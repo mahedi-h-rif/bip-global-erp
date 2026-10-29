@@ -1,0 +1,43 @@
+# One stack per client. Usage:
+#   cp clients/nazmul-global.env.example clients/nazmul-global.env   # fill in the secrets
+#   CLIENT=nazmul-global docker compose -p nazmul-global up -d --build
+# Put a TLS-terminating reverse proxy (Caddy, Nginx, Cloudflare) in front of "web".
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fatoora
+      POSTGRES_USER: fatoora
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in the client env file}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fatoora"]
+      interval: 10s
+      retries: 5
+
+  api:
+    build: ../backend
+    restart: unless-stopped
+    env_file: clients/${CLIENT:?set CLIENT}.env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/fatoora
+      DB_USERNAME: fatoora
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../frontend
+      args:
+        API_ORIGIN: http://api:8080
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

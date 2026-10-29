@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5434/fatoora_test}
+    username: ${TEST_DB_USERNAME:postgres}
+    password: ${TEST_DB_PASSWORD:postgres}
+  flyway:
+    clean-disabled: false
+
+fatoora:
+  # Test-only keys. Never reuse outside tests.
+  master-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  jwt:
+    secret: test-jwt-secret-test-jwt-secret-0123456789
+    cookie-secure: false
+  auto-report-after: PT0S
+  scheduler-interval: PT1H
+  bootstrap:
+    admin-email: admin@test.local
+    admin-password: correct-horse-battery
+    admin-name: Test Admin
+    operator-email: provider@test.local
+    operator-password: provider-secret-123
+    organization:
+      legal-name-ar: شركة نازمول جلوبال
+      legal-name-en: Nazmul Global Company
+      vat-number: "399999999900003"
+      other-id: "7054854679"
+      street: الملك فيصل بن عبد العزيز
+      building-number: "3287"
+      additional-number: "9519"
+      district: حي النهضة
+      city: البكيرية
+      postal-code: "52727"
+      zatca-environment: SANDBOX

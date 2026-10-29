@@ -1,0 +1,25 @@
+# local dev database and logs
+.local/
+
+# backend
+backend/.gradle/
+backend/build/
+backend/*/build/
+backend/*/bin/
+
+# frontend
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+
+# secrets
+.env
+*.env.local
+deploy/clients/*.env
+!deploy/clients/*.env.example
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.tsbuildinfo

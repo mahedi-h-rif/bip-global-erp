@@ -1,0 +1,270 @@
+package com.fatoora.api;
+
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
+import org.springframework.test.context.ActiveProfiles;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.net.CookieManager;
+import java.net.HttpCookie;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * End-to-end through the real HTTP API (cookie session + CSRF, exactly like the portal) against
+ * a local PostgreSQL and ZATCA's public developer sandbox.
+ * Run with: ./gradlew :invoice-api:test -Dzatca.live=true
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@EnabledIfSystemProperty(named = "zatca.live", matches = "true")
+class InvoiceApiApplicationTests {
+
+    @TestConfiguration
+    static class CleanDatabase {
+        @Bean
+        FlywayMigrationStrategy cleanMigrate() {
+            return (Flyway flyway) -> {
+                flyway.clean();
+                flyway.migrate();
+            };
+        }
+    }
+
+    @Autowired
+    Environment env;
+
+    private final JsonMapper json = JsonMapper.builder().build();
+    private final CookieManager cookies = new CookieManager();
+    private final HttpClient http = HttpClient.newBuilder().cookieHandler(cookies).build();
+    private String base;
+    private long customerId;
+    private long simplifiedId;
+    private long standardId;
+
+    @BeforeAll
+    void login() throws Exception {
+        base = "http://localhost:" + env.getProperty("local.server.port") + "/api/v1";
+        assertEquals(401, call("GET", "/auth/me", null).statusCode(), "API must be closed without a session");
+        call("GET", "/auth/csrf", null);
+        // The e-invoicing provider performs ZATCA setup; it inherits all client-admin rights.
+        var res = call("POST", "/auth/login", Map.of("email", "provider@test.local", "password", "provider-secret-123"));
+        assertEquals(200, res.statusCode(), res.body());
+    }
+
+    @Test
+    @Order(8)
+    void clientAdminCannotReachZatcaSetupOrLegalDetails() throws Exception {
+        var jar = new CookieManager();
+        var client = HttpClient.newBuilder().cookieHandler(jar).build();
+        client.send(HttpRequest.newBuilder(URI.create(base + "/auth/csrf")).build(), HttpResponse.BodyHandlers.ofString());
+        java.util.function.Supplier<String> token = () -> jar.getCookieStore().getCookies().stream()
+                .filter(c -> c.getName().equals("XSRF-TOKEN")).map(HttpCookie::getValue).findFirst().orElseThrow();
+        java.util.function.BiFunction<String, Object[], HttpResponse<String>> as = (spec, args) -> {
+            try {
+                String[] parts = spec.split(" ", 2);
+                var req = HttpRequest.newBuilder(URI.create(base + parts[1])).header("Content-Type", "application/json")
+                        .header("X-XSRF-TOKEN", token.get())
+                        .method(parts[0], args.length == 0 ? HttpRequest.BodyPublishers.noBody()
+                                : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(args[0])));
+                return client.send(req.build(), HttpResponse.BodyHandlers.ofString());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        };
+
+        assertEquals(200, as.apply("POST /auth/login",
+                new Object[]{Map.of("email", "admin@test.local", "password", "correct-horse-battery")}).statusCode());
+        assertEquals("ADMIN", json.readTree(as.apply("GET /auth/me", new Object[0]).body()).get("role").asString());
+
+        assertEquals(403, as.apply("GET /egs-units", new Object[0]).statusCode(), "device list is provider-only");
+        assertEquals(403, as.apply("POST /egs-units", new Object[]{Map.of("name", "X", "branch", "B",
+                "location", "L", "industry", "I", "invoiceTypes", "1100")}).statusCode(), "onboarding is provider-only");
+
+        var org = (tools.jackson.databind.node.ObjectNode) json.readTree(as.apply("GET /organization", new Object[0]).body());
+        var changedVat = org.deepCopy().put("vatNumber", "311111111111113");
+        var refused = as.apply("PUT /organization", new Object[]{changedVat});
+        assertEquals(403, refused.statusCode(), refused.body());
+        assertTrue(refused.body().contains("provider_only"));
+
+        var branding = org.deepCopy().put("phone", "+966 11 000 0000").put("brandColor", "#1B6B05");
+        var ok = as.apply("PUT /organization", new Object[]{branding});
+        assertEquals(200, ok.statusCode(), ok.body());
+        assertEquals("#1B6B05", json.readTree(ok.body()).get("brandColor").asString());
+
+        var dash = json.readTree(as.apply("GET /dashboard", new Object[0]).body());
+        assertEquals(0, dash.get("certificates").size(), "certificate warnings are for the provider only");
+    }
+
+    @Test
+    @Order(1)
+    void wrongPasswordIsRejected() throws Exception {
+        var jar = new CookieManager();
+        var anon = HttpClient.newBuilder().cookieHandler(jar).build();
+        anon.send(HttpRequest.newBuilder(URI.create(base + "/auth/csrf")).build(), HttpResponse.BodyHandlers.ofString());
+        String token = jar.getCookieStore().getCookies().stream()
+                .filter(c -> c.getName().equals("XSRF-TOKEN")).map(HttpCookie::getValue).findFirst().orElseThrow();
+        var res = anon.send(HttpRequest.newBuilder(URI.create(base + "/auth/login"))
+                .header("Content-Type", "application/json").header("X-XSRF-TOKEN", token)
+                .POST(HttpRequest.BodyPublishers.ofString("{\"email\":\"admin@test.local\",\"password\":\"wrong-password\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, res.statusCode(), res.body());
+
+        var noCsrf = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(base + "/auth/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"email\":\"admin@test.local\",\"password\":\"correct-horse-battery\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        // Correct password but no CSRF token: refused (Spring reports it as 401 for anonymous callers), no session.
+        assertTrue(noCsrf.statusCode() == 401 || noCsrf.statusCode() == 403, "status " + noCsrf.statusCode());
+        assertTrue(noCsrf.headers().allValues("Set-Cookie").stream().noneMatch(c -> c.startsWith("fatoora_session=")),
+                "login without the CSRF token must not create a session");
+    }
+
+    @Test
+    @Order(2)
+    void onboardSandboxDevice() throws Exception {
+        var created = body(call("POST", "/egs-units", Map.of("name", "NG-PORTAL-1", "branch", "Head Office",
+                "location", "QFDA3287", "industry", "Fuel retail", "invoiceTypes", "1100")), 201);
+        long id = created.get("id").asLong();
+        var result = body(call("POST", "/egs-units/" + id + "/onboard", Map.of("otp", "123345")), 200);
+        System.out.println("ONBOARDING " + result);
+        assertEquals("ACTIVE", result.get("status").asString());
+        assertEquals(9, result.get("steps").size(), "CSR + compliance CSID + 6 compliance checks + production CSID");
+    }
+
+    @Test
+    @Order(3)
+    void createCustomer() throws Exception {
+        var c = body(call("POST", "/customers", Map.ofEntries(
+                Map.entry("nameAr", "شركة العميل التجارية"), Map.entry("nameEn", "Client Trading Co."),
+                Map.entry("vatNumber", "399999999800003"), Map.entry("street", "طريق الملك عبدالعزيز"),
+                Map.entry("buildingNumber", "1234"), Map.entry("additionalNumber", "5678"),
+                Map.entry("district", "حي الريان"), Map.entry("city", "بريدة"), Map.entry("postalCode", "52365"),
+                Map.entry("phone", "0501234567"))), 201);
+        customerId = c.get("id").asLong();
+    }
+
+    @Test
+    @Order(4)
+    void standardDraftIsNotDownloadableThenClears() throws Exception {
+        var draft = body(call("POST", "/invoices", Map.of("kind", "STANDARD", "customerId", customerId,
+                "lines", new Object[]{Map.of("name", "Diesel - ديزل", "quantity", 1000, "unitCode", "LTR", "unitPrice", 1.66)})), 201);
+        standardId = draft.get("id").asLong();
+        assertEquals("DRAFT", draft.get("status").asString());
+        assertEquals(409, call("GET", "/invoices/" + standardId + "/pdf", null).statusCode(), "drafts must not be shareable");
+        assertEquals(400, call("POST", "/invoices/" + standardId + "/issue", Map.of("sendMode", "LATER")).statusCode(),
+                "standard invoices cannot be queued");
+
+        var issued = body(call("POST", "/invoices/" + standardId + "/issue", Map.of("sendMode", "NOW")), 200);
+        System.out.println("STANDARD " + issued.get("status") + " " + issued.get("number") + " errors=" + issued.get("zatcaErrors"));
+        assertEquals("CLEARED", issued.get("status").asString());
+        assertTrue(issued.get("downloadable").asBoolean());
+        // 1000 L × 1.66 = 1,660.00 + 15% VAT 249.00
+        assertEquals(0, new java.math.BigDecimal("1909.00").compareTo(issued.get("totalInclVat").decimalValue()));
+    }
+
+    @Test
+    @Order(5)
+    void simplifiedQueuedForLaterIsReportedByScheduler() throws Exception {
+        var draft = body(call("POST", "/invoices", Map.of("kind", "SIMPLIFIED",
+                "lines", new Object[]{Map.of("name", "Petrol 91 - بنزين 91", "quantity", 40, "unitCode", "LTR", "unitPrice", 2.18)})), 201);
+        simplifiedId = draft.get("id").asLong();
+        var issued = body(call("POST", "/invoices/" + simplifiedId + "/issue", Map.of("sendMode", "LATER")), 200);
+        assertEquals("SIGNED", issued.get("status").asString(), "queued, not yet reported");
+        assertTrue(issued.get("downloadable").asBoolean(), "simplified invoices can be given to the customer immediately");
+        assertEquals(2, issued.get("icv").asLong(), "second document of this device");
+
+        var sent = body(call("POST", "/invoices/" + simplifiedId + "/submit", null), 200);
+        assertEquals("REPORTED", sent.get("status").asString(), sent.toString());
+    }
+
+    @Test
+    @Order(6)
+    void pdfAndXmlDownloadAndCreditNote() throws Exception {
+        var pdf = http.send(HttpRequest.newBuilder(URI.create(base + "/invoices/" + standardId + "/pdf")).build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, pdf.statusCode());
+        assertEquals("%PDF", new String(pdf.body(), 0, 4));
+        java.nio.file.Files.write(java.nio.file.Path.of("build/sample-standard-invoice.pdf"), pdf.body());
+
+        var xml = call("GET", "/invoices/" + standardId + "/xml", null);
+        assertEquals(200, xml.statusCode());
+        assertTrue(xml.body().contains("<cbc:ID>QR</cbc:ID>"));
+
+        var note = body(call("POST", "/invoices/" + standardId + "/notes", Map.of("type", "CREDIT_NOTE", "reason", "Returned 100 L")), 201);
+        long noteId = note.get("id").asLong();
+        var issued = body(call("POST", "/invoices/" + noteId + "/issue", Map.of("sendMode", "NOW")), 200);
+        System.out.println("CREDIT NOTE " + issued.get("status") + " " + issued.get("number"));
+        assertEquals("CLEARED", issued.get("status").asString(), issued.toString());
+        assertTrue(issued.get("number").asString().startsWith("CN-"));
+
+        var dash = body(call("GET", "/dashboard", null), 200);
+        assertEquals(0, dash.get("awaitingSubmission").asLong());
+    }
+
+    @Test
+    @Order(7)
+    void companyVatDifferentFromCertificateIsRefusedBeforeNumbering() throws Exception {
+        // Nazmul's real VAT, while the sandbox device holds ZATCA's shared test certificate (399999999900003).
+        var org = (tools.jackson.databind.node.ObjectNode) body(call("GET", "/organization", null), 200);
+        String originalVat = org.get("vatNumber").asString();
+        org.put("vatNumber", "314920207600003");
+        body(call("PUT", "/organization", org), 200);
+        try {
+            var draft = body(call("POST", "/invoices", Map.of("kind", "SIMPLIFIED",
+                    "lines", new Object[]{Map.of("name", "Petrol 95", "quantity", 10, "unitCode", "LTR", "unitPrice", 2.33)})), 201);
+            long id = draft.get("id").asLong();
+            var refused = call("POST", "/invoices/" + id + "/issue", Map.of("sendMode", "NOW"));
+            assertEquals(409, refused.statusCode(), refused.body());
+            assertTrue(refused.body().contains("certificate_vat_mismatch"), refused.body());
+
+            var still = body(call("GET", "/invoices/" + id, null), 200);
+            assertEquals("DRAFT", still.get("status").asString(), "no number, ICV or ZATCA call may be spent");
+            assertTrue(still.get("number").isNull());
+        } finally {
+            org.put("vatNumber", originalVat);
+            body(call("PUT", "/organization", org), 200);
+        }
+    }
+
+    // --- helpers ---------------------------------------------------------------------------------
+
+    private HttpResponse<String> call(String method, String path, Object body) throws Exception {
+        var req = HttpRequest.newBuilder(URI.create(base + path))
+                .header("Content-Type", "application/json")
+                .method(method, body == null ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
+        xsrf().ifPresent(t -> req.header("X-XSRF-TOKEN", t));
+        return http.send(req.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private java.util.Optional<String> xsrf() {
+        return cookies.getCookieStore().getCookies().stream()
+                .filter(c -> c.getName().equals("XSRF-TOKEN")).map(HttpCookie::getValue).findFirst();
+    }
+
+    private JsonNode body(HttpResponse<String> res, int expected) {
+        assertEquals(expected, res.statusCode(), res.body());
+        return json.readTree(res.body());
+    }
+}

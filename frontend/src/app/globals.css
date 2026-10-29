@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Portal theme. --color-brand is overridden at runtime with the organization's brand colour. */
+@theme {
+  --color-brand: #0b2a6f;
+  --color-ink: #1b2233;
+  --color-muted: #5a6275;
+  --color-line: #e3e7ef;
+  --color-canvas: #f5f7fb;
+  --color-ok: #1b7a3a;
+  --color-warn: #b26b00;
+  --color-bad: #b42318;
+
+  /* Latin first; Bangla, Devanagari and Arabic glyphs fall through to the script fonts. */
+  --font-sans: var(--font-inter), var(--font-noto-bengali), var(--font-noto-devanagari), var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
+  --font-arabic: var(--font-plex-arabic), ui-sans-serif, sans-serif;
+}
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; }
+  body { background: var(--color-canvas); color: var(--color-ink); }
+  :focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+  [dir="rtl"], .ar { font-family: var(--font-arabic); }
+  /* Script fonts first for Bangla and Hindi, so their text uses one matching font. */
+  html[lang="bn"] body, [lang="bn"] { font-family: var(--font-noto-bengali), var(--font-inter), ui-sans-serif, sans-serif; }
+  html[lang="hi"] body, [lang="hi"] { font-family: var(--font-noto-devanagari), var(--font-inter), ui-sans-serif, sans-serif; }
+  [lang="en"] { font-family: var(--font-sans); }
+  [lang="ar"] { font-family: var(--font-arabic); }
+  input, select, textarea { font: inherit; }
+}
+
+@utility tabular { font-variant-numeric: tabular-nums; }

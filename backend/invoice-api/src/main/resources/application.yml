@@ -1,0 +1,93 @@
+# Everything client-specific comes from environment variables, so one build serves every client.
+# See deploy/clients/*.env for per-client values.
+spring:
+  application:
+    name: fatoora-invoice-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fatoora}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: always
+
+fatoora:
+  # 32-byte key, base64. Encrypts EGS private keys and CSID secrets at rest. Never commit a real one.
+  master-key: ${FATOORA_MASTER_KEY}
+  jwt:
+    secret: ${FATOORA_JWT_SECRET}
+    ttl: ${FATOORA_JWT_TTL:PT12H}
+    cookie-secure: ${FATOORA_COOKIE_SECURE:true}
+  # Simplified invoices queued "for later" are auto-reported this long after issue (ZATCA limit: 24h).
+  # PT0S: never automatically; they wait until staff click "Send to ZATCA".
+  auto-report-after: ${FATOORA_AUTO_REPORT_AFTER:PT20H}
+  scheduler-interval: ${FATOORA_SCHEDULER_INTERVAL:PT5M}
+  # Public address of the portal, used for invoice links in customer reminders.
+  portal-url: ${FATOORA_PORTAL_URL:http://localhost:3100}
+  # Document scanning (iqama, passport, licences): the tesseract CLI with English and Arabic data.
+  ocr:
+    tesseract-path: ${FATOORA_OCR_TESSERACT_PATH:tesseract}
+    enabled: ${FATOORA_OCR_ENABLED:true}
+    languages: ${FATOORA_OCR_LANGUAGES:}
+  # Automatic payment reminders by email (SMTP) and SMS. A channel without settings only writes to the log.
+  notifications:
+    enabled: ${FATOORA_REMINDERS_ENABLED:true}
+    interval: ${FATOORA_REMINDER_INTERVAL:P15D}
+    check-interval: ${FATOORA_REMINDER_CHECK_INTERVAL:PT6H}
+    mail:
+      host: ${FATOORA_SMTP_HOST:}
+      port: ${FATOORA_SMTP_PORT:587}
+      username: ${FATOORA_SMTP_USERNAME:}
+      password: ${FATOORA_SMTP_PASSWORD:}
+      starttls: ${FATOORA_SMTP_STARTTLS:true}
+      from: ${FATOORA_MAIL_FROM:}
+    sms:
+      url: ${FATOORA_SMS_URL:}
+      auth-header: ${FATOORA_SMS_AUTH_HEADER:}
+      to-param: ${FATOORA_SMS_TO_PARAM:to}
+      text-param: ${FATOORA_SMS_TEXT_PARAM:text}
+      sender-param: ${FATOORA_SMS_SENDER_PARAM:sender}
+      sender: ${FATOORA_SMS_SENDER:}
+      extra-params: ${FATOORA_SMS_EXTRA_PARAMS:}
+      format: ${FATOORA_SMS_FORMAT:form}
+  # First-boot bootstrap: creates the organization and the first admin if the database is empty.
+  bootstrap:
+    admin-email: ${FATOORA_ADMIN_EMAIL:}
+    admin-password: ${FATOORA_ADMIN_PASSWORD:}
+    admin-name: ${FATOORA_ADMIN_NAME:Administrator}
+    # The e-invoicing provider's account (ZATCA onboarding, environment, legal details).
+    operator-email: ${FATOORA_OPERATOR_EMAIL:}
+    operator-password: ${FATOORA_OPERATOR_PASSWORD:}
+    operator-name: ${FATOORA_OPERATOR_NAME:E-invoicing provider}
+    # The client's normal staff account: invoices, customers, products and dues, but no dashboard or sales report.
+    user-email: ${FATOORA_USER_EMAIL:}
+    user-password: ${FATOORA_USER_PASSWORD:}
+    user-name: ${FATOORA_USER_NAME:Staff}
+    organization:
+      legal-name-ar: ${ORG_LEGAL_NAME_AR:}
+      legal-name-en: ${ORG_LEGAL_NAME_EN:}
+      vat-number: ${ORG_VAT_NUMBER:}
+      other-id: ${ORG_CR_NUMBER:}
+      street: ${ORG_STREET:}
+      building-number: ${ORG_BUILDING_NUMBER:}
+      additional-number: ${ORG_ADDITIONAL_NUMBER:}
+      district: ${ORG_DISTRICT:}
+      city: ${ORG_CITY:}
+      postal-code: ${ORG_POSTAL_CODE:}
+      email: ${ORG_EMAIL:}
+      phone: ${ORG_PHONE:}
+      zatca-environment: ${ORG_ZATCA_ENVIRONMENT:SANDBOX}
+
+logging:
+  level:
+    com.fatoora: INFO
