@@ -4,9 +4,9 @@ import { useState } from "react";
 import useSWR from "swr";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
-import type { WorkerDayEntry, WorkerRow } from "@/lib/types";
-import { date as fmtDate, money } from "@/lib/format";
-import { Alert, Empty, Input, Spinner } from "@/components/ui";
+import type { PaymentMethod, WorkerDayEntry, WorkerRow } from "@/lib/types";
+import { date as fmtDate, money, paymentMethodLabel } from "@/lib/format";
+import { Alert, Empty, Input, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const num = (v: string | null | undefined) => (v == null || v === "" ? 0 : Number(v));
@@ -40,17 +40,18 @@ function DayRow({ w, day, entry, onSaved }: { w: WorkerRow; day: string; entry?:
   const t = useT();
   const [work, setWork] = useState(entry?.work ?? "");
   const [paid, setPaid] = useState(entry?.paid ?? "");
+  const [method, setMethod] = useState<PaymentMethod>(entry?.method ?? "CASH");
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function save() {
+  async function save(nextMethod: PaymentMethod = method) {
     const same = (input: string, stored: string | null | undefined) => (input === "" ? stored == null : stored != null && Number(input) === Number(stored));
-    if (same(work, entry?.work) && same(paid, entry?.paid) && notes.trim() === (entry?.notes ?? "")) return;
+    if (same(work, entry?.work) && same(paid, entry?.paid) && notes.trim() === (entry?.notes ?? "") && nextMethod === (entry?.method ?? "CASH")) return;
     setState("saving");
     setError(null);
     try {
-      await api("PUT", `/workers/${w.id}/days/${day}`, { work: work === "" ? null : work, paid: paid === "" ? null : paid, notes });
+      await api("PUT", `/workers/${w.id}/days/${day}`, { work: work === "" ? null : work, paid: paid === "" ? null : paid, notes, paidMethod: nextMethod });
       setState("saved");
       onSaved();
     } catch (e) {
@@ -66,15 +67,20 @@ function DayRow({ w, day, entry, onSaved }: { w: WorkerRow; day: string; entry?:
       <td className="px-4 py-2 font-medium">{w.name}</td>
       <td className="px-2 py-1.5">
         <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-28 text-end" placeholder="—"
-               aria-label={`${w.name} · ${t("Work value")}`} value={work} onChange={(e) => setWork(e.target.value)} onBlur={save} />
+               aria-label={`${w.name} · ${t("Work value")}`} value={work} onChange={(e) => setWork(e.target.value)} onBlur={() => save()} />
       </td>
       <td className="px-2 py-1.5">
         <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-28 text-end" placeholder="—"
-               aria-label={`${w.name} · ${t("Paid")}`} value={paid} onChange={(e) => setPaid(e.target.value)} onBlur={save} />
+               aria-label={`${w.name} · ${t("Paid")}`} value={paid} onChange={(e) => setPaid(e.target.value)} onBlur={() => save()} />
+        <Select className="mt-1 h-8 w-28 py-0 text-xs" aria-label={`${w.name} · ${t("Salary method")}`} value={method}
+                onChange={(e) => { const v = e.target.value as PaymentMethod; setMethod(v); void save(v); }}>
+          <option value="CASH">{t(paymentMethodLabel.CASH)}</option>
+          <option value="CARD">{t(paymentMethodLabel.CARD)}</option>
+        </Select>
       </td>
       <td className="px-2 py-1.5">
         <Input className="min-w-40" placeholder={t("Note")} aria-label={`${w.name} · ${t("Note")}`} value={notes}
-               onChange={(e) => setNotes(e.target.value)} onBlur={save} dir="auto" />
+               onChange={(e) => setNotes(e.target.value)} onBlur={() => save()} dir="auto" />
       </td>
       <td className="px-4 py-2 text-end tabular">{due == null ? <span className="text-muted">—</span> : <span className={tone(due)}>{money(due)}</span>}</td>
       <td className="w-20 px-4 py-2 text-xs">

@@ -1,5 +1,6 @@
 package com.fatoora.api.worker;
 
+import com.fatoora.api.payment.InvoicePayment;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -23,6 +24,11 @@ public class WorkerDay {
     private LocalDate entryDate;
     private BigDecimal work;
     private BigDecimal paid;
+
+    /** How the day's payment was made: cash, card, etc. */
+    @Enumerated(EnumType.STRING)
+    private InvoicePayment.Method method;
+
     private String notes;
     private String createdBy;
     private Instant createdAt = Instant.now();

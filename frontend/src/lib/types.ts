@@ -397,7 +397,7 @@ export type WorkerRow = {
 
 export type WorkerTotals = { work: string; paid: string; due: string };
 /** One worker's figures on one day; they are already counted in that month's total. */
-export type WorkerDayEntry = { id: number; workerId: number; workerName: string; date: string; work: string | null; paid: string | null; due: string; notes: string | null; createdBy: string | null; createdAt: string | null; updatedBy: string | null; updatedAt: string | null };
+export type WorkerDayEntry = { id: number; workerId: number; workerName: string; date: string; work: string | null; paid: string | null; due: string; notes: string | null; method: PaymentMethod | null; createdBy: string | null; createdAt: string | null; updatedBy: string | null; updatedAt: string | null };
 
 export type WorkerLedger = {
   year: number;

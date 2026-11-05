@@ -48,12 +48,13 @@ public class WorkerController {
                                @PositiveOrZero BigDecimal days, @PositiveOrZero BigDecimal rate,
                                InvoicePayment.Method paidMethod) {}
 
-    public record DayRequest(@PositiveOrZero BigDecimal work, @PositiveOrZero BigDecimal paid, String notes) {}
+    public record DayRequest(@PositiveOrZero BigDecimal work, @PositiveOrZero BigDecimal paid, String notes,
+                             InvoicePayment.Method paidMethod) {}
 
     /** One worker's figures on one day. */
     public record DayEntry(Long id, Long workerId, String workerName, LocalDate date, BigDecimal work, BigDecimal paid,
-                           BigDecimal due, String notes, String createdBy, java.time.Instant createdAt, String updatedBy,
-                           java.time.Instant updatedAt) {}
+                           BigDecimal due, String notes, String method, String createdBy, java.time.Instant createdAt,
+                           String updatedBy, java.time.Instant updatedAt) {}
 
     public record ImportResult(int year, int workers, int created, int months) {}
 
@@ -186,6 +187,7 @@ public class WorkerController {
         return days.findByWorkerIdInAndEntryDateBetweenOrderByEntryDateAscIdAsc(byId.keySet(), ym.atDay(1), ym.atEndOfMonth())
                 .stream().map(d -> new DayEntry(d.getId(), d.getWorkerId(), byId.get(d.getWorkerId()).getName(), d.getEntryDate(),
                         d.getWork(), d.getPaid(), nz(d.getWork()).subtract(nz(d.getPaid())), d.getNotes(),
+                        d.getMethod() == null ? null : d.getMethod().name(),
                         d.getCreatedBy(), d.getCreatedAt(), d.getUpdatedBy(), d.getUpdatedAt())).toList();
     }
 
@@ -216,11 +218,16 @@ public class WorkerController {
             }
             d.setWork(req.work());
             d.setPaid(req.paid());
+            d.setMethod(req.paidMethod());
             d.setNotes(notes);
             days.save(d);
         }
         BigDecimal dWork = nz(req.work()).subtract(nz(oldWork)), dPaid = nz(req.paid()).subtract(nz(oldPaid));
         if (dWork.signum() != 0 || dPaid.signum() != 0) shift(w.getId(), date, dWork, dPaid);
+        // Record the payment method on the month when a paid amount is entered for the day.
+        if (req.paidMethod() != null && nz(req.paid()).signum() != 0)
+            months.findByWorkerIdAndYearAndMonth(w.getId(), date.getYear(), date.getMonthValue())
+                    .ifPresent(m -> m.setPaidMethod(req.paidMethod()));
         audit.record(w.getOrganizationId(), "WORKER_DAY_SET", "worker", w.getId(),
                 w.getName() + " · " + date + " · " + nz(req.work()) + " / " + nz(req.paid()));
     }
