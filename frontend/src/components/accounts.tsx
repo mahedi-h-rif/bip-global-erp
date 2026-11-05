@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Banknote, CircleDollarSign, Hourglass, Pencil, PiggyBank, Plus, Receipt, Trash2, Users, Wallet } from "lucide-react";
+import { Banknote, CircleDollarSign, Coins, CreditCard, Hourglass, Pencil, PiggyBank, Plus, Receipt, Trash2, Users, Wallet } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { AccountExpense, AccountIncome, AccountMonth, AccountYear, EditedBy, ExpenseCategory, PartnerRow, PartnerWithdrawal, PaymentMethod } from "@/lib/types";
 import { date, dateTime, money, paymentMethodLabel } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, Select } from "@/components/ui";
 import { MonthlyChart } from "@/components/worker-charts";
 import { DayPicker } from "@/components/worker-days";
-import { useT, type TFunction } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
 
 export const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -31,9 +31,25 @@ function methodSplit<T extends { method: PaymentMethod | null }>(rows: T[], valu
   return { cash, card };
 }
 
-/** "Cash … · Card …" tile hint for a cash/card split. */
-function splitHint(t: TFunction, split: { cash: number; card: number }) {
-  return t("Cash {cash} · Card {card}", { cash: money(split.cash), card: money(split.card) });
+/** Four tiles with the cash/card split of money in (received) and money out (expenses). */
+function MethodBreakdown({ received, expense }: { received: { cash: number; card: number }; expense: { cash: number; card: number } }) {
+  const t = useT();
+  const items: { label: string; value: number; icon: typeof Wallet; tone?: string }[] = [
+    { label: t("Income · cash"), value: received.cash, icon: Coins, tone: "text-ok" },
+    { label: t("Income · card"), value: received.card, icon: CreditCard, tone: "text-ok" },
+    { label: t("Expense · cash"), value: expense.cash, icon: Coins },
+    { label: t("Expense · card"), value: expense.card, icon: CreditCard },
+  ];
+  return (
+    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {items.map((it) => (
+        <div key={it.label} className="rounded-xl border border-line bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between text-muted"><span className="text-xs font-medium">{it.label}</span><it.icon className="size-4" aria-hidden /></div>
+          <p className={`tabular mt-2 text-lg font-semibold ${it.tone ?? ""}`}>{money(it.value)}</p>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 type Tile = { label: string; value: string; icon: typeof Wallet; tone?: string; hint?: string };
@@ -333,11 +349,12 @@ export function MonthView({ data, onChanged }: { data: AccountMonth; onChanged: 
     <>
       <Tiles tiles={[
         { label: t("Total bill / work"), value: money(tt.billed), icon: CircleDollarSign, hint: t("{n} jobs", { n: data.income.length }) },
-        { label: t("Received"), value: money(tt.received), icon: Banknote, tone: "text-ok", hint: splitHint(t, receivedSplit) },
+        { label: t("Received"), value: money(tt.received), icon: Banknote, tone: "text-ok" },
         { label: t("Customer due"), value: money(tt.due), icon: Hourglass, tone: num(tt.due) > 0 ? "text-bad" : "", hint: t("Still to collect") },
-        { label: t("Expenses"), value: money(tt.expense), icon: Receipt, hint: splitHint(t, expenseSplit) },
+        { label: t("Expenses"), value: money(tt.expense), icon: Receipt },
         { label: t("Cash after expenses"), value: money(tt.cashAfterExpense), icon: Wallet, tone: num(tt.cashAfterExpense) < 0 ? "text-bad" : "text-ok", hint: t("Received minus expenses") },
       ]} />
+      <MethodBreakdown received={receivedSplit} expense={expenseSplit} />
 
       <Card className="mt-6">
         <CardHeader title={t("Income")} subtitle={t("Jobs and bills for this month; due is what the customer still owes.")}
@@ -697,11 +714,12 @@ export function DayView({ day, month, year, onDay, onChanged }: {
 
       <Tiles tiles={[
         { label: t("Bill / work today"), value: money(billed), icon: CircleDollarSign, hint: t("{n} jobs", { n: income.length }) },
-        { label: t("Received"), value: money(received), icon: Banknote, tone: "text-ok", hint: splitHint(t, receivedSplit) },
-        { label: t("Expenses"), value: money(spent), icon: Receipt, hint: splitHint(t, expenseSplit) },
+        { label: t("Received"), value: money(received), icon: Banknote, tone: "text-ok", hint: t("Customer due {amount}", { amount: money(due) }) },
+        { label: t("Expenses"), value: money(spent), icon: Receipt, hint: t("{n} entries", { n: expenses.length }) },
         { label: t("Partner drawings"), value: money(taken), icon: Users, hint: t("{n} withdrawals", { n: drawn.length }) },
         { label: t("Cash for the day"), value: money(cashToday), icon: Wallet, tone: cashToday < 0 ? "text-bad" : "text-ok", hint: t("Received minus expenses and drawings") },
       ]} />
+      <MethodBreakdown received={receivedSplit} expense={expenseSplit} />
 
       <Card className="mt-6">
         <CardHeader title={t("Income")} subtitle={t("Jobs and bills on this day. Click an amount to change it.")}
