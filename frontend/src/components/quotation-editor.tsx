@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { FileDown, FilePlus2, Plus, Printer, Save, Trash2, UserPlus } from "lucide-react";
@@ -78,9 +78,10 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 
-  /** An exact product name fills in its price; anything else is free text. */
+  /** An exact product name or item code fills in its price; anything else is free text. */
   function setItemName(i: number, name: string) {
-    const p = products?.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+    const key = name.trim().toLowerCase();
+    const p = products?.find((x) => x.name.toLowerCase() === key || (x.number != null && x.number.toLowerCase() === key));
     if (p && p.id !== lines[i].productId) setLine(i, { name: p.name, unitPrice: p.unitPrice, productId: p.id });
     else setLine(i, { name, productId: p ? p.id : null });
   }
@@ -276,7 +277,12 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
           </table>
         </div>
         <datalist id="quotation-products">
-          {products?.map((p) => <option key={p.id} value={p.name}>{money(p.unitPrice)}</option>)}
+          {products?.map((p) => (
+            <Fragment key={p.id}>
+              <option value={p.name}>{p.number ? `${p.number} · ${money(p.unitPrice)}` : money(p.unitPrice)}</option>
+              {p.number && <option value={p.number}>{p.name}</option>}
+            </Fragment>
+          ))}
         </datalist>
         <div className="flex flex-wrap items-start justify-between gap-6 border-t border-line p-5">
           <Button variant="secondary" onClick={() => setLines((ls) => [...ls, emptyLine()])}><Plus className="size-4" aria-hidden /> {t("Add item")}</Button>
