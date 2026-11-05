@@ -38,7 +38,11 @@ public class ReminderService {
                            String recipient, NotificationLog.Status status, BigDecimal dueAmount, String message,
                            String error, String createdBy, Instant createdAt) {}
 
-    public record WhatsAppLink(String phone, String url, String message) {}
+    /**
+     * The WhatsApp reminder: {@code sent} when it went out from the linked number; otherwise {@code url} opens
+     * the chat with the message ready (not linked, or sending failed with {@code error}).
+     */
+    public record WhatsAppLink(String phone, String url, String message, boolean sent, String error) {}
 
     private final FatooraProperties.Notifications config;
     private final DueService dues;
@@ -47,12 +51,13 @@ public class ReminderService {
     private final NotificationLogRepository logs;
     private final EmailSender email;
     private final SmsSender sms;
+    private final WhatsAppGateway whatsapp;
     private final InvoiceLinks links;
     private final AuditService audit;
 
     public ReminderService(FatooraProperties props, DueService dues, CustomerRepository customers,
                            OrganizationRepository orgs, NotificationLogRepository logs, EmailSender email, SmsSender sms,
-                           InvoiceLinks links, AuditService audit) {
+                           WhatsAppGateway whatsapp, InvoiceLinks links, AuditService audit) {
         this.config = props.notifications();
         this.dues = dues;
         this.customers = customers;
@@ -60,11 +65,12 @@ public class ReminderService {
         this.logs = logs;
         this.email = email;
         this.sms = sms;
+        this.whatsapp = whatsapp;
         this.links = links;
         this.audit = audit;
     }
 
-    /** Sends email and/or SMS now to one customer about all their due invoices. */
+    /** Sends email, SMS and (when a number is linked) WhatsApp now to one customer about all their due invoices. */
     public List<LogEntry> remindNow(Long orgId, Long customerId, String actor) {
         Customer c = load(orgId, customerId);
         List<DueInvoice> owed = dues.forCustomer(orgId, customerId);
@@ -76,7 +82,10 @@ public class ReminderService {
         return sent.stream().map(l -> entry(l, DueService.displayName(c))).toList();
     }
 
-    /** The wa.me link with a ready-made message; the staff member sends it from their own WhatsApp. */
+    /**
+     * The WhatsApp reminder: sent straight away from the linked number, or, when none is linked, a wa.me link
+     * with the message ready that the staff member sends from their own WhatsApp.
+     */
     public WhatsAppLink whatsapp(Long orgId, Long customerId, String actor) {
         Customer c = load(orgId, customerId);
         String phone = PhoneNumbers.normalize(c.getPhone());
@@ -85,10 +94,20 @@ public class ReminderService {
         if (owed.isEmpty()) throw ApiException.conflict("nothing_due", "This customer has nothing due");
         Organization org = orgs.findById(orgId).orElseThrow();
         String text = ReminderMessages.whatsapp(sellerName(org), DueService.displayName(c), owed, linkFor());
-        logs.save(log(orgId, c.getId(), Channel.WHATSAPP, Trigger.MANUAL, phone, SendResult.opened(),
-                ReminderMessages.totalDue(owed), text, actor));
-        return new WhatsAppLink(phone, "https://wa.me/" + phone + "?text=" + URLEncoder.encode(text, StandardCharsets.UTF_8)
-                .replace("+", "%20"), text);
+        String url = "https://wa.me/" + phone + "?text=" + URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20");
+        if (!whatsapp.connected()) {
+            logs.save(log(orgId, c.getId(), Channel.WHATSAPP, Trigger.MANUAL, phone, SendResult.opened(),
+                    ReminderMessages.totalDue(owed), text, actor));
+            return new WhatsAppLink(phone, url, text, false, null);
+        }
+        SendResult r = whatsapp.sendText(phone, text);
+        logs.save(log(orgId, c.getId(), Channel.WHATSAPP, Trigger.MANUAL, phone, r, ReminderMessages.totalDue(owed), text, actor));
+        if (r.delivered()) {
+            c.setLastReminderAt(Instant.now());
+            customers.save(c);
+            audit.record(orgId, "REMINDER_SENT", "customer", customerId, "WhatsApp");
+        }
+        return new WhatsAppLink(phone, r.delivered() ? null : url, text, r.delivered(), r.error());
     }
 
     /** Called by the scheduler: every customer whose 15-day reminder interval has passed. */
@@ -141,6 +160,10 @@ public class ReminderService {
             DueInvoice first = owed.stream().filter(DueInvoice::shareable).findFirst().orElse(null);
             String text = ReminderMessages.sms(seller, name, owed, owed.size() == 1 && first != null ? links.pdfUrl(first.invoiceId()) : null);
             result.add(logs.save(log(org.getId(), c.getId(), Channel.SMS, trigger, phone, sms.send(phone, text), total, text, actor)));
+            if (org.isWhatsappReminders() && whatsapp.connected()) {
+                String wa = ReminderMessages.whatsapp(seller, name, owed, linkFor());
+                result.add(logs.save(log(org.getId(), c.getId(), Channel.WHATSAPP, trigger, phone, whatsapp.sendText(phone, wa), total, wa, actor)));
+            }
         }
         // The 15-day clock restarts once a message went out (or was logged because the channel isn't set up yet).
         if (result.stream().anyMatch(l -> l.getStatus() != NotificationLog.Status.FAILED)) {

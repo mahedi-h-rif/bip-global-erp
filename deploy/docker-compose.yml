@@ -1,6 +1,7 @@
 # One stack per client. Usage:
 #   cp clients/nazmul-global.env.example clients/nazmul-global.env   # fill in the secrets
-#   CLIENT=nazmul-global docker compose -p nazmul-global up -d --build
+#   CLIENT=nazmul-global docker compose -p nazmul-global --env-file clients/nazmul-global.env up -d --build
+# --env-file is what fills ${DB_PASSWORD} and ${FATOORA_WHATSAPP_TOKEN} below; env_file only reaches the api.
 # Put a TLS-terminating reverse proxy (Caddy, Nginx, Cloudflare) in front of "web".
 services:
   db:
@@ -27,6 +28,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      whatsapp:
+        condition: service_started
+
+  # Sends WhatsApp from the company's number, linked by QR (Settings → WhatsApp). Only the api talks to it.
+  whatsapp:
+    build: ../whatsapp
+    restart: unless-stopped
+    environment:
+      WHATSAPP_TOKEN: ${FATOORA_WHATSAPP_TOKEN:-}
+    volumes:
+      - wa-auth:/data
 
   web:
     build:
@@ -41,3 +53,5 @@ services:
 
 volumes:
   pgdata:
+  # The linked WhatsApp session: keep it, or the number has to be scanned again.
+  wa-auth:

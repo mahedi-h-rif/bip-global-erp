@@ -19,6 +19,8 @@ public class Product {
     private Long id;
 
     private Long organizationId;
+    /** Incremental catalogue number, e.g. ITEM-000001; never reused. */
+    private String number;
     private String name;
     private BigDecimal unitPrice;
     private boolean active = true;

@@ -25,7 +25,7 @@ public class OrganizationController {
 
     public record OrganizationDto(
             Long id,
-            @NotBlank String legalNameAr,
+            String legalNameAr,
             String legalNameEn,
             @Pattern(regexp = "3\\d{13}3", message = "15 digits, starting and ending with 3") String vatNumber,
             @NotBlank String otherId,
@@ -42,6 +42,7 @@ public class OrganizationController {
             String signatoryName,
             String signatoryTitle,
             @Pattern(regexp = "#[0-9A-Fa-f]{6}") String brandColor,
+            @Pattern(regexp = "CLASSIC|MODERN") String letterheadStyle,
             String logoUrl,
             @NotBlank String invoicePrefix,
             @NotBlank String creditNotePrefix,
@@ -52,7 +53,7 @@ public class OrganizationController {
             return new OrganizationDto(o.getId(), o.getLegalNameAr(), o.getLegalNameEn(), o.getVatNumber(),
                     o.getOtherId(), o.getOtherIdScheme(), o.getStreet(), o.getBuildingNumber(), o.getAdditionalNumber(),
                     o.getDistrict(), o.getCity(), o.getPostalCode(), o.getPhone(), o.getEmail(), o.getWebsite(),
-                    o.getSignatoryName(), o.getSignatoryTitle(), o.getBrandColor(),
+                    o.getSignatoryName(), o.getSignatoryTitle(), o.getBrandColor(), o.getLetterheadStyle(),
                     o.getLogoUrl(), o.getInvoicePrefix(), o.getCreditNotePrefix(), o.getDebitNotePrefix(),
                     o.getZatcaEnvironment());
         }
@@ -84,6 +85,8 @@ public class OrganizationController {
                         "Company legal details (name, VAT, CR, address) are managed by your e-invoicing provider. Contact them to change these.");
             dto = keepProtected(o, dto);
         }
+        if (nz(dto.legalNameAr()).isBlank() && nz(dto.legalNameEn()).isBlank())
+            throw new ApiException.Validation(java.util.Map.of("legalNameEn", "Enter the legal name in English or Arabic"));
         String idProblem = com.fatoora.api.customer.OtherIdRules.check(dto.otherIdScheme(), dto.otherId());
         if (idProblem != null) throw new ApiException.Validation(java.util.Map.of("otherId", idProblem));
         o.setLegalNameAr(dto.legalNameAr());
@@ -93,16 +96,17 @@ public class OrganizationController {
         o.setOtherIdScheme(dto.otherIdScheme());
         o.setStreet(dto.street());
         o.setBuildingNumber(dto.buildingNumber());
-        o.setAdditionalNumber(dto.additionalNumber());
+        o.setAdditionalNumber(emptyToNull(dto.additionalNumber()));
         o.setDistrict(dto.district());
         o.setCity(dto.city());
         o.setPostalCode(dto.postalCode());
-        o.setPhone(dto.phone());
-        o.setEmail(dto.email());
-        o.setWebsite(dto.website());
-        o.setSignatoryName(dto.signatoryName());
-        o.setSignatoryTitle(dto.signatoryTitle());
+        o.setPhone(emptyToNull(dto.phone()));
+        o.setEmail(emptyToNull(dto.email()));
+        o.setWebsite(emptyToNull(dto.website()));
+        o.setSignatoryName(emptyToNull(dto.signatoryName()));
+        o.setSignatoryTitle(emptyToNull(dto.signatoryTitle()));
         if (dto.brandColor() != null) o.setBrandColor(dto.brandColor());
+        if (dto.letterheadStyle() != null) o.setLetterheadStyle(dto.letterheadStyle());
         o.setInvoicePrefix(dto.invoicePrefix());
         o.setCreditNotePrefix(dto.creditNotePrefix());
         o.setDebitNotePrefix(dto.debitNotePrefix());
@@ -161,8 +165,8 @@ public class OrganizationController {
     }
 
     private static boolean legalIdentityChanged(Organization o, OrganizationDto d) {
-        return !java.util.Objects.equals(o.getLegalNameAr(), d.legalNameAr())
-                || !java.util.Objects.equals(nz(o.getLegalNameEn()), nz(d.legalNameEn()))
+        return !java.util.Objects.equals(nz(o.getLegalNameAr()).trim(), nz(d.legalNameAr()).trim())
+                || !java.util.Objects.equals(nz(o.getLegalNameEn()).trim(), nz(d.legalNameEn()).trim())
                 || !java.util.Objects.equals(o.getVatNumber(), d.vatNumber())
                 || !java.util.Objects.equals(o.getOtherId(), d.otherId())
                 || !java.util.Objects.equals(o.getOtherIdScheme(), d.otherIdScheme())
@@ -179,12 +183,16 @@ public class OrganizationController {
     private static OrganizationDto keepProtected(Organization o, OrganizationDto d) {
         return new OrganizationDto(o.getId(), o.getLegalNameAr(), o.getLegalNameEn(), o.getVatNumber(), o.getOtherId(),
                 o.getOtherIdScheme(), o.getStreet(), o.getBuildingNumber(), o.getAdditionalNumber(), o.getDistrict(),
-                o.getCity(), o.getPostalCode(), d.phone(), d.email(), d.website(), d.signatoryName(), d.signatoryTitle(), d.brandColor(), d.logoUrl(), d.invoicePrefix(),
+                o.getCity(), o.getPostalCode(), d.phone(), d.email(), d.website(), d.signatoryName(), d.signatoryTitle(), d.brandColor(), d.letterheadStyle(), d.logoUrl(), d.invoicePrefix(),
                 d.creditNotePrefix(), d.debitNotePrefix(), o.getZatcaEnvironment());
     }
 
     private static String nz(String s) {
         return s == null ? "" : s;
+    }
+
+    private static String emptyToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     private Organization load() {

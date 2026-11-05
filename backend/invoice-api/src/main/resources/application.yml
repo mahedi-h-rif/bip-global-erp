@@ -39,7 +39,7 @@ fatoora:
     tesseract-path: ${FATOORA_OCR_TESSERACT_PATH:tesseract}
     enabled: ${FATOORA_OCR_ENABLED:true}
     languages: ${FATOORA_OCR_LANGUAGES:}
-  # Automatic payment reminders by email (SMTP) and SMS. A channel without settings only writes to the log.
+  # Automatic payment reminders by email (SMTP), SMS and WhatsApp. A channel without settings only writes to the log.
   notifications:
     enabled: ${FATOORA_REMINDERS_ENABLED:true}
     interval: ${FATOORA_REMINDER_INTERVAL:P15D}
@@ -60,6 +60,10 @@ fatoora:
       sender: ${FATOORA_SMS_SENDER:}
       extra-params: ${FATOORA_SMS_EXTRA_PARAMS:}
       format: ${FATOORA_SMS_FORMAT:form}
+    # WhatsApp from a number linked by QR (the whatsapp service). Empty: wa.me links only.
+    whatsapp:
+      url: ${FATOORA_WHATSAPP_URL:}
+      token: ${FATOORA_WHATSAPP_TOKEN:}
   # First-boot bootstrap: creates the organization and the first admin if the database is empty.
   bootstrap:
     admin-email: ${FATOORA_ADMIN_EMAIL:}
@@ -73,6 +77,9 @@ fatoora:
     user-email: ${FATOORA_USER_EMAIL:}
     user-password: ${FATOORA_USER_PASSWORD:}
     user-name: ${FATOORA_USER_NAME:Staff}
+    # Branch logins, "login:password:Full name" separated by ";". Each sees only invoices, quotations, agreements
+    # and cash-book entries it created. Created once; later password changes are not overwritten.
+    branch-users: ${FATOORA_BRANCH_USERS:}
     organization:
       legal-name-ar: ${ORG_LEGAL_NAME_AR:}
       legal-name-en: ${ORG_LEGAL_NAME_EN:}

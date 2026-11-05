@@ -1,5 +1,6 @@
 package com.fatoora.api.worker;
 
+import com.fatoora.api.payment.InvoicePayment;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,4 +23,12 @@ public class WorkerMonth {
     private int month;
     private BigDecimal work;
     private BigDecimal paid;
+
+    /** For a daily-wage worker: days worked and the daily rate; work = days × rate. Null for permanent workers. */
+    private BigDecimal days;
+    private BigDecimal rate;
+
+    /** How the salary was paid: cash, card, etc. Null when not recorded. */
+    @Enumerated(EnumType.STRING)
+    private InvoicePayment.Method paidMethod;
 }

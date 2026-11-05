@@ -58,12 +58,12 @@ public class CustomerController {
             c.setOtherId(emptyToNull(otherId));
             c.setOtherIdScheme(emptyToNull(otherIdScheme));
             c.setAddress(emptyToNull(address));
-            c.setStreet(street);
-            c.setBuildingNumber(buildingNumber);
-            c.setAdditionalNumber(additionalNumber);
-            c.setDistrict(district);
-            c.setCity(city);
-            c.setPostalCode(postalCode);
+            c.setStreet(emptyToNull(street));
+            c.setBuildingNumber(emptyToNull(buildingNumber));
+            c.setAdditionalNumber(emptyToNull(additionalNumber));
+            c.setDistrict(emptyToNull(district));
+            c.setCity(emptyToNull(city));
+            c.setPostalCode(emptyToNull(postalCode));
             c.setCountryCode(countryCode == null || countryCode.isBlank() ? "SA" : countryCode);
             c.setEmail(emptyToNull(email));
             c.setPhone(emptyToNull(phone));
@@ -71,7 +71,7 @@ public class CustomerController {
         }
 
         private static String emptyToNull(String s) {
-            return s == null || s.isBlank() ? null : s;
+            return s == null || s.isBlank() ? null : s.strip();
         }
 
         /**
@@ -97,7 +97,7 @@ public class CustomerController {
         }
     }
 
-    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
+    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT','BRANCH')";
 
     private final CustomerRepository repo;
     private final InvoiceRepository invoices;

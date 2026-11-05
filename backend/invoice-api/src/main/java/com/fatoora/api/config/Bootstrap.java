@@ -40,7 +40,7 @@ public class Bootstrap {
         var b = props.bootstrap();
         if (orgs.count() == 0) {
             var o = b.organization();
-            if (o == null || isBlank(o.vatNumber()) || isBlank(o.legalNameAr())) {
+            if (o == null || isBlank(o.vatNumber()) || (isBlank(o.legalNameAr()) && isBlank(o.legalNameEn()))) {
                 log.warn("No organization yet. Set ORG_* environment variables to bootstrap one.");
                 return;
             }
@@ -79,6 +79,15 @@ public class Bootstrap {
         createOnce(b.operatorEmail(), b.operatorPassword(), b.operatorName(), AppUser.Role.OPERATOR, "FATOORA_OPERATOR_PASSWORD");
         // The client's normal staff account (no dashboard or sales report).
         createOnce(b.userEmail(), b.userPassword(), b.userName(), AppUser.Role.ACCOUNTANT, "FATOORA_USER_PASSWORD");
+        // Branch logins (e.g. asthaAluminium): only their own invoices, quotations, agreements and cash-book entries.
+        if (!isBlank(b.branchUsers())) {
+            for (String entry : b.branchUsers().split(";")) {
+                if (entry.isBlank()) continue;
+                String[] f = entry.strip().split(":", 3);
+                if (f.length < 2) throw new IllegalStateException("FATOORA_BRANCH_USERS entries are login:password:Full name");
+                createOnce(f[0].strip(), f[1], f.length > 2 ? f[2].strip() : f[0].strip(), AppUser.Role.BRANCH, "FATOORA_BRANCH_USERS password");
+            }
+        }
     }
 
     private void createOnce(String email, String password, String name, AppUser.Role role, String passwordVar) {

@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { AlertTriangle, Clock, FilePen, Plus, ShieldAlert, TrendingUp } from "lucide-react";
 import { fetcher } from "@/lib/api";
-import type { Dashboard, Me } from "@/lib/types";
-import { countdown, date, money, typeLabel } from "@/lib/format";
+import type { AccountMonth, Dashboard, Me } from "@/lib/types";
+import { countdown, date, money, todayKsa, typeLabel } from "@/lib/format";
 import { Alert, ButtonLink, Card, CardHeader, Empty, PageHeader, Spinner } from "@/components/ui";
 import { SalesReportPanel } from "@/components/sales-report";
 import { Trans, useT } from "@/lib/i18n";
@@ -16,9 +16,13 @@ export default function DashboardPage() {
   const router = useRouter();
   const t = useT();
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
-  // Sales figures are for the client's admin; normal staff start at Invoices.
-  const isAdmin = me?.role === "ADMIN" || me?.role === "OPERATOR";
+  // Sales figures are for the client's admin; normal staff start at Invoices. A branch login gets a summary of
+  // only what it created: its invoices and its own cash book this month.
+  const isBranch = me?.role === "BRANCH";
+  const isAdmin = me?.role === "ADMIN" || me?.role === "OPERATOR" || isBranch;
   const { data, error } = useSWR<Dashboard>(isAdmin ? "/dashboard" : null, fetcher, { refreshInterval: 60_000 });
+  const today = todayKsa();
+  const { data: book } = useSWR<AccountMonth>(isBranch ? `/accounts/month?year=${today.slice(0, 4)}&month=${Number(today.slice(5, 7))}` : null, fetcher);
   useEffect(() => {
     if (me && !isAdmin) router.replace("/invoices");
   }, [me, isAdmin, router]);
@@ -39,7 +43,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title={t("Dashboard")}
-        subtitle={t("Sales, collections, dues and ZATCA submissions at a glance")}
+        subtitle={isBranch ? t("Your invoices and your cash book: only what you created") : t("Sales, collections, dues and ZATCA submissions at a glance")}
         actions={<ButtonLink href="/invoices/new"><Plus className="size-4" aria-hidden /> {t("New invoice")}</ButtonLink>}
       />
 
@@ -68,7 +72,25 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <SalesReportPanel />
+      {isBranch ? book && (
+        <Card className="mt-6">
+          <CardHeader title={t("My cash book this month")} subtitle={t("Income and expenses you entered")}
+                      action={<Link className="text-sm font-medium text-brand hover:underline" href="/accounts">{t("Open")}</Link>} />
+          <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: t("Total bill / work"), value: book.totals.billed },
+              { label: t("Received"), value: book.totals.received, tone: "text-ok" },
+              { label: t("Expenses"), value: book.totals.expense },
+              { label: t("Cash after expenses"), value: book.totals.cashAfterExpense, tone: Number(book.totals.cashAfterExpense) < 0 ? "text-bad" : "text-ok" },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-xs font-medium text-muted">{s.label}</p>
+                <p className={`tabular mt-1 text-xl font-semibold ${s.tone ?? ""}`}>{money(s.value)}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : <SalesReportPanel />}
 
       <Card className="mt-6">
         <CardHeader

@@ -32,6 +32,7 @@ public class InvoicePayment {
     private String reference;
     private String note;
     private String createdBy;
+    private String updatedBy;
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 

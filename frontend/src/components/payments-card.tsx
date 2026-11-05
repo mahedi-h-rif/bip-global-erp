@@ -4,8 +4,8 @@ import { useState, type FormEvent } from "react";
 import { Banknote, CheckCircle2, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { InvoiceDetail, Payment, PaymentMethod } from "@/lib/types";
-import { date, money, paymentMethodLabel, todayKsa } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Field, Input, PaymentBadge, Select } from "@/components/ui";
+import { date, dateTime, money, paymentMethodLabel, todayKsa } from "@/lib/format";
+import { Alert, Button, Card, CardHeader, Field, Input, PaymentBadge, RequiredLegend, Select } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 type Draft = { id?: number; amount: string; paidOn: string; method: PaymentMethod; reference: string; note: string };
@@ -21,7 +21,7 @@ function PaymentForm({ inv, initial, onDone }: { inv: InvoiceDetail; initial: Dr
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const body = { ...p, amount: Number(p.amount), reference: p.reference || null, note: p.note || null };
+    const body = { ...p, amount: Number(p.amount), paidOn: p.paidOn || null, reference: p.reference.trim() || null, note: p.note.trim() || null };
     try {
       if (p.id) await api("PUT", `/payments/${p.id}`, body);
       else await api("POST", `/invoices/${inv.id}/payments`, body);
@@ -35,22 +35,23 @@ function PaymentForm({ inv, initial, onDone }: { inv: InvoiceDetail; initial: Dr
   return (
     <form onSubmit={submit} className="space-y-4 border-t border-line bg-canvas/50 p-5">
       {error && !error.fields && <Alert tone="bad">{error.message}</Alert>}
+      <RequiredLegend />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label={t("Amount (SAR)")} error={error?.fields?.amount}>
           <Input required autoFocus type="number" min="0.01" step="0.01" value={p.amount} onChange={set("amount")} />
         </Field>
-        <Field label={t("Date received")}>
-          <Input required type="date" value={p.paidOn} onChange={set("paidOn")} />
+        <Field label={t("Date received")} optional hint={t("Leave empty for today")}>
+          <Input type="date" value={p.paidOn} onChange={set("paidOn")} />
         </Field>
         <Field label={t("Method")}>
           <Select value={p.method} onChange={set("method")}>
             {(Object.keys(paymentMethodLabel) as PaymentMethod[]).map((m) => <option key={m} value={m}>{t(paymentMethodLabel[m])}</option>)}
           </Select>
         </Field>
-        <Field label={t("Reference")} hint={t("Transfer or cheque no., optional")}>
+        <Field label={t("Reference")} optional hint={t("Transfer or cheque no.")}>
           <Input value={p.reference} onChange={set("reference")} />
         </Field>
-        <Field label={t("Note")} className="sm:col-span-2 lg:col-span-4">
+        <Field label={t("Note")} optional className="sm:col-span-2 lg:col-span-4">
           <Input value={p.note} onChange={set("note")} />
         </Field>
       </div>
@@ -132,7 +133,7 @@ export function PaymentsCard({ inv, canWrite, onChange }: { inv: InvoiceDetail; 
             act("due", () => api("PUT", `/invoices/${inv.id}/due-date`, { dueDate: dueDate || null }));
           }}
         >
-          <Field label={t("Payment due date")} hint={t("Internal payment terms; can be changed at any time.")} className="min-w-44 flex-1">
+          <Field label={t("Payment due date")} optional hint={t("Internal payment terms; can be changed at any time.")} className="min-w-44 flex-1">
             <Input type="date" value={dueDate} disabled={!canWrite} onChange={(e) => setDueDate(e.target.value)} />
           </Field>
           {canWrite && (
@@ -148,7 +149,8 @@ export function PaymentsCard({ inv, canWrite, onChange }: { inv: InvoiceDetail; 
               <Banknote className="size-4 shrink-0 text-ok" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{money(p.amount)} <span className="font-normal text-muted">· {t(paymentMethodLabel[p.method])} · {date(p.paidOn)}</span></p>
-                <p className="truncate text-xs text-muted">{[p.reference, p.note, p.createdBy].filter(Boolean).join(" · ")}</p>
+                <p className="truncate text-xs text-muted">{[p.reference, p.note, p.createdBy && t("Added by {name}", { name: p.createdBy }),
+                  p.updatedBy && t("edited by {name} on {date}", { name: p.updatedBy, date: dateTime(p.updatedAt) })].filter(Boolean).join(" · ")}</p>
               </div>
               {canWrite && (
                 <span className="inline-flex gap-1">
@@ -181,7 +183,7 @@ export function PaymentsCard({ inv, canWrite, onChange }: { inv: InvoiceDetail; 
               <CheckCircle2 className="size-4" aria-hidden /> {t("Full paid")}
             </Button>
             <span className="pb-2 text-sm text-muted">{t("or")}</span>
-            <Field label={t("Amount received (SAR)")} hint={t("Up to {amount}", { amount: money(due) })} error={Number(amount) > due ? t("More than the amount due") : undefined} className="w-52">
+            <Field label={t("Amount received (SAR)")} optional hint={t("Up to {amount}", { amount: money(due) })} error={Number(amount) > due ? t("More than the amount due") : undefined} className="w-52">
               <Input type="number" min="0.01" step="0.01" max={due} value={amount} onChange={(e) => setAmount(e.target.value)} />
             </Field>
             <Button

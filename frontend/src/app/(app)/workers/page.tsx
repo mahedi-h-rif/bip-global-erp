@@ -18,11 +18,13 @@ import {
   Users,
 } from "lucide-react";
 import { api, ApiError, download, fetcher, openFile, printFile, uploadFile } from "@/lib/api";
-import type { WorkerLedger, WorkerRow } from "@/lib/types";
-import { money, todayKsa } from "@/lib/format";
+import type { PaymentMethod, WorkerLedger, WorkerRow } from "@/lib/types";
+import { money, paymentMethodLabel, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { BalanceBars, MonthlyChart } from "@/components/worker-charts";
 import { DayWorkImport, type DayPreview } from "@/components/daywork-import";
+import { DayPicker, WorkerDaily } from "@/components/worker-days";
+import { WorkerLeaves } from "@/components/worker-leaves";
 import { useT } from "@/lib/i18n";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -42,13 +44,13 @@ function Balance({ value, strong }: { value: number; strong?: boolean }) {
   );
 }
 
-type Draft = { name: string; phone: string; iqamaNumber: string; nationality: string; notes: string; active: boolean };
-const blankDraft: Draft = { name: "", phone: "", iqamaNumber: "", nationality: "", notes: "", active: true };
+type Draft = { name: string; phone: string; iqamaNumber: string; nationality: string; notes: string; active: boolean; daily: boolean; dailyRate: string };
+const blankDraft: Draft = { name: "", phone: "", iqamaNumber: "", nationality: "", notes: "", active: true, daily: false, dailyRate: "" };
 
 function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone: () => void; onCancel: () => void }) {
   const t = useT();
   const [d, setD] = useState<Draft>(() => initial
-    ? { name: initial.name, phone: initial.phone ?? "", iqamaNumber: initial.iqamaNumber ?? "", nationality: initial.nationality ?? "", notes: initial.notes ?? "", active: initial.active }
+    ? { name: initial.name, phone: initial.phone ?? "", iqamaNumber: initial.iqamaNumber ?? "", nationality: initial.nationality ?? "", notes: initial.notes ?? "", active: initial.active, daily: initial.daily, dailyRate: initial.dailyRate ?? "" }
     : blankDraft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +60,9 @@ function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone
     setBusy(true);
     setError(null);
     try {
-      if (initial) await api("PUT", `/workers/${initial.id}`, d);
-      else await api("POST", "/workers", d);
+      const body = { ...d, dailyRate: d.daily && d.dailyRate.trim() !== "" ? Number(d.dailyRate) : null };
+      if (initial) await api("PUT", `/workers/${initial.id}`, body);
+      else await api("POST", "/workers", body);
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("Failed"));
@@ -82,6 +85,17 @@ function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone
           <option value="0">{t("Inactive")}</option>
         </Select>
       </Field>
+      <Field label={t("Worker type")}>
+        <Select value={d.daily ? "daily" : "permanent"} onChange={(e) => setD({ ...d, daily: e.target.value === "daily" })}>
+          <option value="permanent">{t("Permanent")}</option>
+          <option value="daily">{t("Daily-wage")}</option>
+        </Select>
+      </Field>
+      {d.daily && (
+        <Field label={t("Default daily rate")} hint={t("Used to pre-fill the rate; editable each month.")}>
+          <Input type="number" min="0" step="0.01" inputMode="decimal" className="text-end" placeholder="—" value={d.dailyRate} onChange={(e) => setD({ ...d, dailyRate: e.target.value })} />
+        </Field>
+      )}
       <Field label={t("Notes")} className="sm:col-span-2 lg:col-span-4">
         <Input value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} />
       </Field>
@@ -94,22 +108,33 @@ function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone
   );
 }
 
-/** One worker's figures for the chosen month; each change is saved when the field is left. */
+/** One worker's figures for the chosen month; each change is saved when the field is left. Daily-wage workers
+ * enter days × rate instead of a work value, and the salary's cash/card method is recorded alongside the paid amount. */
 function EntryRow({ w, year, month, onSaved }: { w: WorkerRow; year: number; month: number; onSaved: () => void }) {
   const t = useT();
   const cell = w.months[month - 1];
   const [work, setWork] = useState(cell.work ?? "");
   const [paid, setPaid] = useState(cell.paid ?? "");
+  const [days, setDays] = useState(cell.days ?? "");
+  const [rate, setRate] = useState(cell.rate ?? (w.dailyRate ?? ""));
+  const [method, setMethod] = useState<PaymentMethod>(cell.paidMethod ?? "CASH");
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function save() {
+  const workValue = w.daily ? (days === "" || rate === "" ? "" : String(num(days) * num(rate))) : work;
+
+  async function save(nextMethod: PaymentMethod = method) {
     const same = (input: string, stored: string | null) => (input === "" ? stored == null : stored != null && Number(input) === Number(stored));
-    if (same(work, cell.work) && same(paid, cell.paid)) return;
+    const unchanged = nextMethod === (cell.paidMethod ?? "CASH") && same(paid, cell.paid)
+      && (w.daily ? same(days, cell.days) && same(rate, cell.rate) : same(work, cell.work));
+    if (unchanged) return;
     setState("saving");
     setError(null);
     try {
-      await api("PUT", `/workers/${w.id}/months/${year}/${month}`, { work: work === "" ? null : work, paid: paid === "" ? null : paid });
+      const body = w.daily
+        ? { days: days === "" ? null : days, rate: rate === "" ? null : rate, paid: paid === "" ? null : paid, paidMethod: nextMethod }
+        : { work: work === "" ? null : work, paid: paid === "" ? null : paid, paidMethod: nextMethod };
+      await api("PUT", `/workers/${w.id}/months/${year}/${month}`, body);
       setState("saved");
       onSaved();
     } catch (e) {
@@ -118,18 +143,35 @@ function EntryRow({ w, year, month, onSaved }: { w: WorkerRow; year: number; mon
     }
   }
 
-  const due = work === "" && paid === "" ? null : num(work) - num(paid);
+  const due = workValue === "" && paid === "" ? null : num(workValue) - num(paid);
   return (
     <tr className={w.active ? "" : "opacity-60"}>
       <td className="px-4 py-2 text-muted tabular">{w.no}</td>
-      <td className="px-4 py-2 font-medium">{w.name}</td>
+      <td className="px-4 py-2 font-medium">{w.name}{w.daily && <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Daily")}</span>}</td>
       <td className="px-2 py-1.5">
-        <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-28 text-end" placeholder="—"
-               aria-label={`${w.name} · ${t("Work value")}`} value={work} onChange={(e) => setWork(e.target.value)} onBlur={save} />
+        {w.daily ? (
+          <div className="flex items-center gap-1">
+            <Input type="number" min="0" step="0.5" inputMode="decimal" className="tabular w-14 text-end" placeholder={t("Days")}
+                   aria-label={`${w.name} · ${t("Days")}`} value={days} onChange={(e) => setDays(e.target.value)} onBlur={() => save()} />
+            <span className="text-muted">×</span>
+            <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-20 text-end" placeholder={t("Rate")}
+                   aria-label={`${w.name} · ${t("Daily rate")}`} value={rate} onChange={(e) => setRate(e.target.value)} onBlur={() => save()} />
+            <span className="text-muted">=</span>
+            <span className="tabular w-20 text-end">{workValue === "" ? <span className="text-muted">—</span> : money(workValue)}</span>
+          </div>
+        ) : (
+          <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-28 text-end" placeholder="—"
+                 aria-label={`${w.name} · ${t("Work value")}`} value={work} onChange={(e) => setWork(e.target.value)} onBlur={() => save()} />
+        )}
       </td>
       <td className="px-2 py-1.5">
         <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-28 text-end" placeholder="—"
-               aria-label={`${w.name} · ${t("Paid")}`} value={paid} onChange={(e) => setPaid(e.target.value)} onBlur={save} />
+               aria-label={`${w.name} · ${t("Paid")}`} value={paid} onChange={(e) => setPaid(e.target.value)} onBlur={() => save()} />
+        <Select className="mt-1 h-8 w-28 py-0 text-xs" aria-label={`${w.name} · ${t("Salary method")}`} value={method}
+                onChange={(e) => { const v = e.target.value as PaymentMethod; setMethod(v); void save(v); }}>
+          <option value="CASH">{t(paymentMethodLabel.CASH)}</option>
+          <option value="CARD">{t(paymentMethodLabel.CARD)}</option>
+        </Select>
       </td>
       <td className="px-4 py-2 text-end">{due == null ? <span className="text-muted">—</span> : <Balance value={due} />}</td>
       <td className="px-4 py-2 text-end"><Balance value={num(w.due)} strong /></td>
@@ -213,6 +255,8 @@ export default function WorkersPage() {
   const thisYear = Number(todayKsa().slice(0, 4));
   const [year, setYear] = useState(thisYear);
   const [month, setMonth] = useState(Number(todayKsa().slice(5, 7)));
+  const [entryMode, setEntryMode] = useState<"day" | "month">("day");
+  const [day, setDay] = useState(todayKsa());
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -321,10 +365,22 @@ export default function WorkersPage() {
 
           <Card className="mt-6">
             <CardHeader
-              title={t("Monthly entry")}
-              subtitle={t("Type the work value and amount paid for each worker; each figure saves when you leave the field.")}
+              title={entryMode === "day" ? t("Daily entry") : t("Monthly entry")}
+              subtitle={entryMode === "day"
+                ? t("Type each worker's work value and amount paid for the day; it is added to that month's total. Each figure saves when you leave the field.")
+                : t("Type the work value and amount paid for each worker; each figure saves when you leave the field.")}
               action={
                 <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-line bg-white p-0.5" role="tablist">
+                    {(["day", "month"] as const).map((v) => (
+                      <button key={v} role="tab" aria-selected={entryMode === v} onClick={() => setEntryMode(v)}
+                              className={`rounded-md px-2.5 py-1 text-xs font-medium ${entryMode === v ? "bg-brand text-white" : "text-muted hover:text-ink"}`}>
+                        {v === "day" ? t("Daily") : t("Monthly")}
+                      </button>
+                    ))}
+                  </div>
+                  {entryMode === "day" && <DayPicker value={day} onChange={setDay} />}
+                  {entryMode === "month" && <>
                   <div className="w-44">
                     <Select value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label={t("Month")}>
                       {MONTHS.map((m, i) => <option key={m} value={i + 1}>{t(m)} {year}</option>)}
@@ -336,6 +392,7 @@ export default function WorkersPage() {
                   <button className={small} onClick={() => run("statement", () => printFile(`/workers/statement/pdf?year=${year}&month=${month}`))} aria-label={t("Print payment statement")}>
                     <Printer className="size-3.5" aria-hidden />
                   </button>
+                  </>}
                   <input ref={dayRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void previewDays(f); }} />
                   <button className={small} disabled={busy === "days"} onClick={() => dayRef.current?.click()}>
@@ -350,6 +407,8 @@ export default function WorkersPage() {
             )}
             {data.workers.length === 0 ? (
               <Empty title={t("No workers yet")}>{t("Add a worker, or import the company's Excel ledger.")}</Empty>
+            ) : entryMode === "day" ? (
+              <WorkerDaily workers={data.workers} day={day} onDay={setDay} onSaved={() => void mutate()} />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-sm">
@@ -429,6 +488,8 @@ export default function WorkersPage() {
           <p className="mt-3 text-xs text-muted">
             {t("Work value = value of work completed · Paid = amount given · Balance = work value minus paid; a figure in brackets was paid in advance.")}
           </p>
+
+          <WorkerLeaves year={year} workers={data.workers} />
         </>
       )}
     </>

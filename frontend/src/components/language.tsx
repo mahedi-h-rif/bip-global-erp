@@ -48,7 +48,7 @@ export function LanguageSwitcher({
 
   const button =
     tone === "dark"
-      ? "border-white/20 bg-white/10 text-white hover:bg-white/15"
+      ? "border-white/20 bg-white/10 text-white hover:bg-white/15 focus-visible:outline-white"
       : "border-line bg-white text-ink hover:bg-canvas shadow-sm";
 
   return (

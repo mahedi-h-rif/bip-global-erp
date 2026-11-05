@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { BellOff, ChevronRight, Search } from "lucide-react";
+import { BellOff, ChevronRight } from "lucide-react";
 import { fetcher } from "@/lib/api";
 import type { CustomerDue, Me } from "@/lib/types";
 import { date, money } from "@/lib/format";
-import { Alert, Card, Empty, Input, PageHeader, Spinner } from "@/components/ui";
+import { Alert, Card, Empty, PageHeader, Spinner } from "@/components/ui";
+import { SearchInput } from "@/components/voice";
 import { DueActions } from "@/components/due-actions";
 import { useT } from "@/lib/i18n";
 
@@ -29,10 +30,7 @@ export default function CustomerDuesPage() {
       />
       <Card>
         <div className="border-b border-line p-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-            <Input className="ps-9" placeholder={t("Search customer")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search customer")} />
-          </div>
+          <SearchInput value={q} onChange={setQ} placeholder={t("Search customer")} />
         </div>
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}

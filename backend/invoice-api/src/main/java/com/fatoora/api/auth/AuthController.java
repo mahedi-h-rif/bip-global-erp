@@ -7,7 +7,6 @@ import com.fatoora.api.user.AppUser;
 import com.fatoora.api.user.AppUserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -26,7 +25,8 @@ import java.util.Map;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
-    public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {}
+    /** {@code email} is the login: an email address, or a plain user name such as a branch login. */
+    public record LoginRequest(@NotBlank String email, @NotBlank String password) {}
 
     public record Me(Long id, String email, String fullName, String role, Long organizationId) {}
 

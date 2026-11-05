@@ -19,7 +19,8 @@ export interface Me {
   email: string;
   fullName: string;
   /** OPERATOR = the e-invoicing provider; the others are the client's own staff. ACCOUNTANT = normal staff user. */
-  role: "OPERATOR" | "ADMIN" | "ACCOUNTANT" | "VIEWER";
+  /** BRANCH: a division login that sees only its own invoices, quotations, agreements and cash-book entries. */
+  role: "OPERATOR" | "ADMIN" | "ACCOUNTANT" | "VIEWER" | "BRANCH";
   organizationId: number;
 }
 
@@ -127,10 +128,14 @@ export interface Payment {
   note: string | null;
   createdBy: string | null;
   createdAt: string;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface Product {
   id?: number;
+  /** Incremental item number, e.g. ITEM-000001 (assigned by the server). */
+  number?: string | null;
   name: string;
   unitPrice: number | string;
   active?: boolean;
@@ -241,7 +246,7 @@ export interface Customer {
 
 export interface Organization {
   id: number;
-  legalNameAr: string;
+  legalNameAr: string | null;
   legalNameEn: string | null;
   vatNumber: string;
   otherId: string;
@@ -259,6 +264,7 @@ export interface Organization {
   signatoryName: string | null;
   signatoryTitle: string | null;
   brandColor: string;
+  letterheadStyle: "CLASSIC" | "MODERN";
   logoUrl: string | null;
   invoicePrefix: string;
   creditNotePrefix: string;
@@ -369,7 +375,7 @@ export interface AgreementTemplate {
 
 // --- workers -----------------------------------------------------------------------------------------
 
-export type WorkerCell = { month: number; work: string | null; paid: string | null; due: string | null };
+export type WorkerCell = { month: number; work: string | null; paid: string | null; due: string | null; days: string | null; rate: string | null; paidMethod: PaymentMethod | null };
 
 export type WorkerRow = {
   id: number;
@@ -380,6 +386,8 @@ export type WorkerRow = {
   nationality: string | null;
   notes: string | null;
   active: boolean;
+  daily: boolean;
+  dailyRate: string | null;
   months: WorkerCell[];
   work: string;
   paid: string;
@@ -387,6 +395,8 @@ export type WorkerRow = {
 };
 
 export type WorkerTotals = { work: string; paid: string; due: string };
+/** One worker's figures on one day; they are already counted in that month's total. */
+export type WorkerDayEntry = { id: number; workerId: number; workerName: string; date: string; work: string | null; paid: string | null; due: string; notes: string | null; createdBy: string | null; createdAt: string | null; updatedBy: string | null; updatedAt: string | null };
 
 export type WorkerLedger = {
   year: number;
@@ -398,6 +408,14 @@ export type WorkerLedger = {
   advances: string;
   workerCount: number;
   activeCount: number;
+};
+
+export type WorkerLeaveType = "ANNUAL" | "SICK" | "UNPAID" | "OTHER";
+/** One worker's leave over a date range; `days` is the inclusive day count, `deduction` an optional salary cut. */
+export type WorkerLeave = {
+  id: number; workerId: number; workerName: string | null; startDate: string; endDate: string;
+  days: number; type: WorkerLeaveType; deduction: string | null; notes: string | null;
+  createdBy: string | null; createdAt: string | null; updatedBy: string | null; updatedAt: string | null;
 };
 
 // --- documents ---------------------------------------------------------------------------------------
@@ -470,12 +488,15 @@ export type DocumentAlerts = { unread: number; items: DocumentAlert[] };
 export type AccountSource = "MANUAL" | "IMPORT" | "IMPORT_YEAR";
 export type ExpenseCategory = "MATERIALS" | "VEHICLE" | "FOOD" | "GOVERNMENT" | "SALARY" | "RENT_UTILITIES" | "OFFICE" | "OTHER";
 
-export type AccountIncome = {
-  id: number; date: string; customerName: string | null; mobile: string | null; details: string | null;
-  amount: string; paid: string; due: string; source: AccountSource;
+/** Who created and who last edited an entry (display names), and when. */
+export type EditedBy = { createdBy: string | null; createdAt: string | null; updatedBy: string | null; updatedAt: string | null };
+
+export type AccountIncome = EditedBy & {
+  id: number; date: string; customerName: string | null; mobile: string | null; details: string | null; receivedBy: string | null;
+  amount: string; paid: string; due: string; source: AccountSource; method: PaymentMethod;
 };
 /** id is null for the month's automatic worker-payments line (category "WORKERS"). */
-export type AccountExpense = { id: number | null; date: string | null; description: string; category: ExpenseCategory | "WORKERS"; amount: string; source: AccountSource | null };
+export type AccountExpense = EditedBy & { id: number | null; date: string | null; description: string; category: ExpenseCategory | "WORKERS"; paidBy: string | null; invoiceNumber: string | null; amount: string; source: AccountSource | null; method: PaymentMethod | null };
 export type AccountCustomer = { name: string; mobile: string | null; billed: string; paid: string; due: string; jobs: number };
 export type AccountCategory = { category: ExpenseCategory | "WORKERS"; amount: string };
 
@@ -485,7 +506,7 @@ export type AccountMonth = {
   customers: AccountCustomer[]; categories: AccountCategory[];
 };
 
-export type PartnerWithdrawal = { id: number; partnerId: number; date: string; amount: string; reference: string | null; approvedBy: string | null; notes: string | null; source: AccountSource };
+export type PartnerWithdrawal = EditedBy & { id: number; partnerId: number; date: string; amount: string; reference: string | null; approvedBy: string | null; notes: string | null; source: AccountSource };
 export type PartnerRow = { id: number; name: string; active: boolean; entitlement: string | null; withdrawn: string; balance: string | null; withdrawals: PartnerWithdrawal[] };
 
 export type AccountYear = {
@@ -511,4 +532,74 @@ export interface PadSummary {
 export interface PadDocument extends PadSummary {
   /** Formatted text (HTML) written on the letterhead. */
   body: string;
+}
+
+/** The business audit of a period (see AuditReport.java). */
+export type AuditSeverity = "HIGH" | "MEDIUM" | "LOW" | "INFO";
+
+export interface AuditFinding {
+  code: string;
+  severity: AuditSeverity;
+  area: string;
+  /** English template with {placeholders}; doubles as the translation key. */
+  text: string;
+  textAr: string;
+  action: string;
+  actionAr: string;
+  vars: Record<string, string>;
+}
+
+export interface AuditVatBox {
+  box: string;
+  label: string;
+  labelAr: string;
+  amount: number;
+  adjustment: number;
+  vat: number;
+}
+
+export interface AuditReportData {
+  company: { nameEn: string; nameAr: string | null; vatNumber: string | null; crNumber: string | null; address: string; live: boolean; missing: string[] };
+  from: string;
+  to: string;
+  generatedAt: string;
+  preparedBy: string;
+  score: { score: number; rating: string; ratingAr: string; high: number; medium: number; low: number };
+  findings: AuditFinding[];
+  vat: { boxes: AuditVatBox[]; total: AuditVatBox; outOfScope: number; filingDeadline: string };
+  einvoicing: {
+    invoices: number; creditNotes: number; debitNotes: number; standard: number; simplified: number;
+    byStatus: Record<string, number>; pending: number; rejected: number; lateReports: number; overdueUnreported: number;
+    standardWithoutBuyerId: number; chainProblems: number; oldDrafts: number; creditNotePct: number;
+  };
+  receivables: {
+    sales: number; collected: number; collectionPct: number; totalDue: number;
+    aging: { label: string; labelAr: string; amount: number; invoices: number }[];
+    topDebtors: { name: string; due: number; invoices: number; oldestDays: number }[];
+    topCustomer: string | null; topCustomerPct: number;
+  };
+  cash: { received: number; expenses: number; net: number; drawings: number; retained: number; categories: { category: string; amount: number }[] };
+  documents: { type: string; label: string; labelAr: string; number: string | null; expiry: string | null; status: "VALID" | "EXPIRING" | "EXPIRED" | "MISSING"; daysLeft: number | null }[];
+  workforce: { active: number; iqamaValid: number; iqamaExpiring: number; iqamaExpired: number; iqamaMissing: number };
+  controls: { events: number; users: number; deletions: number; paymentEdits: number; failedLogins: number };
+  calendar: { label: string; labelAr: string; date: string }[];
+}
+
+/** The company's WhatsApp number, linked by QR (see WhatsAppController.java). */
+export interface WhatsAppStatus {
+  /** False when the server has no WhatsApp service: WhatsApp buttons open a prefilled chat instead. */
+  configured: boolean;
+  status: "idle" | "connecting" | "qr" | "connected" | "logged_out" | "error" | "unavailable";
+  /** PNG data URL to scan; admins only. */
+  qr: string | null;
+  phone: string | null;
+  name: string | null;
+  lastError: string | null;
+  reminders: boolean;
+  documentReminders: boolean;
+}
+
+export interface SendOutcome {
+  status: "SENT" | "LOGGED" | "FAILED" | "OPENED";
+  error: string | null;
 }

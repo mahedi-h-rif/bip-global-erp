@@ -3,12 +3,13 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { BellOff, BellRing, CalendarClock, Eye, FileWarning, Files, MessageCircle, Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { BellOff, BellRing, CalendarClock, Eye, FileWarning, Files, Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher, openFile } from "@/lib/api";
 import type { CompanyDocument, WorkerLedger } from "@/lib/types";
 import { date } from "@/lib/format";
 import { Alert, Button, Card, Empty, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { DocumentForm, typeName } from "@/components/document-form";
+import { DocumentWhatsAppButton } from "@/components/whatsapp";
 import { useT, type TFunction } from "@/lib/i18n";
 
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
@@ -76,9 +77,7 @@ function Row({ d, highlight, onEdit, onChanged }: { d: CompanyDocument; highligh
       <td className="px-4 py-3">
         <div className="flex flex-wrap justify-end gap-1.5">
           {d.fileName && <button className={small} onClick={() => run(() => openFile(`/documents/${d.id}/file`))}><Eye className="size-3.5" aria-hidden />{t("View")}</button>}
-          <a className={small} href={d.whatsappUrl} target="_blank" rel="noopener noreferrer" title={d.workerPhone ? t("Send to the worker on WhatsApp") : t("Share on WhatsApp")}>
-            <MessageCircle className="size-3.5" aria-hidden />{t("WhatsApp")}
-          </a>
+          <DocumentWhatsAppButton documentId={d.id} phone={d.workerPhone} url={d.whatsappUrl} className={small} />
           <button className={small} onClick={onEdit}><Pencil className="size-3.5" aria-hidden />{t("Edit")}</button>
           {confirm
             ? <button className={`${small} border-bad/40 text-bad`} disabled={busy} onClick={() => run(() => api("DELETE", `/documents/${d.id}`))}>{t("Confirm delete")}</button>

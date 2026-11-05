@@ -4,6 +4,7 @@ import com.fatoora.api.InvoiceApiApplication;
 import com.fatoora.api.audit.AuditService;
 import com.fatoora.api.auth.CurrentUser;
 import com.fatoora.api.common.ApiException;
+import com.fatoora.api.notification.SendResult;
 import com.fatoora.api.ocr.OcrInput;
 import com.fatoora.api.worker.Worker;
 import com.fatoora.api.worker.WorkerRepository;
@@ -139,6 +140,17 @@ public class DocumentController {
         audit.record(d.getOrganizationId(), req.remindersEnabled() ? "DOCUMENT_REMINDERS_ON" : "DOCUMENT_REMINDERS_OFF",
                 "document", d.getId(), service.describe(d));
         return dto(d, workers());
+    }
+
+    /** Sends the expiry message to the worker now, from the linked WhatsApp number. */
+    @PostMapping("/{id}/whatsapp")
+    @PreAuthorize(WRITE)
+    @Transactional(readOnly = true)
+    SendResult whatsapp(@PathVariable Long id) {
+        CompanyDocument d = load(id);
+        var r = service.sendWhatsApp(d);
+        if (r.delivered()) audit.record(d.getOrganizationId(), "DOCUMENT_WHATSAPP_SENT", "document", d.getId(), service.describe(d));
+        return r;
     }
 
     @PutMapping("/{id}/file")

@@ -18,10 +18,12 @@ import java.util.stream.Collectors;
  */
 public final class WorkerLedger {
 
-    public record Cell(int month, BigDecimal work, BigDecimal paid, BigDecimal due) {}
+    public record Cell(int month, BigDecimal work, BigDecimal paid, BigDecimal due, BigDecimal days, BigDecimal rate,
+                       String paidMethod) {}
 
     public record Row(Long id, int no, String name, String phone, String iqamaNumber, String nationality, String notes,
-                      boolean active, List<Cell> months, BigDecimal work, BigDecimal paid, BigDecimal due) {}
+                      boolean active, boolean daily, BigDecimal dailyRate, List<Cell> months, BigDecimal work,
+                      BigDecimal paid, BigDecimal due) {}
 
     public record Totals(BigDecimal work, BigDecimal paid, BigDecimal due) {}
 
@@ -44,7 +46,9 @@ public final class WorkerLedger {
             for (int m = 1; m <= 12; m++) {
                 WorkerMonth e = months.get(m);
                 BigDecimal cw = e == null ? null : e.getWork(), cp = e == null ? null : e.getPaid();
-                cells.add(new Cell(m, cw, cp, cw == null && cp == null ? null : nz(cw).subtract(nz(cp))));
+                cells.add(new Cell(m, cw, cp, cw == null && cp == null ? null : nz(cw).subtract(nz(cp)),
+                        e == null ? null : e.getDays(), e == null ? null : e.getRate(),
+                        e == null || e.getPaidMethod() == null ? null : e.getPaidMethod().name()));
                 work = work.add(nz(cw));
                 paid = paid.add(nz(cp));
                 mw[m - 1] = mw[m - 1].add(nz(cw));
@@ -54,7 +58,7 @@ public final class WorkerLedger {
             if (due.signum() > 0) outstanding = outstanding.add(due);
             else advances = advances.add(due.negate());
             rows.add(new Row(w.getId(), ++no, w.getName(), w.getPhone(), w.getIqamaNumber(), w.getNationality(),
-                    w.getNotes(), w.isActive(), cells, work, paid, due));
+                    w.getNotes(), w.isActive(), w.isDaily(), w.getDailyRate(), cells, work, paid, due));
         }
         List<Totals> monthTotals = new ArrayList<>(12);
         BigDecimal tw = BigDecimal.ZERO, tp = BigDecimal.ZERO;

@@ -9,4 +9,6 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     Optional<AppUser> findByEmailIgnoreCase(String email);
 
     List<AppUser> findByOrganizationIdAndRoleAndEnabledTrue(Long organizationId, AppUser.Role role);
+
+    List<AppUser> findByOrganizationId(Long organizationId);
 }

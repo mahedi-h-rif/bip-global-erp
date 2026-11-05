@@ -36,6 +36,8 @@ public class Organization {
     private String email;
     private String website;
     private String brandColor = "#0B2A6F";
+    /** Letterhead design for quotations and agreements: CLASSIC (the original) or MODERN (themed backdrop). */
+    private String letterheadStyle = "CLASSIC";
     private String logoUrl;
     /** Base64-encoded PNG or JPEG. */
     private String logo;
@@ -47,16 +49,44 @@ public class Organization {
     private String creditNotePrefix = "CN";
     private String debitNotePrefix = "DN";
 
+    /** Send payment reminders (automatic and "Send reminder") on WhatsApp too, when a number is linked. */
+    private boolean whatsappReminders = true;
+    /** Send document expiry reminders to the worker on WhatsApp, when a number is linked. */
+    private boolean whatsappDocumentReminders = false;
+
     @Enumerated(EnumType.STRING)
     private ZatcaEnvironment zatcaEnvironment = ZatcaEnvironment.SANDBOX;
 
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 
-    /** The seller as ZATCA sees it. The Arabic legal name is the registration name. */
+    /** Empty input is stored as null, so "no Arabic name" is one state, not two. */
+    public void setLegalNameAr(String legalNameAr) {
+        this.legalNameAr = blankToNull(legalNameAr);
+    }
+
+    public void setLegalNameEn(String legalNameEn) {
+        this.legalNameEn = blankToNull(legalNameEn);
+    }
+
+    /** The name for English text: the English legal name, else the Arabic one (either may be left empty). */
+    public String displayName() {
+        return legalNameEn != null ? legalNameEn : legalNameAr;
+    }
+
+    /** The registration name for ZATCA: the Arabic legal name, else the English one. */
+    public String registrationName() {
+        return legalNameAr != null ? legalNameAr : legalNameEn;
+    }
+
+    /** The seller as ZATCA sees it. The Arabic legal name is the registration name when there is one. */
     public Party toParty() {
-        return new Party(legalNameAr, vatNumber, otherId, otherIdScheme,
+        return new Party(registrationName(), vatNumber, otherId, otherIdScheme,
                 new Address(street, buildingNumber, additionalNumber, district, city, postalCode, countryCode));
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     @PreUpdate

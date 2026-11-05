@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { api, ApiError, download, fetcher, openFile, printFile, shareFile } from "@/lib/api";
 import type { Organization, PadDocument } from "@/lib/types";
-import { Alert, Button, Input } from "@/components/ui";
+import { Alert, Button, Field, Input } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -158,10 +158,9 @@ export function PadEditor({ initial, start }: { initial?: PadDocument; start?: "
       {notice && <Alert tone="ok">{notice}</Alert>}
 
       <div className="flex flex-wrap items-end gap-2">
-        <label className="min-w-0 flex-1 basis-64">
-          <span className="mb-1 block text-xs font-medium text-muted">{t("Title")}</span>
-          <Input dir="auto" value={title} placeholder={t("e.g. Completion letter")} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} />
-        </label>
+        <Field label={t("Title")} className="min-w-0 flex-1 basis-64">
+          <Input dir="auto" required value={title} placeholder={t("e.g. Completion letter")} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} />
+        </Field>
         <Button loading={busy === "save"} disabled={busy != null} onClick={() => act("save", async () => { await save(); setNotice(t("Saved")); })}>
           <Save className="size-4" aria-hidden /> {t("Save")}
         </Button>

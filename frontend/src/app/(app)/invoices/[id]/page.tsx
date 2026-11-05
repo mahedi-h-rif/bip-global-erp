@@ -11,6 +11,7 @@ import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner, Sta
 import { InvoiceEditor } from "@/components/invoice-editor";
 import { PaymentsCard } from "@/components/payments-card";
 import { EditDeleteActions } from "@/components/invoice-actions";
+import { WhatsAppInvoiceButton } from "@/components/whatsapp";
 import { useT } from "@/lib/i18n";
 
 type ZatcaMessage = { code?: string; message?: string; category?: string };
@@ -116,6 +117,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             >
               <FileCode2 className="size-4" aria-hidden /> XML
             </Button>
+            {canWrite && <WhatsAppInvoiceButton invoiceId={inv.id} disabled={!inv.downloadable} />}
             {inv.status === "SIGNED" && (
               <Button loading={busy === "send"} onClick={() => act("send", async () => { await api("POST", `/invoices/${inv.id}/submit`); await mutate(); })}>
                 <Send className="size-4" aria-hidden /> {t("Send to ZATCA now")}
@@ -188,7 +190,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 <tbody className="divide-y divide-line">
                   {inv.lines.map((l, i) => (
                     <tr key={i}>
-                      <td className="px-4 py-2.5">{l.name}</td>
+                      <td className="px-4 py-2.5" dir="auto">{l.name}</td>
                       <td className="tabular px-4 py-2.5 text-end">{Number(l.quantity)} {l.unitCode}</td>
                       <td className="tabular px-4 py-2.5 text-end">{money(l.unitPrice)}</td>
                       <td className="px-4 py-2.5 text-end">{l.vatCategory === "S" ? `${Number(l.vatRate)}%` : l.vatCategory}</td>

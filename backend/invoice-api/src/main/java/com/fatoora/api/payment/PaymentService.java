@@ -35,11 +35,13 @@ public class PaymentService {
             @Size(max = 1000) String note) {}
 
     public record PaymentDto(Long id, Long invoiceId, BigDecimal amount, LocalDate paidOn, InvoicePayment.Method method,
-                             String reference, String note, String createdBy, Instant createdAt) {
+                             String reference, String note, String createdBy, Instant createdAt, String updatedBy,
+                             Instant updatedAt) {
 
         static PaymentDto of(InvoicePayment p) {
             return new PaymentDto(p.getId(), p.getInvoiceId(), p.getAmount(), p.getPaidOn(), p.getMethod(),
-                    p.getReference(), p.getNote(), p.getCreatedBy(), p.getCreatedAt());
+                    p.getReference(), p.getNote(), p.getCreatedBy(), p.getCreatedAt(), p.getUpdatedBy(),
+                    p.getUpdatedBy() == null ? null : p.getUpdatedAt());
         }
     }
 
@@ -103,6 +105,7 @@ public class PaymentService {
         Invoice inv = lockPayable(orgId, p.getInvoiceId());
         requireWithinDue(inv, req.amount(), p.getAmount());
         apply(p, req);
+        p.setUpdatedBy(com.fatoora.api.auth.CurrentUser.get().email());
         audit.record(orgId, "PAYMENT_UPDATED", "invoice", inv.getId(), inv.getNumber() + " " + p.getAmount() + " " + p.getMethod());
         return PaymentDto.of(p);
     }
@@ -116,6 +119,7 @@ public class PaymentService {
     @Transactional
     public void delete(Long orgId, Long paymentId) {
         InvoicePayment p = payments.findByIdAndOrganizationId(paymentId, orgId).orElseThrow(() -> ApiException.notFound("Payment"));
+        load(orgId, p.getInvoiceId());
         payments.delete(p);
         audit.record(orgId, "PAYMENT_DELETED", "invoice", p.getInvoiceId(), p.getAmount() + " " + p.getMethod());
     }
@@ -132,7 +136,9 @@ public class PaymentService {
     // --- helpers ---------------------------------------------------------------------------------
 
     private Invoice lockPayable(Long orgId, Long invoiceId) {
-        Invoice inv = invoices.lockByIdAndOrganizationId(invoiceId, orgId).orElseThrow(() -> ApiException.notFound("Invoice"));
+        Invoice inv = invoices.lockByIdAndOrganizationId(invoiceId, orgId)
+                .filter(i -> com.fatoora.api.auth.CurrentUser.owns(i.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Invoice"));
         if (inv.getType() != DocumentType.INVOICE)
             throw ApiException.badRequest("not_invoice", "Record payments against the invoice, not against a credit or debit note");
         if (!inv.getStatus().billable())
@@ -157,7 +163,9 @@ public class PaymentService {
     }
 
     private Invoice load(Long orgId, Long invoiceId) {
-        return invoices.findByIdAndOrganizationId(invoiceId, orgId).orElseThrow(() -> ApiException.notFound("Invoice"));
+        return invoices.findByIdAndOrganizationId(invoiceId, orgId)
+                .filter(i -> com.fatoora.api.auth.CurrentUser.owns(i.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Invoice"));
     }
 
     private static Map<Long, BigDecimal> paidTotals(List<PaidTotal> totals) {

@@ -33,7 +33,7 @@ public class MiscController {
 
     /** Business figures are for the client's admin; normal staff only work with invoices and dues. */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     InvoiceDtos.Dashboard dashboard() {
         return invoices.dashboard(CurrentUser.orgId());
     }

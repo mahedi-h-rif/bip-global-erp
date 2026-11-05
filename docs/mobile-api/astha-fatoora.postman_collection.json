@@ -1,0 +1,3437 @@
+{
+  "info": {
+    "name": "Astha Fatoora API",
+    "description": "REST API of Astha Fatoora (ZATCA e-invoicing). Base path: /api/v1. JSON in and out; dates are ISO yyyy-MM-dd, timestamps ISO-8601 UTC, money as decimal numbers (SAR).\n\nAuth: POST /auth/login sets an httpOnly JWT cookie (`fatoora_session`). Keep a cookie jar. For every POST/PUT/DELETE send header X-XSRF-TOKEN = value of the XSRF-TOKEN cookie (get it first with GET /auth/csrf; it can rotate, so re-read it from the cookie jar before each write).\n\nRoles: OPERATOR > ADMIN > ACCOUNTANT > VIEWER. Writes need ADMIN or ACCOUNTANT unless marked otherwise.\n\nErrors: {\"code\", \"message\", \"fields\"}. 400 validation (fields = per-field messages), 401 not signed in, 403 role not allowed, 404 not found, 409 conflict, 429 locked.\n\nLists of invoices, audit log and notifications are Spring pages: {content, totalElements, totalPages, number, size}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Copies the XSRF-TOKEN cookie into the xsrf variable before every request.",
+          "const t = pm.cookies.get('XSRF-TOKEN');",
+          "if (t) pm.collectionVariables.set('xsrf', t);"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://astha.187-127-75-189.sslip.io/api/v1"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "xsrf",
+      "value": ""
+    },
+    {
+      "key": "customerId",
+      "value": "1"
+    },
+    {
+      "key": "productId",
+      "value": "1"
+    },
+    {
+      "key": "invoiceId",
+      "value": "1"
+    },
+    {
+      "key": "publicToken",
+      "value": ""
+    },
+    {
+      "key": "paymentId",
+      "value": "1"
+    },
+    {
+      "key": "quotationId",
+      "value": "1"
+    },
+    {
+      "key": "agreementId",
+      "value": "1"
+    },
+    {
+      "key": "padId",
+      "value": "1"
+    },
+    {
+      "key": "documentId",
+      "value": "1"
+    },
+    {
+      "key": "alertId",
+      "value": "1"
+    },
+    {
+      "key": "workerId",
+      "value": "1"
+    },
+    {
+      "key": "entryId",
+      "value": "1"
+    },
+    {
+      "key": "partnerId",
+      "value": "1"
+    },
+    {
+      "key": "egsId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "CSRF token (sets XSRF-TOKEN cookie)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "csrf"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sets the JWT cookie. 401 bad_credentials; 429 locked after repeated failures (15 min)."
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Health (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Auth: POST /auth/login sets an httpOnly JWT cookie (`fatoora_session`). Keep a cookie jar. For every POST/PUT/DELETE send header X-XSRF-TOKEN = value of the XSRF-TOKEN cookie (get it first with GET /auth/csrf; it can rotate, so re-read it from the cookie jar before each write)."
+    },
+    {
+      "name": "Dashboard & audit log (ADMIN)",
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Audit log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit?page=0&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "size",
+                  "value": "50",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organization",
+      "item": [
+        {
+          "name": "Get organization",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/organization",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organization"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update organization (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organization",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organization"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"legalNameAr\": \"شركة مثال\",\n  \"legalNameEn\": \"Example Co\",\n  \"vatNumber\": \"300000000000003\",\n  \"otherId\": \"1010000000\",\n  \"otherIdScheme\": \"CRN\",\n  \"street\": \"King Fahd Rd\",\n  \"buildingNumber\": \"1234\",\n  \"additionalNumber\": \"5678\",\n  \"district\": \"Al Olaya\",\n  \"city\": \"Riyadh\",\n  \"postalCode\": \"12345\",\n  \"phone\": \"0110000000\",\n  \"email\": \"info@example.com\",\n  \"website\": null,\n  \"signatoryName\": null,\n  \"signatoryTitle\": null,\n  \"brandColor\": \"#0F766E\",\n  \"logoUrl\": null,\n  \"invoicePrefix\": \"INV\",\n  \"creditNotePrefix\": \"CN\",\n  \"debitNotePrefix\": \"DN\",\n  \"zatcaEnvironment\": \"PRODUCTION\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Logo (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/organization/logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organization",
+                "logo"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload logo (ADMIN, PNG/JPEG body)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "image/png"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organization/logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organization",
+                "logo"
+              ]
+            },
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete logo (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organization/logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organization",
+                "logo"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nameEn\": \"Al Noor Trading\",\n  \"nameAr\": \"مؤسسة النور التجارية\",\n  \"vatNumber\": \"300000000000003\",\n  \"otherId\": null,\n  \"otherIdScheme\": null,\n  \"address\": null,\n  \"street\": \"King Fahd Rd\",\n  \"buildingNumber\": \"1234\",\n  \"additionalNumber\": \"5678\",\n  \"district\": \"Al Olaya\",\n  \"city\": \"Riyadh\",\n  \"postalCode\": \"12345\",\n  \"countryCode\": \"SA\",\n  \"email\": \"customer@example.com\",\n  \"phone\": \"0500000000\",\n  \"remindersEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "nameEn and phone required. vatNumber: empty or 15 digits starting and ending with 3."
+          }
+        },
+        {
+          "name": "Update customer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nameEn\": \"Al Noor Trading\",\n  \"nameAr\": \"مؤسسة النور التجارية\",\n  \"vatNumber\": \"300000000000003\",\n  \"otherId\": null,\n  \"otherIdScheme\": null,\n  \"address\": null,\n  \"street\": \"King Fahd Rd\",\n  \"buildingNumber\": \"1234\",\n  \"additionalNumber\": \"5678\",\n  \"district\": \"Al Olaya\",\n  \"city\": \"Riyadh\",\n  \"postalCode\": \"12345\",\n  \"countryCode\": \"SA\",\n  \"email\": \"customer@example.com\",\n  \"phone\": \"0500000000\",\n  \"remindersEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete customer",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?q=&all=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "all",
+                  "value": "false",
+                  "description": "true includes inactive",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cleaning service\",\n  \"unitPrice\": 1000,\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cleaning service\",\n  \"unitPrice\": 1100,\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "products",
+                "{{productId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "List invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices?status=&kind=&q=&page=0&size=25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "DRAFT|SIGNED|CLEARED|CLEARED_WITH_WARNINGS|REPORTED|REPORTED_WITH_WARNINGS|REJECTED",
+                  "disabled": false
+                },
+                {
+                  "key": "kind",
+                  "value": "",
+                  "description": "STANDARD|SIMPLIFIED",
+                  "disabled": false
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "size",
+                  "value": "25",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get invoice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"SIMPLIFIED\",\n  \"type\": \"INVOICE\",\n  \"customerId\": \"{{customerId}}\",\n  \"supplyDate\": \"2026-10-31\",\n  \"paymentMeans\": \"10\",\n  \"sendMode\": \"NOW\",\n  \"originalInvoiceId\": null,\n  \"reason\": null,\n  \"internalNote\": null,\n  \"dueDate\": \"2026-11-30\",\n  \"lines\": [\n    {\n      \"name\": \"Cleaning service\",\n      \"quantity\": 1,\n      \"unitCode\": \"PCE\",\n      \"unitPrice\": 1000.0,\n      \"vatCategory\": \"S\",\n      \"vatRate\": 15,\n      \"exemptionCode\": null,\n      \"exemptionReason\": null,\n      \"productId\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "kind: STANDARD (B2B, needs customer VAT) | SIMPLIFIED (B2C). type: INVOICE|DEBIT_NOTE|CREDIT_NOTE. vatCategory: S (15%) | Z | E | O (Z/E/O need exemptionCode + exemptionReason). sendMode: NOW|LATER."
+          }
+        },
+        {
+          "name": "Update draft",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"SIMPLIFIED\",\n  \"type\": \"INVOICE\",\n  \"customerId\": \"{{customerId}}\",\n  \"supplyDate\": \"2026-10-31\",\n  \"paymentMeans\": \"10\",\n  \"sendMode\": \"NOW\",\n  \"originalInvoiceId\": null,\n  \"reason\": null,\n  \"internalNote\": null,\n  \"dueDate\": \"2026-11-30\",\n  \"lines\": [\n    {\n      \"name\": \"Cleaning service\",\n      \"quantity\": 1,\n      \"unitCode\": \"PCE\",\n      \"unitPrice\": 1000.0,\n      \"vatCategory\": \"S\",\n      \"vatRate\": 15,\n      \"exemptionCode\": null,\n      \"exemptionReason\": null,\n      \"productId\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete draft",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Issue (sign + send to ZATCA)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/issue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "issue"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sendMode\": \"NOW\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Retry submit to ZATCA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "submit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create credit/debit note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/notes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "notes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CREDIT_NOTE\",\n  \"reason\": \"Returned goods\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Duplicate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/duplicate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "duplicate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download XML",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/xml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "xml"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "pdf"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send PDF on WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/whatsapp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "whatsapp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "phone optional (defaults to the customer's mobile). 409 whatsapp_not_connected, 422 no_mobile."
+          }
+        },
+        {
+          "name": "Public invoice (no auth, from share link)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/public/invoices/{{invoiceId}}/{{publicToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "public",
+                "invoices",
+                "{{invoiceId}}",
+                "{{publicToken}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments & dues",
+      "item": [
+        {
+          "name": "List payments of invoice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "payments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.0,\n  \"paidOn\": \"2026-10-31\",\n  \"method\": \"CASH\",\n  \"reference\": null,\n  \"note\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "method: CASH|BANK_TRANSFER|CARD|CHEQUE|OTHER"
+          }
+        },
+        {
+          "name": "Update payment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "{{paymentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.0,\n  \"paidOn\": \"2026-10-31\",\n  \"method\": \"BANK_TRANSFER\",\n  \"reference\": \"TRX-1\",\n  \"note\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete payment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "{{paymentId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set due date",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/due-date",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoiceId}}",
+                "due-date"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dueDate\": \"2026-11-30\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Due invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dues?q=&customerId=&overdueOnly=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dues"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "customerId",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "overdueOnly",
+                  "value": "false",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Dues by customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dues/customers?q=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dues",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send reminder (email/WhatsApp)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dues/customers/{{customerId}}/remind",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dues",
+                "customers",
+                "{{customerId}}",
+                "remind"
+              ]
+            }
+          }
+        },
+        {
+          "name": "WhatsApp reminder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dues/customers/{{customerId}}/whatsapp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dues",
+                "customers",
+                "{{customerId}}",
+                "whatsapp"
+              ]
+            },
+            "description": "Sends directly when the company number is linked; otherwise returns a wa.me url to open."
+          }
+        },
+        {
+          "name": "Notification log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?customerId=&page=0&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "size",
+                  "value": "50",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quotations",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotations/{{quotationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations",
+                "{{quotationId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/quotations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"clientName\": null,\n  \"issueDate\": \"2026-10-31\",\n  \"validUntil\": \"2026-11-30\",\n  \"status\": \"DRAFT\",\n  \"notes\": null,\n  \"terms\": null,\n  \"lines\": [\n    {\n      \"name\": \"Cleaning service\",\n      \"quantity\": 1,\n      \"unitCode\": \"PCE\",\n      \"unitPrice\": 1000,\n      \"vatRate\": 15,\n      \"productId\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "status: DRAFT|SENT|ACCEPTED|DECLINED|INVOICED"
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/quotations/{{quotationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations",
+                "{{quotationId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"clientName\": null,\n  \"issueDate\": \"2026-10-31\",\n  \"validUntil\": \"2026-11-30\",\n  \"status\": \"DRAFT\",\n  \"notes\": null,\n  \"terms\": null,\n  \"lines\": [\n    {\n      \"name\": \"Cleaning service\",\n      \"quantity\": 1,\n      \"unitCode\": \"PCE\",\n      \"unitPrice\": 1000,\n      \"vatRate\": 15,\n      \"productId\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/quotations/{{quotationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations",
+                "{{quotationId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark invoiced",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/quotations/{{quotationId}}/invoiced",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations",
+                "{{quotationId}}",
+                "invoiced"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotations/{{quotationId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotations",
+                "{{quotationId}}",
+                "pdf"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agreements",
+      "item": [
+        {
+          "name": "Template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/agreement-template",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreement-template"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save template (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/agreement-template",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreement-template"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Service agreement\",\n  \"body\": \"Template text…\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reset template (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/agreement-template",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreement-template"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Template PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/agreement-template/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreement-template",
+                "pdf"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/agreements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/agreements/{{agreementId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements",
+                "{{agreementId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/agreements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"clientName\": null,\n  \"clientDetails\": null,\n  \"title\": \"Service agreement\",\n  \"body\": \"Agreement text…\",\n  \"agreementDate\": \"2026-10-31\",\n  \"status\": \"DRAFT\",\n  \"signedOn\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "status: DRAFT|SENT|SIGNED|CANCELLED"
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/agreements/{{agreementId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements",
+                "{{agreementId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"clientName\": null,\n  \"clientDetails\": null,\n  \"title\": \"Service agreement\",\n  \"body\": \"Agreement text…\",\n  \"agreementDate\": \"2026-10-31\",\n  \"status\": \"DRAFT\",\n  \"signedOn\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/agreements/{{agreementId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements",
+                "{{agreementId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/agreements/{{agreementId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "agreements",
+                "{{agreementId}}",
+                "pdf"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Letter pads",
+      "item": [
+        {
+          "name": "Blank pad PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pads/blank/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "blank",
+                "pdf"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Blank pad DOCX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pads/blank/docx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "blank",
+                "docx"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pads/{{padId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "{{padId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Letter\",\n  \"body\": \"Text…\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pads/{{padId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "{{padId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Letter\",\n  \"body\": \"Text…\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pads/{{padId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "{{padId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pads/{{padId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "{{padId}}",
+                "pdf"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DOCX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pads/{{padId}}/docx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pads",
+                "{{padId}}",
+                "docx"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents & alerts",
+      "item": [
+        {
+          "name": "List documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Scan (OCR) a document image",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "image/jpeg"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/scan?type=IQAMA",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "scan"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "IQAMA",
+                  "description": "IQAMA|PASSPORT|WORK_PERMIT|DRIVING_LICENSE|CR|MUNICIPAL_LICENSE|VAT_CERTIFICATE|CHAMBER|INSURANCE|OTHER",
+                  "disabled": false
+                }
+              ]
+            },
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            }
+          }
+        },
+        {
+          "name": "Create document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"IQAMA\",\n  \"workerId\": \"{{workerId}}\",\n  \"title\": null,\n  \"number\": \"2000000000\",\n  \"holderName\": \"Worker Name\",\n  \"nationality\": \"BD\",\n  \"issueDate\": \"2025-11-01\",\n  \"expiryDate\": \"2026-11-01\",\n  \"notes\": null,\n  \"remindersEnabled\": true,\n  \"remindAfterExpiry\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update document",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"IQAMA\",\n  \"workerId\": \"{{workerId}}\",\n  \"title\": null,\n  \"number\": \"2000000000\",\n  \"holderName\": \"Worker Name\",\n  \"nationality\": \"BD\",\n  \"issueDate\": \"2025-11-01\",\n  \"expiryDate\": \"2026-11-01\",\n  \"notes\": null,\n  \"remindersEnabled\": true,\n  \"remindAfterExpiry\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reminder settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}/reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}",
+                "reminders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remindersEnabled\": true,\n  \"remindAfterExpiry\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Send on WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}/whatsapp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}",
+                "whatsapp"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload file (raw body)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}/file?name=iqama.pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}",
+                "file"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "iqama.pdf",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            },
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            }
+          }
+        },
+        {
+          "name": "Download file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}/file",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}",
+                "file"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete document",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "{{documentId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "alerts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark alert read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/alerts/{{alertId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "alerts",
+                "{{alertId}}",
+                "read"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark all alerts read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/documents/alerts/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "alerts",
+                "read-all"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workers",
+      "item": [
+        {
+          "name": "Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/workers/ledger?year=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "ledger"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ledger Excel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/workers/ledger.xlsx?year=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "ledger.xlsx"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ledger PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/workers/ledger/pdf?year=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "ledger",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create worker",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Worker Name\",\n  \"phone\": \"0500000000\",\n  \"iqamaNumber\": \"2000000000\",\n  \"nationality\": \"BD\",\n  \"notes\": null,\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update worker",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Worker Name\",\n  \"phone\": \"0500000000\",\n  \"iqamaNumber\": \"2000000000\",\n  \"nationality\": \"BD\",\n  \"notes\": null,\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete worker (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set month work/paid",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/{{workerId}}/months/2026/10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "{{workerId}}",
+                "months",
+                "2026",
+                "10"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"work\": 3000,\n  \"paid\": 2500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Import Excel (raw .xlsx body)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/workers/import?year=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "import"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            },
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            }
+          }
+        },
+        {
+          "name": "Monthly statement PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/workers/statement/pdf?year=2026&month=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "workers",
+                "statement",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "month",
+                  "value": "10",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Accounts / cash book (ADMIN)",
+      "item": [
+        {
+          "name": "Month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/month?year=2026&month=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "month"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "month",
+                  "value": "10",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Year",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/year?year=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "year"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Month PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/month/pdf?year=2026&month=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "month",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "month",
+                  "value": "10",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Year PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/year/pdf?year=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "year",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add income",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/income",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "income"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-10-31\",\n  \"customerName\": \"Walk-in\",\n  \"mobile\": null,\n  \"details\": null,\n  \"amount\": 1000,\n  \"paid\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update income",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/income/{{entryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "income",
+                "{{entryId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-10-31\",\n  \"customerName\": \"Walk-in\",\n  \"mobile\": null,\n  \"details\": null,\n  \"amount\": 1000,\n  \"paid\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete income",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/income/{{entryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "income",
+                "{{entryId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/expenses",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "expenses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-10-31\",\n  \"description\": \"Fuel\",\n  \"category\": \"VEHICLE\",\n  \"amount\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "category: MATERIALS|VEHICLE|FOOD|GOVERNMENT|SALARY|RENT_UTILITIES|OFFICE|OTHER"
+          }
+        },
+        {
+          "name": "Update expense",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/expenses/{{entryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "expenses",
+                "{{entryId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-10-31\",\n  \"description\": \"Fuel\",\n  \"category\": \"VEHICLE\",\n  \"amount\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete expense",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/expenses/{{entryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "expenses",
+                "{{entryId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/partners",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "partners"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Partner A\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Set partner entitlement",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/partners/{{partnerId}}/entitlement/2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "partners",
+                "{{partnerId}}",
+                "entitlement",
+                "2026"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Add withdrawal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/withdrawals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "withdrawals"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partnerId\": \"{{partnerId}}\",\n  \"date\": \"2026-10-31\",\n  \"amount\": 5000,\n  \"reference\": null,\n  \"approvedBy\": null,\n  \"notes\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports (ADMIN)",
+      "item": [
+        {
+          "name": "Sales report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reports/sales?from=2026-07-01&to=2026-09-30&customerId=&kind=&q=&hourFrom=&hourTo=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "sales"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-07-01",
+                  "description": "ISO date, optional",
+                  "disabled": false
+                },
+                {
+                  "key": "to",
+                  "value": "2026-09-30",
+                  "description": "ISO date, optional",
+                  "disabled": false
+                },
+                {
+                  "key": "customerId",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "kind",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "hourFrom",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "hourTo",
+                  "value": "",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Business audit (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/business-audit?from=2026-07-01&to=2026-09-30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-audit"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-07-01",
+                  "description": "ISO date, optional",
+                  "disabled": false
+                },
+                {
+                  "key": "to",
+                  "value": "2026-09-30",
+                  "description": "ISO date, optional",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Business audit PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/business-audit/pdf?from=2026-07-01&to=2026-09-30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-audit",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-07-01",
+                  "description": "ISO date, optional",
+                  "disabled": false
+                },
+                {
+                  "key": "to",
+                  "value": "2026-09-30",
+                  "description": "ISO date, optional",
+                  "disabled": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp",
+      "item": [
+        {
+          "name": "Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Connect / show QR (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/connect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "connect"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pause (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/disconnect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "disconnect"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unlink (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "logout"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Settings (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "settings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reminders\": true,\n  \"documentReminders\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Test message (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "test"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"0500000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ZATCA EGS units (OPERATOR only)",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/egs-units",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "egs-units"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/egs-units",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "egs-units"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main\",\n  \"branch\": \"Riyadh\",\n  \"location\": \"Riyadh\",\n  \"industry\": \"Services\",\n  \"invoiceTypes\": \"1100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Onboard (OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/egs-units/{{egsId}}/onboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "egs-units",
+                "{{egsId}}",
+                "onboard"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Renew (OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/egs-units/{{egsId}}/renew",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "egs-units",
+                "{{egsId}}",
+                "renew"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Make default",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{xsrf}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/egs-units/{{egsId}}/default",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "egs-units",
+                "{{egsId}}",
+                "default"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Device onboarding. Mobile apps normally do not need these."
+    }
+  ]
+}

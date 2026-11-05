@@ -98,7 +98,7 @@ class NotificationTest {
         var sms = new FatooraProperties.Sms("https://el.cloud.unifonic.com/rest/SMS/messages", null,
                 "Recipient", "Body", "SenderID", "ASTHA", "AppSid=abc123", null);
         var props = new FatooraProperties(null, null, null, null, null,
-                new FatooraProperties.Notifications(true, Duration.ofDays(15), Duration.ofHours(6), null, sms), null);
+                new FatooraProperties.Notifications(true, Duration.ofDays(15), Duration.ofHours(6), null, sms, null), null);
         String form = new HttpSmsSender(props).form("966501234567", "مرحبا & hi");
         assertEquals("AppSid=abc123&Recipient=966501234567&Body=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7+%26+hi&SenderID=ASTHA", form);
     }
@@ -108,7 +108,7 @@ class NotificationTest {
         var sms = new FatooraProperties.Sms("https://api.taqnyat.sa/v1/messages", "Bearer t",
                 "recipients", "body", "sender", "Taqnyat.sa", null, "json");
         var props = new FatooraProperties(null, null, null, null, null,
-                new FatooraProperties.Notifications(true, Duration.ofDays(15), Duration.ofHours(6), null, sms), null);
+                new FatooraProperties.Notifications(true, Duration.ofDays(15), Duration.ofHours(6), null, sms, null), null);
         String json = new HttpSmsSender(props).json("966501234567", "مرحبا \"x\"\nhi");
         assertEquals("{\"recipients\":[\"966501234567\"],\"body\":\"مرحبا \\\"x\\\"\\nhi\",\"sender\":\"Taqnyat.sa\"}", json);
     }
@@ -118,7 +118,7 @@ class NotificationTest {
         var props = new FatooraProperties(null, null, null, null, null,
                 new FatooraProperties.Notifications(true, Duration.ofDays(15), Duration.ofHours(6),
                         new FatooraProperties.Mail("", 587, null, null, true, null),
-                        new FatooraProperties.Sms("", null, null, null, null, null, null, null)), null);
+                        new FatooraProperties.Sms("", null, null, null, null, null, null, null), null), null);
         assertEquals(NotificationLog.Status.LOGGED, new HttpSmsSender(props).send("966501234567", "x").status());
         assertEquals(NotificationLog.Status.LOGGED, new EmailSender(props).send("a@b.c", "s", "b").status());
     }

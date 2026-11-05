@@ -23,12 +23,15 @@ public final class AccountReport {
     public static final String WORKERS = "WORKERS";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    public record Income(Long id, LocalDate date, String customerName, String mobile, String details, BigDecimal amount,
-                         BigDecimal paid, BigDecimal due, AccountSource source) {}
+    /** createdBy / updatedBy are display names (the full name of the login, or the login itself). */
+    public record Income(Long id, LocalDate date, String customerName, String mobile, String details, String receivedBy,
+                         BigDecimal amount, BigDecimal paid, BigDecimal due, AccountSource source, String method, String createdBy,
+                         java.time.Instant createdAt, String updatedBy, java.time.Instant updatedAt) {}
 
     /** An expense row; the worker-payments row of a month has no id and category {@value #WORKERS}. */
-    public record Expense(Long id, LocalDate date, String description, String category, BigDecimal amount,
-                          AccountSource source) {}
+    public record Expense(Long id, LocalDate date, String description, String category, String paidBy, String invoiceNumber,
+                          BigDecimal amount, AccountSource source, String method, String createdBy, java.time.Instant createdAt,
+                          String updatedBy, java.time.Instant updatedAt) {}
 
     public record Customer(String name, String mobile, BigDecimal billed, BigDecimal paid, BigDecimal due, int jobs) {}
 
@@ -44,7 +47,8 @@ public final class AccountReport {
                             Map<Long, BigDecimal> withdrawals) {}
 
     public record Withdrawal(Long id, Long partnerId, LocalDate date, BigDecimal amount, String reference,
-                             String approvedBy, String notes, AccountSource source) {}
+                             String approvedBy, String notes, AccountSource source, String createdBy,
+                             java.time.Instant createdAt, String updatedBy, java.time.Instant updatedAt) {}
 
     public record PartnerRow(Long id, String name, boolean active, BigDecimal entitlement, BigDecimal withdrawn,
                              BigDecimal balance, List<Withdrawal> withdrawals) {}
@@ -61,10 +65,17 @@ public final class AccountReport {
 
     public static MonthResult month(int year, int month, List<IncomeEntry> income, List<ExpenseEntry> expenses,
                                     BigDecimal workerPaid) {
-        List<Income> in = income.stream().map(AccountReport::income).toList();
-        List<Expense> out = new ArrayList<>(expenses.stream().map(AccountReport::expense).toList());
+        return month(year, month, income, expenses, workerPaid, Map.of());
+    }
+
+    /** @param names login (lower case) to the full name shown as who created or edited an entry */
+    public static MonthResult month(int year, int month, List<IncomeEntry> income, List<ExpenseEntry> expenses,
+                                    BigDecimal workerPaid, Map<String, String> names) {
+        List<Income> in = income.stream().map(e -> income(e, names)).toList();
+        List<Expense> out = new ArrayList<>(expenses.stream().map(e -> expense(e, names)).toList());
         if (workerPaid != null && workerPaid.signum() != 0)
-            out.add(new Expense(null, monthEnd(year, month), "Worker payments (from Workers)", WORKERS, workerPaid, null));
+            out.add(new Expense(null, monthEnd(year, month), "Worker payments (from Workers)", WORKERS, null, null, workerPaid, null,
+                    null, null, null, null, null));
 
         BigDecimal billed = sum(in.stream().map(Income::amount).toList());
         BigDecimal received = sum(in.stream().map(Income::paid).toList());
@@ -90,6 +101,12 @@ public final class AccountReport {
 
     public static YearResult year(int year, List<IncomeEntry> income, List<ExpenseEntry> expenses, BigDecimal[] workerPaid,
                                   List<Partner> partners, Map<Long, BigDecimal> entitlements, List<PartnerWithdrawal> withdrawals) {
+        return year(year, income, expenses, workerPaid, partners, entitlements, withdrawals, Map.of());
+    }
+
+    public static YearResult year(int year, List<IncomeEntry> income, List<ExpenseEntry> expenses, BigDecimal[] workerPaid,
+                                  List<Partner> partners, Map<Long, BigDecimal> entitlements, List<PartnerWithdrawal> withdrawals,
+                                  Map<String, String> names) {
         BigDecimal[] billed = zeros(), received = zeros(), spent = zeros();
         BigDecimal due = BigDecimal.ZERO;
         for (IncomeEntry i : income) {
@@ -102,13 +119,13 @@ public final class AccountReport {
         for (ExpenseEntry e : expenses) {
             int m = e.getEntryDate().getMonthValue() - 1;
             spent[m] = spent[m].add(e.getAmount());
-            all.add(expense(e));
+            all.add(expense(e, names));
         }
         for (int m = 0; m < 12; m++) {
             BigDecimal w = workerPaid == null ? null : workerPaid[m];
             if (w != null && w.signum() != 0) {
                 spent[m] = spent[m].add(w);
-                all.add(new Expense(null, null, "Worker payments", WORKERS, w, null));
+                all.add(new Expense(null, null, "Worker payments", WORKERS, null, null, w, null, null, null, null, null, null));
             }
         }
 
@@ -126,7 +143,8 @@ public final class AccountReport {
         for (Partner p : partners) {
             List<Withdrawal> mine = withdrawals.stream().filter(w -> w.getPartnerId().equals(p.getId()))
                     .map(w -> new Withdrawal(w.getId(), w.getPartnerId(), w.getEntryDate(), w.getAmount(), w.getReference(),
-                            w.getApprovedBy(), w.getNotes(), w.getSource())).toList();
+                            w.getApprovedBy(), w.getNotes(), w.getSource(), name(names, w.getCreatedBy()), w.getCreatedAt(),
+                            name(names, w.getUpdatedBy()), w.getUpdatedAt())).toList();
             BigDecimal taken = sum(mine.stream().map(Withdrawal::amount).toList());
             BigDecimal entitled = entitlements.get(p.getId());
             drawings = drawings.add(taken);
@@ -229,7 +247,7 @@ public final class AccountReport {
 
     // --- helpers ----------------------------------------------------------------------------------
 
-    static String categoryName(String c) {
+    public static String categoryName(String c) {
         return switch (c) {
             case WORKERS -> "Worker payments";
             case "MATERIALS" -> "Materials";
@@ -250,14 +268,23 @@ public final class AccountReport {
                 .sorted(Comparator.comparing(Category::amount).reversed()).toList();
     }
 
-    private static Income income(IncomeEntry e) {
+    private static Income income(IncomeEntry e, Map<String, String> names) {
         BigDecimal paid = nz(e.getPaid());
-        return new Income(e.getId(), e.getEntryDate(), e.getCustomerName(), e.getMobile(), e.getDetails(), e.getAmount(), paid,
-                dueOf(e.getAmount(), paid), e.getSource());
+        return new Income(e.getId(), e.getEntryDate(), e.getCustomerName(), e.getMobile(), e.getDetails(), e.getReceivedBy(),
+                e.getAmount(), paid, dueOf(e.getAmount(), paid), e.getSource(), e.getMethod() == null ? "CASH" : e.getMethod().name(),
+                name(names, e.getCreatedBy()), e.getCreatedAt(), name(names, e.getUpdatedBy()), e.getUpdatedAt());
     }
 
-    private static Expense expense(ExpenseEntry e) {
-        return new Expense(e.getId(), e.getEntryDate(), e.getDescription(), e.getCategory().name(), e.getAmount(), e.getSource());
+    private static Expense expense(ExpenseEntry e, Map<String, String> names) {
+        return new Expense(e.getId(), e.getEntryDate(), e.getDescription(), e.getCategory().name(), e.getPaidBy(), e.getInvoiceNumber(),
+                e.getAmount(), e.getSource(), e.getMethod() == null ? "CASH" : e.getMethod().name(), name(names, e.getCreatedBy()),
+                e.getCreatedAt(), name(names, e.getUpdatedBy()), e.getUpdatedAt());
+    }
+
+    /** The full name for a login, or the login itself when it is not a known user. */
+    static String name(Map<String, String> names, String login) {
+        if (login == null) return null;
+        return names.getOrDefault(login.toLowerCase(Locale.ROOT), login);
     }
 
     /** What the customer still owes; paying more than the bill does not make it negative. */

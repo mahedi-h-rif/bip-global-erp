@@ -171,6 +171,7 @@ public class InvoiceSigningService {
     static void validate(Invoice inv, Party seller, Party buyer) {
         List<String> problems = new ArrayList<>();
         if (inv.getLines().isEmpty()) problems.add("Add at least one line");
+        if (blank(seller.name())) problems.add("Seller legal name is missing (English or Arabic)");
         checkAddress("Seller", seller.address(), problems);
         if (seller.vatNumber() == null || !seller.vatNumber().matches("3\\d{13}3"))
             problems.add("Seller VAT number is invalid");

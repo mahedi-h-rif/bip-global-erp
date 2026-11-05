@@ -6,7 +6,9 @@ import useSWR from "swr";
 import { BellOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Customer, Me } from "@/lib/types";
-import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
+import { SearchInput } from "@/components/voice";
+import { searchCustomers } from "@/lib/voice-parse";
 import { useT } from "@/lib/i18n";
 
 const blank: Customer = { nameAr: "", nameEn: "", vatNumber: "", otherIdScheme: "CRN", countryCode: "SA", remindersEnabled: true };
@@ -46,10 +48,11 @@ function CustomerForm({ initial, onDone }: { initial: Customer; onDone: () => vo
       />
       <form onSubmit={submit} className="space-y-5 p-5">
         {error && <Alert tone="bad" title={t("Not saved")}>{error.fields ? t("Please correct the highlighted fields.") : error.message}</Alert>}
+        <RequiredLegend />
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("Name (English)")}><Input required value={c.nameEn} onChange={set("nameEn")} /></Field>
-          <Field label={t("Name (Arabic)")} hint={t("Optional")}><Input dir="rtl" value={c.nameAr ?? ""} onChange={set("nameAr")} /></Field>
-          <Field label={t("VAT number")} hint={t("15 digits, starts and ends with 3")} error={fe("vatNumber")}><Input inputMode="numeric" maxLength={15} value={c.vatNumber ?? ""} onChange={set("vatNumber")} /></Field>
+          <Field label={t("Name (English)")} error={fe("nameEn")}><Input required value={c.nameEn} onChange={set("nameEn")} /></Field>
+          <Field label={t("Name (Arabic)")} optional><Input dir="rtl" value={c.nameAr ?? ""} onChange={set("nameAr")} /></Field>
+          <Field label={t("VAT number")} optional hint={t("15 digits, starts and ends with 3")} error={fe("vatNumber")}><Input inputMode="numeric" maxLength={15} value={c.vatNumber ?? ""} onChange={set("vatNumber")} /></Field>
           <div className="grid grid-cols-[8rem_1fr] gap-3">
             <Field label={t("Other ID type")}>
               <Select value={c.otherIdScheme ?? "CRN"} onChange={set("otherIdScheme")}>
@@ -61,15 +64,15 @@ function CustomerForm({ initial, onDone }: { initial: Customer; onDone: () => vo
                 <option value="OTH">{t("Other")}</option>
               </Select>
             </Field>
-            <Field label={t("Other ID")} hint={t("Needed if there is no VAT number. CR, 700, national ID and Iqama have 10 digits")} error={fe("otherId")}><Input value={c.otherId ?? ""} onChange={set("otherId")} /></Field>
+            <Field label={t("Other ID")} optional hint={t("Needed if there is no VAT number. CR, 700, national ID and Iqama have 10 digits")} error={fe("otherId")}><Input value={c.otherId ?? ""} onChange={set("otherId")} /></Field>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("Mobile (WhatsApp)")} hint={t("Use the customer's WhatsApp number: 05XXXXXXXX or with country code. Used for WhatsApp and SMS reminders")} error={fe("phone")}>
             <Input inputMode="tel" required value={c.phone ?? ""} onChange={set("phone")} />
           </Field>
-          <Field label={t("Email")} hint={t("Optional. Payment reminders are emailed here")} error={fe("email")}><Input type="email" value={c.email ?? ""} onChange={set("email")} /></Field>
-          <Field label={t("Address")} className="md:col-span-2">
+          <Field label={t("Email")} optional hint={t("Payment reminders are emailed here")} error={fe("email")}><Input type="email" value={c.email ?? ""} onChange={set("email")} /></Field>
+          <Field label={t("Address")} optional className="md:col-span-2">
             <textarea
               rows={2}
               className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand"
@@ -98,16 +101,16 @@ function CustomerForm({ initial, onDone }: { initial: Customer; onDone: () => vo
                 <option value="EG">{t("Egypt")} (EG)</option>
               </Select>
             </Field>
-            <Field label={t("Building no.")} hint={ksa ? t("4 digits") : undefined} error={fe("buildingNumber")}>
+            <Field label={t("Building no.")} optional hint={ksa ? t("4 digits") : undefined} error={fe("buildingNumber")}>
               <Input inputMode={ksa ? "numeric" : "text"} maxLength={ksa ? 4 : 20} value={c.buildingNumber ?? ""} onChange={set("buildingNumber")} />
             </Field>
-            <Field label={t("Street")} className="md:col-span-2"><Input value={c.street ?? ""} onChange={set("street")} /></Field>
-            <Field label={t("District")}><Input value={c.district ?? ""} onChange={set("district")} /></Field>
-            <Field label={t("City")}><Input value={c.city ?? ""} onChange={set("city")} /></Field>
-            <Field label={t("Postal code")} hint={ksa ? t("5 digits") : undefined} error={fe("postalCode")}>
+            <Field label={t("Street")} optional className="md:col-span-2"><Input value={c.street ?? ""} onChange={set("street")} /></Field>
+            <Field label={t("District")} optional><Input value={c.district ?? ""} onChange={set("district")} /></Field>
+            <Field label={t("City")} optional><Input value={c.city ?? ""} onChange={set("city")} /></Field>
+            <Field label={t("Postal code")} optional hint={ksa ? t("5 digits") : undefined} error={fe("postalCode")}>
               <Input inputMode={ksa ? "numeric" : "text"} maxLength={ksa ? 5 : 10} value={c.postalCode ?? ""} onChange={set("postalCode")} />
             </Field>
-            <Field label={t("Additional no.")} hint={ksa ? t("4 digits, optional") : t("Optional")} error={fe("additionalNumber")}>
+            <Field label={t("Additional no.")} optional hint={ksa ? t("4 digits") : undefined} error={fe("additionalNumber")}>
               <Input maxLength={ksa ? 4 : 10} value={c.additionalNumber ?? ""} onChange={set("additionalNumber")} />
             </Field>
           </div>
@@ -140,6 +143,9 @@ function Customers() {
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const [editing, setEditing] = useState<Customer | null>(params.get("new") ? blank : null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // ?q= comes from a voice search ("find customer Al Noor").
+  const [q, setQ] = useState(params.get("q") ?? "");
+  const shown = data && q.trim() ? searchCustomers(data, q) : data;
   const canWrite = me != null && me.role !== "VIEWER";
 
   async function remove(c: Customer) {
@@ -163,17 +169,23 @@ function Customers() {
       {deleteError && <div className="mb-4"><Alert tone="bad">{deleteError}</Alert></div>}
       {editing && <CustomerForm key={editing.id ?? "new"} initial={editing} onDone={() => { setEditing(null); mutate(); }} />}
       <Card>
+        {data && data.length > 0 && (
+          <div className="border-b border-line p-4">
+            <SearchInput value={q} onChange={setQ} placeholder={t("Search name, VAT number, phone or city")} />
+          </div>
+        )}
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No customers yet")}>{t("Add your first business customer to issue standard invoices.")}</Empty>}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")}>{t("No customer matches “{q}”", { q })}</Empty>}
+        {shown && shown.length > 0 && (
           <ul className="divide-y divide-line">
-            {data.map((c) => (
+            {shown.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{c.nameEn || c.nameAr} <span className="ar font-normal text-muted" dir="rtl">{c.nameEn ? c.nameAr : ""}</span></p>
                   <p className="text-xs text-muted">
-                    {c.vatNumber ? `${t("VAT")} ${c.vatNumber}` : c.otherId ? `${c.otherIdScheme} ${c.otherId}` : t("No tax ID")} · {c.city || t("No address")}
+                    {c.vatNumber ? `${t("VAT")} ${c.vatNumber}` : c.otherId ? [c.otherIdScheme, c.otherId].filter(Boolean).join(" ") : t("No tax ID")} · {c.city || t("No address")}
                     {c.phone && ` · ${c.phone}`}
                     {c.remindersEnabled === false && (
                       <span className="ms-2 inline-flex items-center gap-1 text-warn"><BellOff className="size-3" aria-hidden /> {t("Reminders off")}</span>

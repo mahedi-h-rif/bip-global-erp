@@ -8,6 +8,7 @@ import com.fatoora.api.customer.Customer;
 import com.fatoora.api.customer.CustomerRepository;
 import com.fatoora.api.organization.Organization;
 import com.fatoora.api.organization.OrganizationRepository;
+import com.fatoora.api.pdf.InvoicePdfService;
 import com.fatoora.api.pdf.LetterheadPdf;
 import com.fatoora.zatca.model.InvoiceTotals;
 import jakarta.validation.Valid;
@@ -37,7 +38,7 @@ import java.util.Map;
 @RequestMapping("/api/v1/quotations")
 public class QuotationController {
 
-    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
+    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT','BRANCH')";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     public record LineDto(
@@ -84,7 +85,8 @@ public class QuotationController {
     @GetMapping
     @Transactional(readOnly = true)
     List<QuotationDto> list() {
-        return repo.findByOrganizationIdOrderByCreatedAtDesc(CurrentUser.orgId()).stream().map(this::dto).toList();
+        return repo.findByOrganizationIdOrderByCreatedAtDesc(CurrentUser.orgId()).stream()
+                .filter(q -> CurrentUser.owns(q.getCreatedBy())).map(this::dto).toList();
     }
 
     @GetMapping("/{id}")
@@ -229,7 +231,7 @@ public class QuotationController {
             BigDecimal vat = InvoiceTotals.round(net.multiply(l.getVatRate()).divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP));
             rows.append("<tr>")
                     .append(td(Integer.toString(n++), "center"))
-                    .append(td(LetterheadPdf.esc(l.getName()), "left"))
+                    .append(td(LetterheadPdf.esc(l.getName()), InvoicePdfService.startsRtl(l.getName()) ? "right; direction:rtl" : "left"))
                     .append(td(l.getQuantity().stripTrailingZeros().toPlainString() + " " + LetterheadPdf.esc(l.getUnitCode()), "right"))
                     .append(td(LetterheadPdf.money(l.getUnitPrice()), "right"))
                     .append(td(l.getVatRate().stripTrailingZeros().toPlainString() + "%", "right"))
@@ -308,6 +310,7 @@ public class QuotationController {
     }
 
     private Quotation load(Long id) {
-        return repo.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Quotation"));
+        return repo.findByIdAndOrganizationId(id, CurrentUser.orgId()).filter(q -> CurrentUser.owns(q.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Quotation"));
     }
 }

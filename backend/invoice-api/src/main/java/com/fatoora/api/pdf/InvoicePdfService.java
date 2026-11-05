@@ -175,7 +175,7 @@ public class InvoicePdfService {
         for (InvoiceTotals.LineAmounts l : totals.lines()) {
             rows.append("<tr>")
                     .append(td(Integer.toString(n++), "c"))
-                    .append(td(esc(l.line().name()), "desc"))
+                    .append(td(esc(l.line().name()), startsRtl(l.line().name()) ? "desc rtl" : "desc"))
                     .append(td(plain(l.line().quantity()) + " " + esc(l.line().unitCode()), "n"))
                     .append(td(money(l.line().unitPrice()), "n"))
                     .append(td(money(l.net()), "n"))
@@ -196,6 +196,7 @@ public class InvoicePdfService {
         }
 
         String buyerBlock = buyer == null ? "" : party("Buyer", "المشتري", buyer);
+        String brandEn = org.getLegalNameEn() == null || org.getLegalNameEn().isBlank() ? nz(seller.name()) : org.getLegalNameEn();
 
         String[] stamp = switch (inv.getStatus()) {
             case CLEARED, CLEARED_WITH_WARNINGS -> new String[]{"Cleared by ZATCA", "معتمدة من هيئة الزكاة والضريبة والجمارك"};
@@ -298,9 +299,10 @@ public class InvoicePdfService {
                 esc(inv.getNumber()),
                 color, color, color, color, color, color,
                 logo(org),
-                esc(org.getLegalNameEn() == null ? seller.name() : org.getLegalNameEn()),
+                esc(brandEn),
                 contact(org),
-                esc(seller.name()),
+                // The registration name (Arabic when there is one); not repeated when it is the English name.
+                esc(brandEn.equals(seller.name()) ? null : seller.name()),
                 esc(nz(seller.address() == null ? null : seller.address().city())),
                 title[1], title[0],
                 meta,
@@ -412,6 +414,24 @@ public class InvoicePdfService {
 
     private static String nz(String s) {
         return s == null ? "" : s;
+    }
+
+    /**
+     * True when the text's first strong character is right-to-left (Arabic, Hebrew), i.e. what HTML's
+     * {@code dir="auto"} would pick. The PDF renderer has no {@code dir="auto"}, and free text such as an
+     * Arabic item name laid out in an LTR cell gets its wrapped lines and embedded Latin words/numbers
+     * reordered wrongly.
+     */
+    public static boolean startsRtl(String s) {
+        if (s == null) return false;
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            byte d = Character.getDirectionality(cp);
+            if (d == Character.DIRECTIONALITY_LEFT_TO_RIGHT) return false;
+            if (d == Character.DIRECTIONALITY_RIGHT_TO_LEFT || d == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) return true;
+            i += Character.charCount(cp);
+        }
+        return false;
     }
 
     static String esc(String s) {

@@ -34,7 +34,7 @@ import java.util.stream.Stream;
 @RequestMapping("/api/v1")
 public class AgreementController {
 
-    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
+    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT','BRANCH')";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     public record TemplateDto(@NotBlank String title, @NotBlank String body, boolean standard, String updatedBy,
@@ -152,7 +152,8 @@ public class AgreementController {
 
     @GetMapping("/agreements")
     List<AgreementDto> list() {
-        return agreements.findByOrganizationIdOrderByCreatedAtDesc(CurrentUser.orgId()).stream().map(AgreementDto::of).toList();
+        return agreements.findByOrganizationIdOrderByCreatedAtDesc(CurrentUser.orgId()).stream()
+                .filter(a -> CurrentUser.owns(a.getCreatedBy())).map(AgreementDto::of).toList();
     }
 
     @GetMapping("/agreements/{id}")
@@ -251,8 +252,9 @@ public class AgreementController {
 
     private byte[] render(Agreement a, Organization org) {
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("company_name", nz(org.getLegalNameEn()));
-        values.put("company_name_ar", nz(org.getLegalNameAr()));
+        values.put("company_name", nz(org.displayName()));
+        // The Arabic name only next to an English one; never the same name twice, never empty brackets.
+        values.put("company_name_ar", blank(org.getLegalNameEn()) ? "" : nz(org.getLegalNameAr()));
         values.put("company_vat", nz(org.getVatNumber()));
         values.put("company_cr", nz(org.getOtherId()));
         // Numbers first, then the Arabic street, district and city, so digits never sit inside right-to-left text.
@@ -272,9 +274,16 @@ public class AgreementController {
                 + "</p>";
         String html = "<h1 style=\"text-align:center; text-transform:uppercase; letter-spacing:0.5px\">"
                 + LetterheadPdf.esc(a.getTitle()) + "</h1>" + meta
-                + "<div style=\"margin-top:8px\">" + body(a.getBody(), values) + "</div>"
+                + "<div style=\"margin-top:8px\">" + body(withoutEmptyArabicName(a.getBody(), values), values) + "</div>"
                 + LetterheadPdf.signatures(org, a.getClientName());
         return letterhead.render(org, a.getTitle() + " " + a.getNumber(), html);
+    }
+
+    /** Drops " ({{company_name_ar}})" when the company has no separate Arabic name, so no "()" is printed. */
+    static String withoutEmptyArabicName(String text, Map<String, String> values) {
+        if (text == null) return "";
+        if (!blank(values.get("company_name_ar"))) return text;
+        return text.replace(" ({{company_name_ar}})", "").replace("({{company_name_ar}})", "");
     }
 
     /**
@@ -346,6 +355,7 @@ public class AgreementController {
     }
 
     private Agreement load(Long id) {
-        return agreements.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Agreement"));
+        return agreements.findByIdAndOrganizationId(id, CurrentUser.orgId()).filter(a -> CurrentUser.owns(a.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Agreement"));
     }
 }

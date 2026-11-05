@@ -9,8 +9,15 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
 import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.geom.Arc2D;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Line2D;
+import java.awt.geom.QuadCurve2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -30,6 +37,8 @@ public class LetterheadPdf {
     /** Renders {@code bodyHtml} (well-formed XHTML, already escaped) on the letterhead. */
     public byte[] render(Organization org, String title, String bodyHtml) {
         String color = org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor();
+        if ("MODERN".equalsIgnoreCase(org.getLetterheadStyle()))
+            return toPdf(modernHtml(org, title, bodyHtml, color));
         String html = """
                 <!DOCTYPE html>
                 <html><head><meta charset="UTF-8"/>
@@ -98,6 +107,10 @@ public class LetterheadPdf {
                 watermark(org),
                 bodyHtml);
 
+        return toPdf(html);
+    }
+
+    private byte[] toPdf(String html) {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PdfRendererBuilder b = new PdfRendererBuilder();
             b.useFastMode();
@@ -113,6 +126,168 @@ public class LetterheadPdf {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * The MODERN letterhead: the same identity and registration details as the classic one, restyled with a
+     * logo roundel, a brand-and-gold header rule, a brand footer bar, a faint logo watermark and a themed
+     * landmark line backdrop (Qassim date palms, a mosque and towers) drawn in the brand colour.
+     */
+    private String modernHtml(Organization org, String title, String bodyHtml, String color) {
+        String gold = "#a9833f";
+        String addr = "<span dir=\"rtl\">" + InvoicePdfService.esc(joined("، ", org.getStreet(), org.getDistrict(), org.getCity())) + "</span>";
+        String reg = InvoicePdfService.esc(joined(" · ",
+                org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
+                org.getPostalCode() == null ? null : "Postal " + org.getPostalCode(),
+                "VAT " + nz(org.getVatNumber()), "CR " + nz(org.getOtherId())));
+        String contactLine = InvoicePdfService.esc(joined(" · ", org.getEmail(), org.getWebsite(),
+                org.getPhone() == null || org.getPhone().isBlank() ? null : "Mobile " + org.getPhone()));
+        return """
+                <!DOCTYPE html>
+                <html><head><meta charset="UTF-8"/>
+                <title>%s</title>
+                <style>
+                  @page {
+                    size: A4; margin: 42mm 16mm 32mm 16mm;
+                    @top-center { content: element(header); }
+                    @bottom-center { content: element(footer); }
+                  }
+                  * { font-family: 'Plex'; }
+                  body { font-size: 9.5pt; color: #1b2233; line-height: 1.45; }
+                  table { width: 100%%; border-collapse: collapse; }
+                  .rtl { direction: rtl; text-align: right; }
+                  #header { position: running(header); }
+                  #header td { vertical-align: middle; }
+                  #header .en { font-size: 13.5pt; font-weight: 700; color: %s; }
+                  #header .tag { font-size: 7.5pt; color: %s; letter-spacing: 1px; margin-top: 1px; }
+                  #header .ar { font-size: 13.5pt; font-weight: 700; color: #1b2233; }
+                  #header .muted { font-size: 8pt; color: #5a6275; }
+                  #header .rule { border-bottom: 3px solid %s; margin-top: 6px; }
+                  #header .rule2 { width: 96px; border-bottom: 3px solid %s; margin-top: -3px; }
+                  #footer { position: running(footer); }
+                  #footer .gold { height: 3px; background: %s; }
+                  #footer .bar { background: %s; }
+                  #footer .bar td { vertical-align: middle; color: #ffffff; font-size: 7.5pt; padding: 7px 10px; }
+                  #footer .bar .r { text-align: right; }
+                  .pageno::after { content: "Page " counter(page) " / " counter(pages); }
+                  #watermark { position: fixed; top: 46mm; left: 0; width: 178mm; text-align: center; }
+                  #landmark { position: fixed; bottom: 33mm; left: 0; width: 178mm; text-align: center; }
+                  h1 { font-size: 15pt; color: %s; margin: 0 0 2px 0; }
+                  h2 { font-size: 10.5pt; color: %s; margin: 12px 0 3px 0; }
+                  p { margin: 0 0 6px 0; }
+                  .muted { color: #5a6275; }
+                  .brand { color: %s; }
+                </style></head>
+                <body>
+                  <div id="header">
+                    <table><tr>
+                      %s
+                      <td>
+                        <div class="en">%s</div>
+                        <div class="tag">%s</div>
+                        %s
+                      </td>
+                      <td class="rtl" style="white-space:nowrap; width:34%%"><div class="ar">%s</div><div class="muted">%s</div></td>
+                    </tr></table>
+                    <div class="rule"></div><div class="rule2"></div>
+                  </div>
+                  <div id="footer">
+                    <div class="gold"></div>
+                    <table class="bar"><tr>
+                      <td>%s<br/>%s</td>
+                      <td class="r" style="width:42%%">%s<br/><span class="pageno"></span></td>
+                    </tr></table>
+                  </div>
+                  %s
+                  %s
+                  %s
+                </body></html>
+                """.formatted(
+                InvoicePdfService.esc(title),
+                color, gold, color, gold, gold, color, color, color, color,
+                logoCell(org),
+                InvoicePdfService.esc(nz(org.getLegalNameEn())),
+                InvoicePdfService.esc(nz(org.getCity()) + (org.getCountryCode() == null ? "" : " · KSA")),
+                contact(org),
+                InvoicePdfService.esc(nz(org.getLegalNameAr())),
+                InvoicePdfService.esc(nz(org.getCity())),
+                addr, reg, contactLine,
+                watermark(org),
+                landmark(color));
+    }
+
+    /** A faint landmark line illustration (date palms, a mosque and towers) in the brand colour, as a PNG. */
+    private static String landmark(String brandHex) {
+        try {
+            Color brand;
+            try { brand = Color.decode(brandHex); } catch (RuntimeException e) { brand = new Color(0x0B2A6F); }
+            int W = 1400, H = 230;
+            BufferedImage img = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = img.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(brand);
+            g.setStroke(new BasicStroke(3.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.11f));
+            double base = 198;
+            g.draw(new Line2D.Double(10, base, W - 10, base));   // ground
+            palm(g, 150, base);
+            mosque(g, 360, base);
+            kingdomCentre(g, 690, base);
+            faisaliah(g, 910, base);
+            tower(g, 1110, base);
+            palm(g, 1290, base);
+            g.dispose();
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            ImageIO.write(img, "png", png);
+            int shownW = 560;
+            return "<div id=\"landmark\"><img src=\"data:image/png;base64,"
+                    + Base64.getEncoder().encodeToString(png.toByteArray())
+                    + "\" style=\"width:" + shownW + "px;height:" + Math.round(shownW * (double) H / W) + "px\"/></div>";
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private static void palm(Graphics2D g, double cx, double base) {
+        g.draw(new Line2D.Double(cx, base, cx, base - 84));
+        double t = base - 84;
+        g.draw(new QuadCurve2D.Double(cx, t, cx - 22, t - 14, cx - 40, t - 8));
+        g.draw(new QuadCurve2D.Double(cx, t, cx - 18, t - 30, cx - 30, t - 44));
+        g.draw(new QuadCurve2D.Double(cx, t, cx + 22, t - 14, cx + 40, t - 8));
+        g.draw(new QuadCurve2D.Double(cx, t, cx + 18, t - 30, cx + 30, t - 44));
+        g.draw(new QuadCurve2D.Double(cx, t, cx, t - 34, cx, t - 50));
+    }
+
+    private static void mosque(Graphics2D g, double x, double base) {
+        g.draw(new Line2D.Double(x, base, x, base - 56));
+        g.draw(new Line2D.Double(x + 120, base, x + 120, base - 56));
+        g.draw(new Line2D.Double(x, base - 56, x + 120, base - 56));
+        g.draw(new Arc2D.Double(x + 24, base - 56 - 36, 72, 72, 0, 180, Arc2D.OPEN)); // dome
+        g.draw(new Line2D.Double(x + 60, base - 92, x + 60, base - 104));             // finial
+        g.draw(new Line2D.Double(x + 112, base, x + 112, base - 96));                 // minaret
+        g.draw(new Arc2D.Double(x + 104, base - 96 - 8, 16, 16, 0, 180, Arc2D.OPEN));
+        g.draw(new Line2D.Double(x + 112, base - 104, x + 112, base - 114));
+    }
+
+    private static void kingdomCentre(Graphics2D g, double x, double base) {
+        g.draw(new Line2D.Double(x, base, x, base - 120));
+        g.draw(new Line2D.Double(x + 92, base, x + 92, base - 120));
+        g.draw(new QuadCurve2D.Double(x, base - 120, x + 46, base - 150, x + 92, base - 120)); // tapered top
+        g.draw(new QuadCurve2D.Double(x + 24, base - 122, x + 46, base - 92, x + 68, base - 122)); // arch opening
+    }
+
+    private static void faisaliah(Graphics2D g, double x, double base) {
+        g.draw(new Line2D.Double(x, base, x + 30, base - 118));
+        g.draw(new Line2D.Double(x + 60, base, x + 30, base - 118));
+        g.draw(new Ellipse2D.Double(x + 30 - 11, base - 118 - 22, 22, 22)); // sphere
+        g.draw(new Line2D.Double(x + 30, base - 140, x + 30, base - 158));  // spire
+    }
+
+    private static void tower(Graphics2D g, double x, double base) {
+        Rectangle2D.Double body = new Rectangle2D.Double(x, base - 104, 56, 104);
+        g.draw(body);
+        for (int gy = 20; gy < 104; gy += 20) g.draw(new Line2D.Double(x, base - gy, x + 56, base - gy));
+        g.draw(new Line2D.Double(x + 28, base - 104, x + 28, base));
     }
 
     /** An image file (base64) as a data URI with its pixel size scaled to {@code height} px, or null. */
@@ -208,7 +383,7 @@ public class LetterheadPdf {
      */
     public static String signatures(Organization org, String clientName) {
         return "<table style=\"margin-top:16px; page-break-inside:avoid\"><tr>"
-                + party("padding-right:14px", "For the company · عن الشركة", org.getLegalNameEn(), "Company stamp · ختم الشركة")
+                + party("padding-right:14px", "For the company · عن الشركة", org.displayName(), "Company stamp · ختم الشركة")
                 + party("padding-left:14px", "For the client · عن العميل", clientName, null)
                 + "</tr></table>";
     }

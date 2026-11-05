@@ -59,7 +59,7 @@ function TemplateForm({ initial, onSaved }: { initial: AgreementTemplate; onSave
         <Card>
           <CardHeader title={t("Title")} />
           <div className="p-5">
-            <Field label={t("Agreement title")}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+            <Field label={t("Agreement title")}><Input required value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           </div>
         </Card>
         <AgreementTextForm value={text} onChange={setText} />

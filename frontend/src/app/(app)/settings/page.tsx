@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import useSWR from "swr";
 import { api, ApiError, fetcher, uploadFile } from "@/lib/api";
 import type { Me, Organization } from "@/lib/types";
-import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 export default function CompanySettingsPage() {
@@ -110,6 +110,7 @@ function CompanyForm({ initial, provider, onSaved }: {
       <PageHeader title={t("Company")} subtitle={t("Details printed on every invoice")} />
       <form onSubmit={submit} className="space-y-6">
         {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
+        <RequiredLegend />
         {locked && (
           <Alert tone="info">
             {t("Your legal name, VAT number, CR number and address are registered for e-invoicing and managed by your e-invoicing provider. Contact them if any of these change.")}
@@ -118,8 +119,10 @@ function CompanyForm({ initial, provider, onSaved }: {
         <Card>
           <CardHeader title={t("Legal identity")} subtitle={provider ? t("Must match the VAT registration certificate exactly") : undefined} />
           <fieldset disabled={locked} className="grid gap-4 p-5 md:grid-cols-2">
-            <Field label={t("Legal name (Arabic)")}><Input dir="rtl" required value={org.legalNameAr} onChange={set("legalNameAr")} /></Field>
-            <Field label={t("Legal name (English)")}><Input value={org.legalNameEn ?? ""} onChange={set("legalNameEn")} /></Field>
+            <Field label={t("Legal name (English)")} hint={t("Enter the English or the Arabic legal name, or both.")}>
+              <Input required={!(org.legalNameAr ?? "").trim()} value={org.legalNameEn ?? ""} onChange={set("legalNameEn")} />
+            </Field>
+            <Field label={t("Legal name (Arabic)")} optional><Input dir="rtl" value={org.legalNameAr ?? ""} onChange={set("legalNameAr")} /></Field>
             <Field label={t("VAT number")}><Input required maxLength={15} value={org.vatNumber} onChange={set("vatNumber")} /></Field>
             <Field label={t("CR number")}><Input required value={org.otherId} onChange={set("otherId")} /></Field>
           </fieldset>
@@ -129,7 +132,7 @@ function CompanyForm({ initial, provider, onSaved }: {
           <fieldset disabled={locked} className="grid gap-4 p-5 md:grid-cols-4">
             <Field label={t("Building no.")}><Input required maxLength={4} value={org.buildingNumber} onChange={set("buildingNumber")} /></Field>
             <Field label={t("Street")} className="md:col-span-2"><Input required value={org.street} onChange={set("street")} /></Field>
-            <Field label={t("Additional no.")}><Input maxLength={4} value={org.additionalNumber ?? ""} onChange={set("additionalNumber")} /></Field>
+            <Field label={t("Additional no.")} optional><Input maxLength={4} value={org.additionalNumber ?? ""} onChange={set("additionalNumber")} /></Field>
             <Field label={t("District")}><Input required value={org.district} onChange={set("district")} /></Field>
             <Field label={t("City")}><Input required value={org.city} onChange={set("city")} /></Field>
             <Field label={t("Postal code")}><Input required maxLength={5} value={org.postalCode} onChange={set("postalCode")} /></Field>
@@ -139,14 +142,20 @@ function CompanyForm({ initial, provider, onSaved }: {
           <CardHeader title={t("Branding, numbering & contact")} />
           <div className="grid gap-4 p-5 md:grid-cols-4">
             <Field label={t("Brand colour")}><Input type="color" className="h-10 p-1" value={org.brandColor} onChange={set("brandColor")} /></Field>
+            <Field label={t("Letterhead design")} hint={t("For quotations and agreements")}>
+              <Select value={org.letterheadStyle} onChange={set("letterheadStyle")}>
+                <option value="CLASSIC">{t("Classic")}</option>
+                <option value="MODERN">{t("Modern (themed backdrop)")}</option>
+              </Select>
+            </Field>
             <Field label={t("Invoice prefix")}><Input required value={org.invoicePrefix} onChange={set("invoicePrefix")} /></Field>
             <Field label={t("Credit note prefix")}><Input required value={org.creditNotePrefix} onChange={set("creditNotePrefix")} /></Field>
             <Field label={t("Debit note prefix")}><Input required value={org.debitNotePrefix} onChange={set("debitNotePrefix")} /></Field>
-            <Field label={t("Email")}><Input type="email" value={org.email ?? ""} onChange={set("email")} /></Field>
-            <Field label={t("Phone")}><Input value={org.phone ?? ""} onChange={set("phone")} /></Field>
-            <Field label={t("Website")} hint={t("Printed on invoices")}><Input value={org.website ?? ""} onChange={set("website")} placeholder={t("e.g. asthacompany.com")} /></Field>
-            <Field label={t("Signatory name")} hint={t("Signs agreements and quotations")}><Input value={org.signatoryName ?? ""} onChange={set("signatoryName")} /></Field>
-            <Field label={t("Signatory title")} hint={t("e.g. General Manager")}><Input value={org.signatoryTitle ?? ""} onChange={set("signatoryTitle")} /></Field>
+            <Field label={t("Email")} optional><Input type="email" value={org.email ?? ""} onChange={set("email")} /></Field>
+            <Field label={t("Phone")} optional><Input value={org.phone ?? ""} onChange={set("phone")} /></Field>
+            <Field label={t("Website")} optional hint={t("Printed on invoices")}><Input value={org.website ?? ""} onChange={set("website")} placeholder={t("e.g. asthacompany.com")} /></Field>
+            <Field label={t("Signatory name")} optional hint={t("Signs agreements and quotations")}><Input value={org.signatoryName ?? ""} onChange={set("signatoryName")} /></Field>
+            <Field label={t("Signatory title")} optional hint={t("e.g. General Manager")}><Input value={org.signatoryTitle ?? ""} onChange={set("signatoryTitle")} /></Field>
           </div>
         </Card>
         {provider && (

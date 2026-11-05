@@ -8,7 +8,7 @@ import { FileDown, FilePlus2, Plus, Printer, Save, Trash2, UserPlus } from "luci
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { Customer, InvoiceDetail, Product, Quotation, QuotationLine, QuotationStatus } from "@/lib/types";
 import { money, todayKsa, unitCodes } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Field, Input, Select } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, RequiredMark, Select } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const emptyLine = (): QuotationLine => ({ name: "", quantity: 1, unitCode: "PCE", unitPrice: "", vatRate: 15 });
@@ -88,12 +88,12 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
   function payload() {
     return {
       customerId: customerId ? Number(customerId) : null,
-      clientName: customerId ? null : clientName,
-      issueDate,
+      clientName: customerId ? null : clientName.trim() || null,
+      issueDate: issueDate || null,
       validUntil: validUntil || null,
       status,
-      notes,
-      terms,
+      notes: notes.trim() || null,
+      terms: terms.trim() || null,
       lines: lines.filter((l) => l.name.trim()).map((l) => ({
         ...l,
         quantity: Number(l.quantity),
@@ -193,9 +193,11 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
 
       <Card>
         <CardHeader title={t("Client")} subtitle={t("A saved customer, or just the name of a new prospect.")} />
+        <RequiredLegend className="px-5 pt-4" />
         <div className="grid gap-4 p-5 md:grid-cols-2">
           <Field
             label={t("Customer")}
+            optional
             hint={
               <Link href="/customers?new=1" className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:brightness-110">
                 <UserPlus className="size-3.5" aria-hidden /> {t("Add a customer")}
@@ -209,12 +211,12 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
           </Field>
           {!customerId && (
             <Field label={t("Client name")}>
-              <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("Company or person")} />
+              <Input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("Company or person")} />
             </Field>
           )}
           <div className="grid grid-cols-3 gap-4 md:col-span-2">
-            <Field label={t("Date")}><Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} /></Field>
-            <Field label={t("Valid until")}><Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} /></Field>
+            <Field label={t("Date")} optional hint={t("Leave empty for today")}><Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} /></Field>
+            <Field label={t("Valid until")} optional><Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} /></Field>
             <Field label={t("Status")}>
               <Select value={status} onChange={(e) => setStatus(e.target.value as QuotationStatus)}>
                 {(Object.keys(quotationStatusLabel) as QuotationStatus[]).map((s) => <option key={s} value={s}>{t(quotationStatusLabel[s])}</option>)}
@@ -230,10 +232,10 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-line text-xs text-muted">
-                <th className="px-3 py-2 text-start font-medium">{t("Item name")}</th>
-                <th className="w-24 px-2 py-2 text-start font-medium">{t("Qty")}</th>
+                <th className="px-3 py-2 text-start font-medium">{t("Item name")}<RequiredMark /></th>
+                <th className="w-24 px-2 py-2 text-start font-medium">{t("Qty")}<RequiredMark /></th>
                 <th className="w-28 px-2 py-2 text-start font-medium">{t("Unit")}</th>
-                <th className="w-32 px-2 py-2 text-start font-medium">{t("Unit price")}</th>
+                <th className="w-32 px-2 py-2 text-start font-medium">{t("Unit price")}<RequiredMark /></th>
                 <th className="w-24 px-2 py-2 text-start font-medium">{t("VAT %")}</th>
                 <th className="w-32 px-3 py-2 text-end font-medium">{t("Line total")}</th>
                 <th className="w-10" />
@@ -243,7 +245,7 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
               {lines.map((l, i) => (
                 <tr key={i} className="align-top">
                   <td className="px-3 py-2">
-                    <Input list="quotation-products" value={l.name} onChange={(e) => setItemName(i, e.target.value)} placeholder={t("Pick a product or type an item name")} aria-label={t("Item {n} name", { n: i + 1 })} />
+                    <Input list="quotation-products" dir="auto" value={l.name} onChange={(e) => setItemName(i, e.target.value)} placeholder={t("Pick a product or type an item name")} aria-label={t("Item {n} name", { n: i + 1 })} />
                   </td>
                   <td className="px-2 py-2"><Input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={t("Quantity")} /></td>
                   <td className="px-2 py-2">
@@ -287,10 +289,10 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
       </Card>
 
       <Card className="grid gap-4 p-5 md:grid-cols-2">
-        <Field label={t("Notes")} hint={t("Printed on the quotation")}>
+        <Field label={t("Notes")} optional hint={t("Printed on the quotation")}>
           <textarea dir="auto" rows={4} className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
-        <Field label={t("Terms & conditions")} hint={t("Printed on the quotation")}>
+        <Field label={t("Terms & conditions")} optional hint={t("Printed on the quotation")}>
           <textarea dir="auto" rows={4} className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand" value={terms} onChange={(e) => setTerms(e.target.value)} />
         </Field>
       </Card>

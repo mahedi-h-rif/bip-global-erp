@@ -204,6 +204,8 @@ public class InvoiceService {
     @Transactional(readOnly = true)
     public Page<InvoiceSummary> list(Long orgId, InvoiceStatus status, InvoiceKind kind, String q, int page, int size) {
         Specification<Invoice> spec = (root, query, cb) -> cb.equal(root.get("organizationId"), orgId);
+        String owner = com.fatoora.api.auth.CurrentUser.owner();
+        if (owner != null) spec = spec.and((root, query, cb) -> cb.equal(cb.lower(root.get("createdBy")), owner.toLowerCase()));
         if (status != null) spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
         if (kind != null) spec = spec.and((root, query, cb) -> cb.equal(root.get("kind"), kind));
         if (q != null && !q.isBlank()) {
@@ -248,7 +250,11 @@ public class InvoiceService {
         Instant monthStart = LocalDate.now(InvoiceApiApplication.KSA).withDayOfMonth(1)
                 .atStartOfDay(InvoiceApiApplication.KSA).toInstant();
         Map<Long, String> names = customerNames(orgId);
-        List<InvoiceSummary> queue = invoices.findTop20ByOrganizationIdAndStatusOrderByReportDeadlineAtAsc(orgId, InvoiceStatus.SIGNED)
+        // A branch login sees only the documents it created.
+        String owner = com.fatoora.api.auth.CurrentUser.owner();
+        List<InvoiceSummary> queue = (owner == null
+                ? invoices.findTop20ByOrganizationIdAndStatusOrderByReportDeadlineAtAsc(orgId, InvoiceStatus.SIGNED)
+                : invoices.findTop20ByOrganizationIdAndStatusAndCreatedByIgnoreCaseOrderByReportDeadlineAtAsc(orgId, InvoiceStatus.SIGNED, owner))
                 .stream().map(i -> summary(i, names, null, testUnits(orgId))).toList();
 
         // Certificate renewal is the provider's job, so only the operator sees expiry warnings.
@@ -263,6 +269,13 @@ public class InvoiceService {
                     .ifPresent(exp -> certs.add(new CertificateWarning(u.getId(), u.getName(), exp,
                             Duration.between(Instant.now(), exp).toDays())));
         }
+        if (owner != null)
+            return new Dashboard(
+                    invoices.countByOrganizationIdAndStatusAndCreatedByIgnoreCase(orgId, InvoiceStatus.DRAFT, owner),
+                    invoices.countByOrganizationIdAndStatusAndCreatedByIgnoreCase(orgId, InvoiceStatus.SIGNED, owner),
+                    invoices.countByOrganizationIdAndStatusAndCreatedByIgnoreCase(orgId, InvoiceStatus.REJECTED, owner),
+                    invoices.sumIssuedSinceBy(orgId, monthStart, owner),
+                    queue, certs);
         return new Dashboard(
                 invoices.countByOrganizationIdAndStatus(orgId, InvoiceStatus.DRAFT),
                 invoices.countByOrganizationIdAndStatus(orgId, InvoiceStatus.SIGNED),
@@ -273,7 +286,9 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public Invoice load(Long orgId, Long id) {
-        return invoices.findByIdAndOrganizationId(id, orgId).orElseThrow(() -> ApiException.notFound("Invoice"));
+        return invoices.findByIdAndOrganizationId(id, orgId)
+                .filter(i -> com.fatoora.api.auth.CurrentUser.owns(i.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Invoice"));
     }
 
     /**
@@ -303,8 +318,8 @@ public class InvoiceService {
         inv.setSupplyDate(req.supplyDate());
         inv.setPaymentMeans(req.paymentMeans() == null || req.paymentMeans().isBlank() ? "10" : req.paymentMeans());
         inv.setSendMode(req.sendMode() == null ? SendMode.NOW : req.sendMode());
-        inv.setReason(req.reason());
-        inv.setInternalNote(req.internalNote());
+        inv.setReason(emptyToNull(req.reason()));
+        inv.setInternalNote(emptyToNull(req.internalNote()));
         inv.setDueDate(type == DocumentType.INVOICE ? req.dueDate() : null);
         if (type != DocumentType.INVOICE && req.originalInvoiceId() != null) {
             Invoice original = load(inv.getOrganizationId(), req.originalInvoiceId());

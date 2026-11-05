@@ -440,8 +440,8 @@ final class AccountExcel {
     }
 
     private static void letterhead(Sheet sh, Organization org, String title, Styles st) {
-        text(sh.createRow(0), 0, nz(org.getLegalNameEn()).toUpperCase(Locale.ROOT), st.company);
-        text(sh.createRow(1), 0, nz(org.getLegalNameAr()), st.companyAr);
+        text(sh.createRow(0), 0, nz(org.displayName()).toUpperCase(Locale.ROOT), st.company);
+        text(sh.createRow(1), 0, org.getLegalNameEn() == null ? "" : nz(org.getLegalNameAr()), st.companyAr);
         text(sh.createRow(2), 0, "CR No. " + nz(org.getOtherId()) + "  |  VAT " + nz(org.getVatNumber())
                 + (org.getWebsite() == null ? "" : "  |  " + org.getWebsite()), st.muted);
         text(sh.createRow(3), 0, title, st.title);

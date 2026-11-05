@@ -4,30 +4,38 @@ import { useRef, useState } from "react";
 import useSWR from "swr";
 import { FileDown, FileSpreadsheet, Printer, Upload } from "lucide-react";
 import { ApiError, download, fetcher, openFile, printFile, uploadFile } from "@/lib/api";
-import type { AccountImportResult, AccountMonth, AccountYear } from "@/lib/types";
+import type { AccountImportResult, AccountMonth, AccountYear, Me } from "@/lib/types";
 import { todayKsa } from "@/lib/format";
 import { Alert, Button, PageHeader, Select, Spinner } from "@/components/ui";
-import { MONTH_NAMES, MonthView, YearView } from "@/components/accounts";
+import { DayView, MONTH_NAMES, MonthView, YearView } from "@/components/accounts";
 import { useT } from "@/lib/i18n";
 
-/** The company cash book: a month's income and expenses, and the year with partner withdrawals. Admin only. */
+/**
+ * The company cash book: a day's or month's income and expenses, and the year with partner withdrawals (admin).
+ * A branch login sees its own cash book only: the day and month views of the entries it created.
+ */
 export default function AccountsPage() {
   const t = useT();
+  const { data: me } = useSWR<Me>("/auth/me", fetcher);
+  const isBranch = me?.role === "BRANCH";
   const thisYear = Number(todayKsa().slice(0, 4));
-  const [view, setView] = useState<"month" | "year">("month");
+  const [view, setView] = useState<"day" | "month" | "year">("day");
+  const [day, setDayState] = useState(todayKsa());
   const [year, setYear] = useState(thisYear);
   const [month, setMonth] = useState(Number(todayKsa().slice(5, 7)));
+  // The day view follows the chosen date; month and year follow it so exports and the other views line up.
+  const setDay = (d: string) => { setDayState(d); setYear(Number(d.slice(0, 4))); setMonth(Number(d.slice(5, 7))); };
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "bad"; text: string; details?: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const monthData = useSWR<AccountMonth>(view === "month" ? `/accounts/month?year=${year}&month=${month}` : null, fetcher, { keepPreviousData: true });
-  const yearData = useSWR<AccountYear>(view === "year" ? `/accounts/year?year=${year}` : null, fetcher, { keepPreviousData: true });
-  const current = view === "month" ? monthData : yearData;
+  const monthData = useSWR<AccountMonth>(view !== "year" ? `/accounts/month?year=${year}&month=${month}` : null, fetcher, { keepPreviousData: true });
+  const yearData = useSWR<AccountYear>(view !== "month" && me && !isBranch ? `/accounts/year?year=${year}` : null, fetcher, { keepPreviousData: true });
+  const current = view === "year" ? yearData : monthData;
   const reload = () => { void monthData.mutate(); void yearData.mutate(); };
 
-  const base = view === "month" ? `/accounts/month` : `/accounts/year`;
-  const q = view === "month" ? `?year=${year}&month=${month}` : `?year=${year}`;
-  const fileName = view === "month" ? `accounts-${year}-${String(month).padStart(2, "0")}` : `company-cashflow-${year}`;
+  const base = view !== "year" ? `/accounts/month` : `/accounts/year`;
+  const q = view !== "year" ? `?year=${year}&month=${month}` : `?year=${year}`;
+  const fileName = view !== "year" ? `accounts-${year}-${String(month).padStart(2, "0")}` : `company-cashflow-${year}`;
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -62,15 +70,15 @@ export default function AccountsPage() {
   return (
     <>
       <PageHeader
-        title={t("Accounts")}
-        subtitle={t("Company cash book: income, expenses and partners' withdrawals (SAR)")}
+        title={isBranch ? t("My cash book") : t("Accounts")}
+        subtitle={isBranch ? t("Your income and expenses: only the entries you added (SAR)") : t("Company cash book: income, expenses and partners' withdrawals (SAR)")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-line bg-white p-0.5" role="tablist">
-              {(["month", "year"] as const).map((v) => (
+              {(isBranch ? (["day", "month"] as const) : (["day", "month", "year"] as const)).map((v) => (
                 <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
                         className={`rounded-md px-3 py-1.5 text-sm font-medium ${view === v ? "bg-brand text-white" : "text-muted hover:text-ink"}`}>
-                  {v === "month" ? t("Month") : t("Year")}
+                  {v === "day" ? t("Day") : v === "month" ? t("Month") : t("Year")}
                 </button>
               ))}
             </div>
@@ -81,14 +89,14 @@ export default function AccountsPage() {
                 </Select>
               </div>
             )}
-            <div className="w-24">
+            {view !== "day" && <div className="w-24">
               <Select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label={t("Year")}>
                 {[thisYear - 2, thisYear - 1, thisYear, thisYear + 1].map((y) => <option key={y} value={y}>{y}</option>)}
               </Select>
-            </div>
+            </div>}
             <input ref={fileRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importFile(f); }} />
-            <Button variant="secondary" loading={busy === "import"} onClick={() => fileRef.current?.click()}><Upload className="size-4" aria-hidden />{t("Import Excel")}</Button>
+            {!isBranch && <Button variant="secondary" loading={busy === "import"} onClick={() => fileRef.current?.click()}><Upload className="size-4" aria-hidden />{t("Import Excel")}</Button>}
             <Button variant="secondary" loading={busy === "xlsx"} onClick={() => run("xlsx", () => download(`${base}.xlsx${q}`, `${fileName}.xlsx`))}>
               <FileSpreadsheet className="size-4" aria-hidden />{t("Excel")}
             </Button>
@@ -112,6 +120,9 @@ export default function AccountsPage() {
       )}
       {current.error && <Alert tone="bad">{current.error.message}</Alert>}
       {!current.data && !current.error && <Spinner />}
+      {view === "day" && monthData.data && (
+        <DayView day={day} month={monthData.data} year={yearData.data} onDay={setDay} onChanged={reload} />
+      )}
       {view === "month" && monthData.data && <MonthView data={monthData.data} onChanged={reload} />}
       {view === "year" && yearData.data && (
         <YearView data={yearData.data} onChanged={reload} onOpenMonth={(m) => { setMonth(m); setView("month"); }} />

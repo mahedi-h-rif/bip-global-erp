@@ -79,7 +79,7 @@ The live suite does the following:
 
 1. Copy `deploy/clients/nazmul-global.env.example` to `deploy/clients/<client>.env`.
 2. Fill in the seller profile from the client's VAT certificate and national address, and generate **new** secrets (`FATOORA_MASTER_KEY`, `FATOORA_JWT_SECRET`, `DB_PASSWORD`, admin password).
-3. `CLIENT=<client> docker compose -p <client> up -d --build` in `deploy/`, behind HTTPS (e.g. `invoice.<client-domain>`).
+3. `CLIENT=<client> docker compose -p <client> --env-file clients/<client>.env up -d --build` in `deploy/`, behind HTTPS (e.g. `invoice.<client-domain>`).
 4. Log in, check **Company** settings and brand colour, then onboard a ZATCA device. Follow [docs/zatca-go-live.md](docs/zatca-go-live.md) to move from simulation to production.
 
 Every table carries `organization_id`, so moving to a single multi-tenant deployment later needs no schema change.

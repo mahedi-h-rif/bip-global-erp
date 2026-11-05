@@ -2,8 +2,11 @@ package com.fatoora.api.document;
 
 import com.fatoora.api.InvoiceApiApplication;
 import com.fatoora.api.config.FatooraProperties;
+import com.fatoora.api.common.ApiException;
 import com.fatoora.api.notification.EmailSender;
+import com.fatoora.api.notification.PhoneNumbers;
 import com.fatoora.api.notification.SendResult;
+import com.fatoora.api.notification.WhatsAppGateway;
 import com.fatoora.api.ocr.DateTextParser;
 import com.fatoora.api.ocr.IqamaFieldExtractor;
 import com.fatoora.api.ocr.OcrInput;
@@ -58,12 +61,13 @@ public class DocumentService {
     private final OrganizationRepository orgs;
     private final AppUserRepository users;
     private final EmailSender email;
+    private final WhatsAppGateway whatsapp;
     private final String portalUrl;
 
     public DocumentService(OcrService ocr, IqamaFieldExtractor iqama, PassportMrzParser mrz, PassportVizParser viz,
                            DateTextParser dates, CompanyDocumentRepository documents, DocumentAlertRepository alerts,
                            WorkerRepository workers, OrganizationRepository orgs, AppUserRepository users,
-                           EmailSender email, FatooraProperties props) {
+                           EmailSender email, WhatsAppGateway whatsapp, FatooraProperties props) {
         this.ocr = ocr;
         this.iqama = iqama;
         this.mrz = mrz;
@@ -75,6 +79,7 @@ public class DocumentService {
         this.orgs = orgs;
         this.users = users;
         this.email = email;
+        this.whatsapp = whatsapp;
         this.portalUrl = props.portalUrl();
     }
 
@@ -187,7 +192,7 @@ public class DocumentService {
                 .stream().map(AppUser::getEmail).filter(e -> e != null && !e.isBlank()).distinct().toList();
         String status = to.isEmpty() ? "NO_RECIPIENT" : "SENT";
         String body = message + "\n\nRenew it and upload the new copy under Documents:\n" + portalUrl + "/documents?id=" + d.getId()
-                + "\n\nTo stop these reminders for this document, switch them off on the document.\n\n" + nz(org.getLegalNameEn());
+                + "\n\nTo stop these reminders for this document, switch them off on the document.\n\n" + nz(org.displayName());
         for (String addr : to) {
             SendResult r = email.send(addr, (left < 0 ? "Expired: " : "Expiring: ") + what, body);
             if (!r.delivered()) status = "FAILED";
@@ -204,6 +209,29 @@ public class DocumentService {
         a.setEmailRecipients(to.isEmpty() ? null : String.join(", ", to));
         alerts.save(a);
         d.setLastReminderOn(today);
+
+        // The worker's own document (Iqama, passport…) also goes to the worker on WhatsApp, if the company chose that.
+        if (org.isWhatsappDocumentReminders() && d.getWorkerId() != null) {
+            String phone = workers.findById(d.getWorkerId()).map(Worker::getPhone).map(PhoneNumbers::normalize).orElse(null);
+            if (phone != null && whatsapp.connected()) {
+                SendResult r = whatsapp.sendText(phone, whatsappText(org, message));
+                if (!r.delivered()) log.warn("WhatsApp reminder for document {} failed: {}", d.getId(), r.error());
+            }
+        }
+    }
+
+    /** Sends the document's expiry message to the worker now, from the linked WhatsApp number. */
+    public SendResult sendWhatsApp(CompanyDocument d) {
+        String phone = d.getWorkerId() == null ? null
+                : workers.findById(d.getWorkerId()).map(Worker::getPhone).map(PhoneNumbers::normalize).orElse(null);
+        if (phone == null) throw ApiException.badRequest("no_mobile", "Add the worker's mobile number first");
+        if (!whatsapp.connected()) throw ApiException.conflict("whatsapp_not_connected", "WhatsApp is not connected. Link the number under Settings → WhatsApp.");
+        Organization org = orgs.findById(d.getOrganizationId()).orElseThrow();
+        return whatsapp.sendText(phone, whatsappText(org, message(d, LocalDate.now(InvoiceApiApplication.KSA))));
+    }
+
+    private static String whatsappText(Organization org, String message) {
+        return message + "\n\nPlease renew it and send the new copy to the office.\n" + nz(org.displayName());
     }
 
     /** "Iqama of Sakat Khan (no. 2412345678)" or "CR (no. 7054876219)". */

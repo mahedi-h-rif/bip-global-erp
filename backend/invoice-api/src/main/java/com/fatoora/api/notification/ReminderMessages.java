@@ -57,7 +57,7 @@ public final class ReminderMessages {
                 + (link == null ? "" : "\n" + link);
     }
 
-    /** WhatsApp text, opened by staff from the portal with wa.me and sent from their own WhatsApp. */
+    /** WhatsApp text: sent from the linked number, or opened by staff with wa.me and sent from their own WhatsApp. */
     public static String whatsapp(String seller, String customer, List<DueInvoice> dues, Function<DueInvoice, String> links) {
         String total = money(totalDue(dues));
         StringBuilder b = new StringBuilder();

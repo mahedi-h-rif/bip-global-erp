@@ -15,7 +15,7 @@ import java.util.List;
 @RequestMapping("/api/v1")
 public class PaymentController {
 
-    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
+    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT','BRANCH')";
 
     public record DueDateRequest(LocalDate dueDate) {}
 

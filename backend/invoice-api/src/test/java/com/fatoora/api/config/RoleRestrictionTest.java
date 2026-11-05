@@ -20,7 +20,11 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** The normal staff user (ACCOUNTANT) works with invoices and dues but never sees business figures. */
+/**
+ * The normal staff user (ACCOUNTANT) works with invoices and dues but never sees business figures. A branch login
+ * (BRANCH) sits outside the hierarchy: it writes its own invoices, payments and the customers it picks, and its
+ * dashboard is filtered to what it created.
+ */
 class RoleRestrictionTest {
 
     private final RoleHierarchy hierarchy = SecurityConfig.roleHierarchy();
@@ -39,22 +43,30 @@ class RoleRestrictionTest {
     }
 
     @Test
-    void salesReportAndDashboardAreAdminOnly() throws Exception {
+    void branchLoginInheritsNothing() {
+        assertEquals(Set.of("ROLE_BRANCH"), reachable("BRANCH"));
+        assertFalse(reachable("ADMIN").contains("ROLE_BRANCH"), "admins are not scoped to their own records");
+    }
+
+    @Test
+    void salesReportIsAdminOnlyAndDashboardAdminOrBranch() throws Exception {
         assertEquals("hasRole('ADMIN')", ReportController.class.getAnnotation(PreAuthorize.class).value());
         Method dashboard = MiscController.class.getDeclaredMethod("dashboard");
-        assertEquals("hasRole('ADMIN')", dashboard.getAnnotation(PreAuthorize.class).value());
+        assertEquals("hasAnyRole('ADMIN','BRANCH')", dashboard.getAnnotation(PreAuthorize.class).value());
     }
 
     @Test
     void everyWriteEndpointRequiresStaffOrAdmin() {
         for (Class<?> c : List.of(ProductController.class, CustomerController.class, PaymentController.class, DueController.class)) {
+            boolean branchToo = c == CustomerController.class || c == PaymentController.class;
             for (Method m : c.getDeclaredMethods()) {
                 boolean writes = Arrays.stream(m.getAnnotations()).anyMatch(a -> Set.of("PostMapping", "PutMapping", "DeleteMapping")
                         .contains(a.annotationType().getSimpleName()));
                 if (!writes) continue;
                 PreAuthorize pa = m.getAnnotation(PreAuthorize.class);
                 assertNotNull(pa, c.getSimpleName() + "." + m.getName() + " must be restricted");
-                assertEquals("hasAnyRole('ADMIN','ACCOUNTANT')", pa.value(), c.getSimpleName() + "." + m.getName());
+                assertEquals(branchToo ? "hasAnyRole('ADMIN','ACCOUNTANT','BRANCH')" : "hasAnyRole('ADMIN','ACCOUNTANT')",
+                        pa.value(), c.getSimpleName() + "." + m.getName());
             }
         }
     }

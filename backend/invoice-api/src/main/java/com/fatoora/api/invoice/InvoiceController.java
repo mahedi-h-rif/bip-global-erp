@@ -3,6 +3,8 @@ package com.fatoora.api.invoice;
 import com.fatoora.api.auth.CurrentUser;
 import com.fatoora.api.common.ApiException;
 import com.fatoora.api.invoice.InvoiceDtos.*;
+import com.fatoora.api.notification.InvoiceWhatsApp;
+import com.fatoora.api.notification.SendResult;
 import com.fatoora.api.pdf.InvoicePdfService;
 import com.fatoora.zatca.model.InvoiceKind;
 import jakarta.validation.Valid;
@@ -21,14 +23,16 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/api/v1/invoices")
 public class InvoiceController {
 
-    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
+    private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT','BRANCH')";
 
     private final InvoiceService service;
     private final InvoicePdfService pdf;
+    private final InvoiceWhatsApp whatsApp;
 
-    public InvoiceController(InvoiceService service, InvoicePdfService pdf) {
+    public InvoiceController(InvoiceService service, InvoicePdfService pdf, InvoiceWhatsApp whatsApp) {
         this.service = service;
         this.pdf = pdf;
+        this.whatsApp = whatsApp;
     }
 
     @GetMapping
@@ -108,6 +112,15 @@ public class InvoiceController {
     ResponseEntity<byte[]> pdf(@PathVariable Long id) {
         Invoice inv = downloadable(id);
         return file(pdf.render(inv), MediaType.APPLICATION_PDF, inv.getNumber() + ".pdf");
+    }
+
+    public record WhatsAppRequest(String phone) {}
+
+    /** Sends the invoice PDF to the customer on WhatsApp from the linked number. */
+    @PostMapping("/{id}/whatsapp")
+    @PreAuthorize(WRITE)
+    SendResult whatsapp(@PathVariable Long id, @RequestBody(required = false) WhatsAppRequest req) {
+        return whatsApp.send(CurrentUser.orgId(), id, req == null ? null : req.phone(), CurrentUser.get().email());
     }
 
     private Invoice downloadable(Long id) {

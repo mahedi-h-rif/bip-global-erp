@@ -44,8 +44,8 @@ final class WorkerExcel {
             int last = FIRST + Math.max(n, 1) - 1;   // last worker row, 0-based
             int total = last + 1;
 
-            text(sh, 0, 2, nz(org.getLegalNameEn()).toUpperCase(Locale.ROOT), st.company);
-            text(sh, 1, 2, nz(org.getLegalNameAr()), st.companyAr);
+            text(sh, 0, 2, nz(org.displayName()).toUpperCase(Locale.ROOT), st.company);
+            text(sh, 1, 2, org.getLegalNameEn() == null ? "" : nz(org.getLegalNameAr()), st.companyAr);
             text(sh, 2, 2, "CR No. " + nz(org.getOtherId()) + "  |  VAT " + nz(org.getVatNumber()), st.muted);
             text(sh, 3, 2, nz(org.getWebsite()), st.muted);
             text(sh, 5, 0, "OUTSIDE WORKER — ANNUAL ACCOUNT LEDGER " + r.year(), st.title);

@@ -45,10 +45,36 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long>, JpaSpec
 
     long countByOrganizationIdAndStatus(Long organizationId, InvoiceStatus status);
 
+    long countByOrganizationIdAndStatusAndCreatedByIgnoreCase(Long organizationId, InvoiceStatus status, String createdBy);
+
+    List<Invoice> findTop20ByOrganizationIdAndStatusAndCreatedByIgnoreCaseOrderByReportDeadlineAtAsc(Long organizationId,
+                                                                                                    InvoiceStatus status, String createdBy);
+
+    @Query("select coalesce(sum(i.totalInclVat), 0) from Invoice i where i.organizationId = :orgId "
+            + "and i.issuedAt >= :from and i.status <> com.fatoora.api.invoice.InvoiceStatus.DRAFT "
+            + "and i.status <> com.fatoora.api.invoice.InvoiceStatus.REJECTED and lower(i.createdBy) = lower(:createdBy)")
+    BigDecimal sumIssuedSinceBy(Long orgId, Instant from, String createdBy);
+
     List<Invoice> findTop20ByOrganizationIdAndStatusOrderByReportDeadlineAtAsc(Long organizationId, InvoiceStatus status);
 
     @Query("select coalesce(sum(i.totalInclVat), 0) from Invoice i where i.organizationId = :orgId "
             + "and i.issuedAt >= :from and i.status <> com.fatoora.api.invoice.InvoiceStatus.DRAFT "
             + "and i.type = com.fatoora.zatca.model.DocumentType.INVOICE")
     BigDecimal sumIssuedSince(Long orgId, Instant from);
+
+    /** Documents issued in [from, to) plus every draft, for the business audit. */
+    @Query("select new com.fatoora.api.invoice.InvoiceAuditRow(i.id, i.number, i.kind, i.type, i.status, i.customerId, "
+            + "i.totalExclVat, i.vatTotal, i.issuedAt, i.submittedAt, i.createdAt) from Invoice i where i.organizationId = :orgId "
+            + "and (i.issuedAt >= :from and i.issuedAt < :to or i.status = com.fatoora.api.invoice.InvoiceStatus.DRAFT)")
+    List<InvoiceAuditRow> findAuditRows(Long orgId, Instant from, Instant to);
+
+    /** [invoice id, VAT category, net of its lines] for documents issued in [from, to). */
+    @Query("select l.invoice.id, l.vatCategory, sum(l.quantity * l.unitPrice) from InvoiceLineEntity l "
+            + "where l.invoice.organizationId = :orgId and l.invoice.issuedAt >= :from and l.invoice.issuedAt < :to "
+            + "group by l.invoice.id, l.vatCategory")
+    List<Object[]> lineNetsByCategory(Long orgId, Instant from, Instant to);
+
+    /** [EGS unit id, ICV] of every chained document, to check the counter has no gaps. */
+    @Query("select i.egsUnitId, i.icv from Invoice i where i.organizationId = :orgId and i.icv is not null")
+    List<Object[]> findChain(Long orgId);
 }

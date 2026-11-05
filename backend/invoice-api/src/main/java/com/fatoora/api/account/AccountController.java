@@ -7,11 +7,15 @@ import com.fatoora.api.common.ApiException;
 import com.fatoora.api.organization.Organization;
 import com.fatoora.api.organization.OrganizationRepository;
 import com.fatoora.api.pdf.LetterheadPdf;
+import com.fatoora.api.payment.InvoicePayment;
+import com.fatoora.api.user.AppUser;
+import com.fatoora.api.user.AppUserRepository;
 import com.fatoora.api.worker.WorkerMonthRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -34,19 +38,25 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** The company cash book (admin only): monthly income and expenses, the yearly account and partner withdrawals. */
+/**
+ * The company cash book: monthly income and expenses, the yearly account and partner withdrawals (admin). A branch
+ * login keeps its own income and expenses here and sees only the entries it created; the year, partners, imports and
+ * worker payments stay with the admin.
+ */
 @RestController
 @RequestMapping("/api/v1/accounts")
-@PreAuthorize("hasRole('ADMIN')")
 public class AccountController {
 
     private static final MediaType XLSX = MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
     public record IncomeRequest(@NotNull LocalDate date, String customerName, String mobile, String details,
-                                @NotNull @PositiveOrZero BigDecimal amount, @PositiveOrZero BigDecimal paid) {}
+                                @Size(max = 255) String receivedBy,
+                                @NotNull @PositiveOrZero BigDecimal amount, @PositiveOrZero BigDecimal paid,
+                                InvoicePayment.Method method) {}
 
     public record ExpenseRequest(@NotNull LocalDate date, @NotBlank String description, ExpenseEntry.Category category,
-                                 @NotNull @PositiveOrZero BigDecimal amount) {}
+                                 @Size(max = 255) String paidBy, @Size(max = 50) String invoiceNumber,
+                                 @NotNull @PositiveOrZero BigDecimal amount, InvoicePayment.Method method) {}
 
     public record PartnerRequest(@NotBlank String name, Boolean active) {}
 
@@ -69,11 +79,13 @@ public class AccountController {
     private final OrganizationRepository orgs;
     private final LetterheadPdf letterhead;
     private final AuditService audit;
+    private final AppUserRepository users;
 
     public AccountController(IncomeEntryRepository income, ExpenseEntryRepository expenses, PartnerRepository partners,
                              PartnerEntitlementRepository entitlements, PartnerWithdrawalRepository withdrawals,
                              WorkerMonthRepository workerMonths, OrganizationRepository orgs, LetterheadPdf letterhead,
-                             AuditService audit) {
+                             AuditService audit, AppUserRepository users) {
+        this.users = users;
         this.income = income;
         this.expenses = expenses;
         this.partners = partners;
@@ -87,18 +99,21 @@ public class AccountController {
 
     // --- reports ----------------------------------------------------------------------------------
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @GetMapping("/month")
     @Transactional(readOnly = true)
     AccountReport.MonthResult month(@RequestParam int year, @RequestParam int month) {
         return monthResult(CurrentUser.orgId(), year, month);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/year")
     @Transactional(readOnly = true)
     AccountReport.YearResult year(@RequestParam int year) {
         return yearResult(CurrentUser.orgId(), year);
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @GetMapping("/month.xlsx")
     @Transactional(readOnly = true)
     ResponseEntity<byte[]> monthExcel(@RequestParam int year, @RequestParam int month) throws IOException {
@@ -107,6 +122,7 @@ public class AccountController {
                 "accounts-" + year + "-" + String.format("%02d", month) + ".xlsx", false);
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @GetMapping("/month/pdf")
     @Transactional(readOnly = true)
     ResponseEntity<byte[]> monthPdf(@RequestParam int year, @RequestParam int month) {
@@ -116,6 +132,7 @@ public class AccountController {
         return file(pdf, MediaType.APPLICATION_PDF, "accounts-" + year + "-" + String.format("%02d", month) + ".pdf", true);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/year.xlsx")
     @Transactional(readOnly = true)
     ResponseEntity<byte[]> yearExcel(@RequestParam int year) throws IOException {
@@ -123,6 +140,7 @@ public class AccountController {
         return file(AccountExcel.writeYear(yearResult(orgId, year), org(orgId)), XLSX, "company-cashflow-" + year + ".xlsx", false);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/year/pdf")
     @Transactional(readOnly = true)
     ResponseEntity<byte[]> yearPdf(@RequestParam int year) {
@@ -133,6 +151,7 @@ public class AccountController {
 
     // --- income -----------------------------------------------------------------------------------
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @PostMapping("/income")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -145,26 +164,33 @@ public class AccountController {
         audit.record(e.getOrganizationId(), "ACCOUNT_INCOME_ADDED", "account_income", e.getId(), label(e));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @PutMapping("/income/{id}")
     @Transactional
     void updateIncome(@PathVariable Long id, @Valid @RequestBody IncomeRequest req) {
-        IncomeEntry e = income.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Income"));
+        IncomeEntry e = income.findByIdAndOrganizationId(id, CurrentUser.orgId()).filter(x -> CurrentUser.owns(x.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Income"));
         apply(e, req);
         e.setSource(AccountSource.MANUAL);
+        e.setUpdatedBy(CurrentUser.get().email());
+        e.setUpdatedAt(java.time.Instant.now());
         audit.record(e.getOrganizationId(), "ACCOUNT_INCOME_UPDATED", "account_income", e.getId(), label(e));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @DeleteMapping("/income/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
     void deleteIncome(@PathVariable Long id) {
-        IncomeEntry e = income.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Income"));
+        IncomeEntry e = income.findByIdAndOrganizationId(id, CurrentUser.orgId()).filter(x -> CurrentUser.owns(x.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Income"));
         income.delete(e);
         audit.record(e.getOrganizationId(), "ACCOUNT_INCOME_DELETED", "account_income", e.getId(), label(e));
     }
 
     // --- expenses ---------------------------------------------------------------------------------
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @PostMapping("/expenses")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -177,26 +203,33 @@ public class AccountController {
         audit.record(e.getOrganizationId(), "ACCOUNT_EXPENSE_ADDED", "account_expense", e.getId(), e.getDescription() + " · " + e.getAmount());
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @PutMapping("/expenses/{id}")
     @Transactional
     void updateExpense(@PathVariable Long id, @Valid @RequestBody ExpenseRequest req) {
-        ExpenseEntry e = expenses.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Expense"));
+        ExpenseEntry e = expenses.findByIdAndOrganizationId(id, CurrentUser.orgId()).filter(x -> CurrentUser.owns(x.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Expense"));
         apply(e, req);
         e.setSource(AccountSource.MANUAL);
+        e.setUpdatedBy(CurrentUser.get().email());
+        e.setUpdatedAt(java.time.Instant.now());
         audit.record(e.getOrganizationId(), "ACCOUNT_EXPENSE_UPDATED", "account_expense", e.getId(), e.getDescription() + " · " + e.getAmount());
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
     @DeleteMapping("/expenses/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
     void deleteExpense(@PathVariable Long id) {
-        ExpenseEntry e = expenses.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Expense"));
+        ExpenseEntry e = expenses.findByIdAndOrganizationId(id, CurrentUser.orgId()).filter(x -> CurrentUser.owns(x.getCreatedBy()))
+                .orElseThrow(() -> ApiException.notFound("Expense"));
         expenses.delete(e);
         audit.record(e.getOrganizationId(), "ACCOUNT_EXPENSE_DELETED", "account_expense", e.getId(), e.getDescription() + " · " + e.getAmount());
     }
 
     // --- partners ---------------------------------------------------------------------------------
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/partners")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -208,6 +241,7 @@ public class AccountController {
         audit.record(p.getOrganizationId(), "PARTNER_ADDED", "partner", p.getId(), p.getName());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/partners/{id}")
     @Transactional
     void updatePartner(@PathVariable Long id, @Valid @RequestBody PartnerRequest req) {
@@ -217,6 +251,7 @@ public class AccountController {
         audit.record(p.getOrganizationId(), "PARTNER_UPDATED", "partner", p.getId(), p.getName());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/partners/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
@@ -227,6 +262,7 @@ public class AccountController {
     }
 
     /** What the partner may draw in that year; empty removes it. */
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/partners/{id}/entitlement/{year}")
     @Transactional
     void entitlement(@PathVariable Long id, @PathVariable int year, @Valid @RequestBody EntitlementRequest req) {
@@ -245,6 +281,7 @@ public class AccountController {
         entitlements.save(e);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/withdrawals")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
@@ -257,15 +294,19 @@ public class AccountController {
         audit.record(w.getOrganizationId(), "PARTNER_WITHDRAWAL_ADDED", "partner_withdrawal", w.getId(), w.getAmount().toPlainString());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/withdrawals/{id}")
     @Transactional
     void updateWithdrawal(@PathVariable Long id, @Valid @RequestBody WithdrawalRequest req) {
         PartnerWithdrawal w = withdrawals.findByIdAndOrganizationId(id, CurrentUser.orgId()).orElseThrow(() -> ApiException.notFound("Withdrawal"));
         apply(w, req);
         w.setSource(AccountSource.MANUAL);
+        w.setUpdatedBy(CurrentUser.get().email());
+        w.setUpdatedAt(java.time.Instant.now());
         audit.record(w.getOrganizationId(), "PARTNER_WITHDRAWAL_UPDATED", "partner_withdrawal", w.getId(), w.getAmount().toPlainString());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/withdrawals/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
@@ -282,6 +323,7 @@ public class AccountController {
      * replaces only what an earlier import of the same kind put there; rows typed in by hand are kept. A month
      * total from the yearly sheet is skipped when that month already has its own entries, so nothing counts twice.
      */
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/import")
     @Transactional
     ImportResult importExcel(@RequestBody byte[] file, @RequestParam int year) {
@@ -411,10 +453,13 @@ public class AccountController {
     private AccountReport.MonthResult monthResult(Long orgId, int year, int month) {
         if (month < 1 || month > 12) throw new IllegalArgumentException("Invalid month");
         YearMonth ym = YearMonth.of(year, month);
+        boolean branch = CurrentUser.owner() != null;
         return AccountReport.month(year, month,
-                income.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, ym.atDay(1), ym.atEndOfMonth()),
-                expenses.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, ym.atDay(1), ym.atEndOfMonth()),
-                workerPaid(orgId, year)[month - 1]);
+                income.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, ym.atDay(1), ym.atEndOfMonth())
+                        .stream().filter(e -> CurrentUser.owns(e.getCreatedBy())).toList(),
+                expenses.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, ym.atDay(1), ym.atEndOfMonth())
+                        .stream().filter(e -> CurrentUser.owns(e.getCreatedBy())).toList(),
+                branch ? null : workerPaid(orgId, year)[month - 1], names(orgId));
     }
 
     private AccountReport.YearResult yearResult(Long orgId, int year) {
@@ -428,7 +473,7 @@ public class AccountController {
                 income.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to),
                 expenses.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to),
                 workerPaid(orgId, year), ps, ent,
-                withdrawals.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to));
+                withdrawals.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to), names(orgId));
     }
 
     /** What the Workers ledger shows as paid to workers in each month of the year. */
@@ -438,20 +483,33 @@ public class AccountController {
         return out;
     }
 
+    /** Login (lower case) to full name, to show who created or edited an entry. */
+    private Map<String, String> names(Long orgId) {
+        Map<String, String> m = new HashMap<>();
+        for (AppUser u : users.findByOrganizationId(orgId))
+            m.put(u.getEmail().toLowerCase(Locale.ROOT), u.getFullName() == null || u.getFullName().isBlank() ? u.getEmail() : u.getFullName());
+        return m;
+    }
+
     private static void apply(IncomeEntry e, IncomeRequest r) {
         e.setEntryDate(r.date());
         e.setCustomerName(blank(r.customerName()));
         e.setMobile(blank(r.mobile()));
         e.setDetails(blank(r.details()));
+        e.setReceivedBy(blank(r.receivedBy()));
         e.setAmount(r.amount());
         e.setPaid(r.paid() == null ? BigDecimal.ZERO : r.paid());
+        if (r.method() != null) e.setMethod(r.method());
     }
 
     private static void apply(ExpenseEntry e, ExpenseRequest r) {
         e.setEntryDate(r.date());
         e.setDescription(r.description().strip());
         e.setCategory(r.category() == null ? AccountExcel.guess(r.description()) : r.category());
+        e.setPaidBy(blank(r.paidBy()));
+        e.setInvoiceNumber(blank(r.invoiceNumber()));
         e.setAmount(r.amount());
+        if (r.method() != null) e.setMethod(r.method());
     }
 
     private void apply(PartnerWithdrawal w, WithdrawalRequest r) {

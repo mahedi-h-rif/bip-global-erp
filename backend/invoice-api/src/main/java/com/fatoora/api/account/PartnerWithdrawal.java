@@ -32,4 +32,6 @@ public class PartnerWithdrawal {
 
     private String createdBy;
     private Instant createdAt = Instant.now();
+    private String updatedBy;
+    private Instant updatedAt;
 }

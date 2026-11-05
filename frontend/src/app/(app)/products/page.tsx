@@ -6,7 +6,7 @@ import { Archive, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Product } from "@/lib/types";
 import { money } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Spinner } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const blank: Product = { name: "", unitPrice: "" };
@@ -16,13 +16,18 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
   const [p, setP] = useState<Product>(initial);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const isNew = !p.id;
+  // For a new product, suggest the next auto item code; the user can type over it before saving.
+  const { data: suggested } = useSWR<{ number: string }>(isNew ? "/products/next-number" : null, fetcher);
+  // p.number is undefined until the user edits, so the suggestion shows through until then.
+  const code = p.number ?? suggested?.number ?? "";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const body = { ...p, name: p.name.trim(), unitPrice: Number(p.unitPrice) };
+      const body = { ...p, number: code.trim() || undefined, name: p.name.trim(), unitPrice: Number(p.unitPrice) };
       if (p.id) await api("PUT", `/products/${p.id}`, body);
       else await api("POST", "/products", body);
       onDone();
@@ -37,9 +42,13 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
       <CardHeader title={p.id ? t("Edit product") : t("New product")} subtitle={t("Price excludes VAT. Changing a product never changes invoices already issued.")} />
       <form onSubmit={submit} className="space-y-4 p-5">
         {error && !error.fields && <Alert tone="bad" title={t("Not saved")}>{error.message}</Alert>}
-        <div className="grid gap-4 md:grid-cols-[1fr_12rem]">
+        <RequiredLegend />
+        <div className="grid gap-4 md:grid-cols-[12rem_1fr_12rem]">
+          <Field label={t("Item code")} optional error={error?.fields?.number} hint={t("Auto-generated; edit if you use your own codes.")}>
+            <Input dir="ltr" value={code} onChange={(e) => setP({ ...p, number: e.target.value })} placeholder="ITEM-000001" maxLength={30} />
+          </Field>
           <Field label={t("Product name")} error={error?.fields?.name}>
-            <Input required autoFocus value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} placeholder={t("e.g. Diesel - ديزل")} />
+            <Input required autoFocus dir="auto" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} placeholder={t("e.g. Diesel - ديزل")} />
           </Field>
           <Field label={t("Unit price (SAR, excl. VAT)")} error={error?.fields?.unitPrice}>
             <Input required type="number" min="0" step="any" value={p.unitPrice} onChange={(e) => setP({ ...p, unitPrice: e.target.value })} />
@@ -118,6 +127,7 @@ export default function ProductsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-xs text-muted">
+                  <th className="w-32 px-4 py-2.5 text-start font-medium">{t("Item code")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Name")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Unit price (excl. VAT)")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("With 15% VAT")}</th>
@@ -127,7 +137,8 @@ export default function ProductsPage() {
               <tbody className="divide-y divide-line">
                 {data.map((p) => (
                   <tr key={p.id} className={p.active ? "" : "text-muted"}>
-                    <td className="px-4 py-3 font-medium">
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted">{p.number ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium" dir="auto">
                       {p.name}
                       {!p.active && <span className="ms-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{t("Deactivated")}</span>}
                     </td>

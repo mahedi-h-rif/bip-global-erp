@@ -18,13 +18,25 @@ public record FatooraProperties(
 
     public record Bootstrap(String adminEmail, String adminPassword, String adminName,
                             String operatorEmail, String operatorPassword, String operatorName,
-                            String userEmail, String userPassword, String userName, Org organization) {}
+                            String userEmail, String userPassword, String userName, String branchUsers,
+                            Org organization) {}
 
     /**
      * Payment reminders. {@code interval} is the gap between two reminders to the same customer;
      * {@code checkInterval} is how often the scheduler looks for customers that are due one.
      */
-    public record Notifications(boolean enabled, Duration interval, Duration checkInterval, Mail mail, Sms sms) {}
+    public record Notifications(boolean enabled, Duration interval, Duration checkInterval, Mail mail, Sms sms, WhatsApp whatsapp) {}
+
+    /**
+     * The WhatsApp service (the {@code whatsapp} container) that sends from a number linked by QR.
+     * Leave {@code url} empty to keep WhatsApp as "open a prefilled chat" links only.
+     */
+    public record WhatsApp(String url, String token) {
+
+        public boolean configured() {
+            return url != null && !url.isBlank() && token != null && !token.isBlank();
+        }
+    }
 
     /** SMTP server for reminder emails. Leave {@code host} empty to only log messages. */
     public record Mail(String host, int port, String username, String password, boolean starttls, String from) {}

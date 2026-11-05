@@ -7,7 +7,7 @@ import { FileDown, Printer, Save, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { Agreement, AgreementStatus, AgreementTemplate, Customer } from "@/lib/types";
 import { todayKsa } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Field, Input, Select, Spinner } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { AgreementTextForm, parseAgreement, serializeAgreement } from "@/components/agreement-form";
 import { useT } from "@/lib/i18n";
 
@@ -75,13 +75,13 @@ function Form({ initial, template, customers, router }: {
   async function save(): Promise<number> {
     const body_ = {
       customerId: customerId ? Number(customerId) : null,
-      clientName,
-      clientDetails,
-      title,
+      clientName: clientName.trim() || null,
+      clientDetails: clientDetails.trim() || null,
+      title: title.trim() || null,
       body: serializeAgreement(text),
-      agreementDate,
+      agreementDate: agreementDate || null,
       status,
-      signedOn: status === "SIGNED" ? signedOn : null,
+      signedOn: status === "SIGNED" ? signedOn || null : null,
     };
     const saved = initial
       ? await api<Agreement>("PUT", `/agreements/${initial.id}`, body_)
@@ -118,15 +118,16 @@ function Form({ initial, template, customers, router }: {
 
       <Card>
         <CardHeader title={t("Client")} subtitle={t("Printed as the second party. Leave the details empty to fill them from the customer.")} />
+        <RequiredLegend className="px-5 pt-4" />
         <div className="grid gap-4 p-5 md:grid-cols-2">
-          <Field label={t("Customer")}>
+          <Field label={t("Customer")} optional>
             <Select value={customerId} onChange={(e) => pickCustomer(e.target.value)}>
               <option value="">{t("Not a saved customer")}</option>
               {customers.map((c) => <option key={c.id} value={c.id}>{c.nameEn || c.nameAr}</option>)}
             </Select>
           </Field>
           <Field label={t("Client name")}><Input required value={clientName} onChange={(e) => setClientName(e.target.value)} /></Field>
-          <Field label={t("Client details")} hint={t("CR or ID, address, mobile. One per line.")} className="md:col-span-2">
+          <Field label={t("Client details")} optional hint={t("CR or ID, address, mobile. One per line.")} className="md:col-span-2">
             <textarea dir="auto" rows={3} className={textareaClass} value={clientDetails} onChange={(e) => setClientDetails(e.target.value)} />
           </Field>
         </div>
@@ -135,15 +136,15 @@ function Form({ initial, template, customers, router }: {
       <Card>
         <CardHeader title={t("Agreement")} subtitle={t("Started from your standard agreement; change anything for this client.")} />
         <div className="grid gap-4 p-5 md:grid-cols-4">
-          <Field label={t("Title")} className="md:col-span-2"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-          <Field label={t("Date")}><Input type="date" value={agreementDate} onChange={(e) => setAgreementDate(e.target.value)} /></Field>
+          <Field label={t("Title")} optional className="md:col-span-2"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+          <Field label={t("Date")} optional hint={t("Leave empty for today")}><Input type="date" value={agreementDate} onChange={(e) => setAgreementDate(e.target.value)} /></Field>
           <Field label={t("Status")}>
             <Select value={status} onChange={(e) => setStatus(e.target.value as AgreementStatus)}>
               {(Object.keys(agreementStatusLabel) as AgreementStatus[]).map((s) => <option key={s} value={s}>{t(agreementStatusLabel[s])}</option>)}
             </Select>
           </Field>
           {status === "SIGNED" && (
-            <Field label={t("Signed on")}><Input type="date" value={signedOn} onChange={(e) => setSignedOn(e.target.value)} /></Field>
+            <Field label={t("Signed on")} optional hint={t("Leave empty for today")}><Input type="date" value={signedOn} onChange={(e) => setSignedOn(e.target.value)} /></Field>
           )}
         </div>
       </Card>

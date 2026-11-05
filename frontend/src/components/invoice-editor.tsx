@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Banknote, CheckCircle2, Clock, PackagePlus, Plus, Save, Send, Trash2, UserPlus } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Customer, InvoiceDetail, InvoiceKind, Line, PaymentMethod, Product, SendMode, VatCategory } from "@/lib/types";
 import { exemptionCodes, lineTotals, money, todayKsa, typeLabel, unitCodes } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Field, Input, Select } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, RequiredMark, Select } from "@/components/ui";
 import { Trans, useLanguage, useT } from "@/lib/i18n";
+import { CustomerPicker, DictateButton } from "@/components/voice";
+import { parseInvoiceSpeech, takePendingInvoice, VOICE_INVOICE_EVENT } from "@/lib/voice-parse";
 
 const emptyLine = (): Line => ({ name: "", quantity: 1, unitCode: "PCE", unitPrice: "", vatCategory: "S", vatRate: 15 });
 
@@ -50,7 +52,7 @@ function PayNowCard({ total, paid, onChange }: { total: number; paid: PaidNow | 
             <CheckCircle2 className="size-4" aria-hidden /> {paid?.full ? `${t("Full paid")} ✓` : t("Full paid")}
           </Button>
           <span className="pb-2 text-sm text-muted">{t("or")}</span>
-          <Field label={t("Amount received (SAR)")} hint={t("Up to {amount}", { amount: money(total) })} error={tooMuch ? t("More than the invoice total") : undefined} className="w-52">
+          <Field label={t("Amount received (SAR)")} optional hint={t("Up to {amount}", { amount: money(total) })} error={tooMuch ? t("More than the invoice total") : undefined} className="w-52">
             <Input type="number" min="0.01" step="0.01" max={total} value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
           <Button
@@ -129,6 +131,8 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
   const [error, setError] = useState<{ err: ApiError; saved: boolean } | null>(null);
   // Once saved, retries update the same draft instead of creating another one.
   const [draftId, setDraftId] = useState<number | null>(initial?.id ?? null);
+  /** What the last spoken invoice filled in, shown until the next one. */
+  const [voiceNote, setVoiceNote] = useState<{ heard: string; filled: string[] } | null>(null);
 
   const totals = useMemo(() => lineTotals(lines), [lines]);
   const customer = customers?.find((c) => String(c.id) === customerId);
@@ -137,9 +141,10 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 
-  /** Typing or picking a description: an exact product name fills in its price; anything else is free text. */
+  /** Typing or picking a description: an exact product name or item code fills in its price; anything else is free text. */
   function setDescription(i: number, name: string) {
-    const p = products?.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+    const key = name.trim().toLowerCase();
+    const p = products?.find((x) => x.name.toLowerCase() === key || (x.number != null && x.number.toLowerCase() === key));
     if (p && p.id !== lines[i].productId) setLine(i, { name: p.name, unitPrice: p.unitPrice, productId: p.id });
     else setLine(i, { name, productId: p ? p.id : null });
   }
@@ -148,6 +153,43 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
     mutateProducts();
     setLine(i, { name: p.name, unitPrice: p.unitPrice, productId: p.id });
   }
+
+  /**
+   * A spoken (or example) invoice: sets what it names and adds its items after the lines already
+   * typed. Nothing is saved or issued; staff check the invoice and issue it themselves.
+   */
+  const applyVoice = useCallback((text: string) => {
+    const v = parseInvoiceSpeech(text, customers ?? [], products ?? []);
+    const filled: string[] = [];
+    if (!isNote) {
+      if (v.kind) { setKind(v.kind); filled.push(t(v.kind === "STANDARD" ? "Business customer" : "Individual customer")); }
+      if (v.customer) { setCustomerId(String(v.customer.id)); filled.push(v.customer.nameEn || v.customer.nameAr || ""); }
+      if (v.fullPaid) { setPaidNow({ full: true }); filled.push(t("Full paid")); }
+    }
+    if (v.paymentMeans) { setPayment(v.paymentMeans); filled.push(t(paymentMeans.find((p) => p.code === v.paymentMeans)!.label)); }
+    if (v.lines.length) {
+      const added = v.lines.map((l): Line => ({
+        ...emptyLine(),
+        name: l.name,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice ?? l.product?.unitPrice ?? "",
+        productId: l.product?.id ?? null,
+      }));
+      setLines((ls) => [...ls.filter((l) => l.name.trim() || l.unitPrice !== ""), ...added]);
+      filled.push(t("{n} items", { n: added.length }));
+    }
+    setVoiceNote({ heard: text, filled });
+  }, [customers, products, isNote, t]);
+
+  // An invoice spoken in the voice assistant: waiting when this page opens, or arriving while it is open.
+  const listsLoaded = customers != null && products != null;
+  useEffect(() => {
+    if (!listsLoaded || initial) return;
+    const pick = () => { const text = takePendingInvoice(); if (text) applyVoice(text); };
+    pick();
+    window.addEventListener(VOICE_INVOICE_EVENT, pick);
+    return () => window.removeEventListener(VOICE_INVOICE_EVENT, pick);
+  }, [listsLoaded, initial, applyVoice]);
 
   const isKnownProduct = (name: string) => products?.some((p) => p.name.toLowerCase() === name.trim().toLowerCase()) ?? true;
 
@@ -251,8 +293,18 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
         </Alert>
       )}
 
+      {voiceNote && (
+        <Alert tone={voiceNote.filled.length ? "ok" : "warn"} title={voiceNote.filled.length ? t("Filled in by voice") : t("Nothing was filled in")}>
+          <span className="block" dir="auto">“{voiceNote.heard}”</span>
+          {voiceNote.filled.length > 0
+            ? <span className="mt-1 block">{voiceNote.filled.join(" · ")}. {t("Check the customer, items and prices before issuing.")}</span>
+            : <span className="mt-1 block">{t("Name the customer and the items, e.g. “for Al Noor, 5 cement at 20 and 2 sand”.")}</span>}
+        </Alert>
+      )}
+
       <Card>
         <CardHeader title={t("Document")} subtitle={isNote ? t("{type} for invoice {number}", { type: t(typeLabel[initial!.type]), number: initial!.billingReference }) : undefined} />
+        <RequiredLegend className="px-5 pt-4" />
         <div className="grid gap-5 p-5 md:grid-cols-2">
           <fieldset disabled={isNote} className="md:col-span-2">
             <legend className="mb-2 text-xs font-medium text-muted">{t("Invoice type")}</legend>
@@ -276,7 +328,9 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
           </fieldset>
 
           <Field
-            label={standard ? t("Customer (required)") : t("Customer (optional)")}
+            label={t("Customer")}
+            required={standard}
+            optional={!standard}
             hint={
               <Link
                 href="/customers?new=1"
@@ -286,15 +340,16 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
               </Link>
             }
           >
-            <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)} disabled={isNote}>
-              <option value="">{standard ? t("Select a customer…") : t("Walk-in customer")}</option>
-              {customers?.map((c) => (
-                <option key={c.id} value={c.id}>{c.nameEn || c.nameAr}{c.vatNumber ? ` · ${t("VAT")} ${c.vatNumber}` : ""}</option>
-              ))}
-            </Select>
+            <CustomerPicker
+              customers={customers}
+              value={customerId}
+              onChange={setCustomerId}
+              emptyLabel={standard ? t("Select a customer…") : t("Walk-in customer")}
+              disabled={isNote}
+            />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t("Supply date")}>
+            <Field label={t("Supply date")} optional hint={t("Leave empty for the issue date")}>
               <Input type="date" value={supplyDate} onChange={(e) => setSupplyDate(e.target.value)} />
             </Field>
             <Field label={t("Payment method")}>
@@ -309,7 +364,7 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
             </div>
           )}
           {isNote && (
-            <Field label={t("Reason for this note (required)")} className="md:col-span-2">
+            <Field label={t("Reason for this note")} className="md:col-span-2">
               <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("e.g. Returned goods, price correction")} required />
             </Field>
           )}
@@ -322,10 +377,10 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
           <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-line text-xs text-muted">
-                <th className="px-3 py-2 text-start font-medium">{t("Item name")}</th>
-                <th className="w-24 px-2 py-2 text-start font-medium">{t("Qty")}</th>
+                <th className="px-3 py-2 text-start font-medium">{t("Item name")}<RequiredMark /></th>
+                <th className="w-24 px-2 py-2 text-start font-medium">{t("Qty")}<RequiredMark /></th>
                 <th className="w-28 px-2 py-2 text-start font-medium">{t("Unit")}</th>
-                <th className="w-32 px-2 py-2 text-start font-medium">{t("Unit price")}</th>
+                <th className="w-32 px-2 py-2 text-start font-medium">{t("Unit price")}<RequiredMark /></th>
                 <th className="w-44 px-2 py-2 text-start font-medium">{t("VAT")}</th>
                 <th className="w-32 px-3 py-2 text-end font-medium">{t("Line total")}</th>
                 <th className="w-10" />
@@ -338,6 +393,7 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
                     <div className="flex flex-wrap items-start gap-2">
                       <Input
                         list="product-options"
+                        dir="auto"
                         className="min-w-0 flex-1"
                         value={l.name}
                         onChange={(e) => setDescription(i, e.target.value)}
@@ -404,13 +460,19 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
           </table>
         </div>
         <datalist id="product-options">
-          {products?.map((p) => <option key={p.id} value={p.name}>{money(p.unitPrice)}</option>)}
+          {products?.map((p) => (
+            <Fragment key={p.id}>
+              <option value={p.name}>{p.number ? `${p.number} · ${money(p.unitPrice)}` : money(p.unitPrice)}</option>
+              {p.number && <option value={p.number}>{p.name}</option>}
+            </Fragment>
+          ))}
         </datalist>
         <div className="flex flex-wrap items-start justify-between gap-6 border-t border-line p-5">
           <div className="flex max-w-2xl flex-1 flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
               <Plus className="size-4" aria-hidden /> {t("Add item")}
             </Button>
+            <DictateButton onText={applyVoice}>{t("Speak the invoice")}</DictateButton>
           </div>
           <dl className="tabular w-full max-w-xs space-y-1.5 text-sm">
             <div className="flex justify-between"><dt className="text-muted">{t("Total excl. VAT")}</dt><dd>{money(totals.net)}</dd></div>

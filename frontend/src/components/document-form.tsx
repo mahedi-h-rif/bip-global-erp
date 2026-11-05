@@ -110,7 +110,13 @@ export function DocumentForm({ initial, workers, workerId: presetWorker, onDone,
     setError(null);
     setFields({});
     try {
-      const body = { type, workerId: workerId ? Number(workerId) : null, ...f };
+      // Empty optional fields go as null: an empty date string is not a date.
+      const body = {
+        type, workerId: workerId ? Number(workerId) : null, ...f,
+        title: f.title.trim() || null, number: f.number.trim() || null, holderName: f.holderName.trim() || null,
+        nationality: f.nationality.trim() || null, issueDate: f.issueDate || null, expiryDate: f.expiryDate || null,
+        notes: f.notes.trim() || null,
+      };
       let doc = initial
         ? await api<CompanyDocument>("PUT", `/documents/${initial.id}`, body)
         : await api<CompanyDocument>("POST", "/documents", body);
@@ -172,27 +178,27 @@ export function DocumentForm({ initial, workers, workerId: presetWorker, onDone,
       </div>
 
       <div className="grid content-start gap-3 sm:grid-cols-2">
-        <Field label={t("Title")} hint={t("Leave empty to use the document type")} className="sm:col-span-2">
+        <Field label={t("Title")} optional hint={t("Leave empty to use the document type")} className="sm:col-span-2">
           <Input value={f.title} onChange={set("title")} placeholder={t(typeName(type))} />
         </Field>
-        <Field label={type === "IQAMA" ? t("Iqama number") : type === "PASSPORT" ? t("Passport number") : t("Document number")} error={fields.number}>
+        <Field label={type === "IQAMA" ? t("Iqama number") : type === "PASSPORT" ? t("Passport number") : t("Document number")} optional error={fields.number}>
           <Input value={f.number} onChange={set("number")} dir="ltr" />
         </Field>
-        <Field label={t("Name on document")}>
+        <Field label={t("Name on document")} optional>
           <Input value={f.holderName} onChange={set("holderName")} dir="auto" />
         </Field>
-        <Field label={t("Issue date")} error={fields.issueDate}>
+        <Field label={t("Issue date")} optional error={fields.issueDate}>
           <Input type="date" value={f.issueDate} onChange={set("issueDate")} />
         </Field>
-        <Field label={t("Expiry date")} error={fields.expiryDate} hint={t("Reminders start two months before this date")}>
+        <Field label={t("Expiry date")} optional error={fields.expiryDate} hint={t("Reminders start two months before this date")}>
           <Input type="date" value={f.expiryDate} onChange={set("expiryDate")} />
         </Field>
         {(owner !== "company") && (
-          <Field label={t("Nationality")}>
+          <Field label={t("Nationality")} optional>
             <Input value={f.nationality} onChange={set("nationality")} />
           </Field>
         )}
-        <Field label={t("Notes")} className={owner !== "company" ? "" : "sm:col-span-2"}>
+        <Field label={t("Notes")} optional className={owner !== "company" ? "" : "sm:col-span-2"}>
           <Input value={f.notes} onChange={set("notes")} />
         </Field>
         <fieldset className="space-y-2 rounded-lg border border-line bg-white p-3 text-sm sm:col-span-2">

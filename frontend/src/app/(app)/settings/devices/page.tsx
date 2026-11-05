@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Cpu, KeyRound, Plus, RefreshCw, Star, XCir
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { EgsUnit, OnboardingResult, Organization } from "@/lib/types";
 import { date, expiresWithinDays } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { Trans, useT } from "@/lib/i18n";
 
 function Steps({ result }: { result: OnboardingResult }) {
@@ -101,6 +101,7 @@ function NewDeviceForm({ onCreated }: { onCreated: () => void }) {
       <CardHeader title={t("New ZATCA device")} subtitle={t("Each device gets its own certificate and its own unbroken invoice chain.")} />
       <form onSubmit={submit} className="grid gap-4 p-5 md:grid-cols-2">
         {error && <div className="md:col-span-2"><Alert tone="bad">{error}</Alert></div>}
+        <RequiredLegend className="md:col-span-2" />
         <Field label={t("Device name")} hint={t("Unique, e.g. PORTAL-1 or STATION-2-POS")}><Input required value={form.name} onChange={set("name")} /></Field>
         <Field label={t("Branch")}><Input required value={form.branch} onChange={set("branch")} /></Field>
         <Field label={t("Location")} hint={t("Short national address, e.g. QFDA3287")}><Input required value={form.location} onChange={set("location")} /></Field>

@@ -15,8 +15,10 @@ public class AppUser {
     /**
      * OPERATOR is the e-invoicing provider (ZATCA onboarding, environment, legal identity) and inherits
      * everything below it. ADMIN / ACCOUNTANT / VIEWER are the client's own staff and never see ZATCA setup.
+     * BRANCH is a division's login (e.g. aluminium, laser): only invoices, quotations, agreements and its own
+     * cash-book entries, and only the records it created itself. It sits outside the hierarchy on purpose.
      */
-    public enum Role { OPERATOR, ADMIN, ACCOUNTANT, VIEWER }
+    public enum Role { OPERATOR, ADMIN, ACCOUNTANT, VIEWER, BRANCH }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

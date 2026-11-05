@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   forwardRef,
+  isValidElement,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -52,19 +53,62 @@ export function ButtonLink({ href, children, variant = "primary" }: { href: stri
   );
 }
 
-export function Field({ label, hint, error, children, className = "" }: {
+/** True when the field's control (the direct child) is marked `required`. */
+function childRequired(children: ReactNode): boolean {
+  return isValidElement<{ required?: boolean }>(children) && children.props.required === true;
+}
+
+/**
+ * A labelled form field. Required fields get a red asterisk after the label (with "required" for screen
+ * readers); optional ones get a muted "(optional)". A field is required when `required` is passed or its
+ * control (the direct child) has `required`; pass `optional` to mark an optional field. Fields with neither
+ * (filters, read-only values) show no marker.
+ */
+export function Field({ label, hint, error, children, className = "", required, optional }: {
   label: string;
   hint?: ReactNode;
   error?: string;
   children: ReactNode;
   className?: string;
+  required?: boolean;
+  optional?: boolean;
 }) {
+  const t = useT();
+  const isRequired = required ?? childRequired(children);
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted">
+        {label}
+        {isRequired ? (
+          <RequiredMark />
+        ) : optional ? (
+          <span className="ms-1 font-normal text-muted/80">({t("optional")})</span>
+        ) : null}
+      </span>
       {children}
       {error ? <span className="mt-1 block text-xs text-bad">{error}</span> : hint ? <span className="mt-1 block text-xs text-muted">{hint}</span> : null}
     </label>
+  );
+}
+
+/** The required asterisk on its own, for column headers of line tables. */
+export function RequiredMark() {
+  const t = useT();
+  return (
+    <>
+      <span aria-hidden className="ms-0.5 text-bad">*</span>
+      <span className="sr-only"> ({t("required")})</span>
+    </>
+  );
+}
+
+/** One-line key for the markers on a form: "* Required field". */
+export function RequiredLegend({ className = "" }: { className?: string }) {
+  const t = useT();
+  return (
+    <p className={`text-xs text-muted ${className}`}>
+      <span aria-hidden className="text-bad">*</span> {t("Required field")}
+    </p>
   );
 }
 

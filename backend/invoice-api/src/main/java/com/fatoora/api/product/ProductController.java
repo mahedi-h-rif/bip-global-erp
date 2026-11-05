@@ -24,19 +24,27 @@ public class ProductController {
 
     private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
 
+    /**
+     * {@code number} is the item code. On create it defaults to the next server sequence
+     * (ITEM-000001, ...) when left blank, and the client may override it with its own code.
+     */
     public record ProductDto(
             Long id,
+            @Size(max = 30) String number,
             @NotBlank @Size(max = 1000) String name,
             @NotNull @DecimalMin("0") BigDecimal unitPrice,
             Boolean active,
             Instant updatedAt) {
 
         static ProductDto of(Product p) {
-            return new ProductDto(p.getId(), p.getName(), p.getUnitPrice(), p.isActive(), p.getUpdatedAt());
+            return new ProductDto(p.getId(), p.getNumber(), p.getName(), p.getUnitPrice(), p.isActive(), p.getUpdatedAt());
         }
     }
 
     public record DeleteResult(String result) {}
+
+    /** The item code the create form pre-fills, which the user may edit before saving. */
+    public record NextNumber(String number) {}
 
     private final ProductRepository repo;
     private final AuditService audit;
@@ -53,6 +61,12 @@ public class ProductController {
         return repo.search(CurrentUser.orgId(), like, all).stream().map(ProductDto::of).toList();
     }
 
+    /** The next auto item code, so the create form can pre-fill it (editable). */
+    @GetMapping("/next-number")
+    NextNumber nextNumber() {
+        return new NextNumber(generateNumber(CurrentUser.orgId()));
+    }
+
     @GetMapping("/{id}")
     ProductDto get(@PathVariable Long id) {
         return ProductDto.of(load(id));
@@ -66,12 +80,15 @@ public class ProductController {
         Long orgId = CurrentUser.orgId();
         String name = dto.name().trim();
         requireUniqueName(orgId, name, null);
+        String number = dto.number() == null || dto.number().isBlank() ? generateNumber(orgId) : dto.number().trim();
+        requireUniqueNumber(orgId, number, null);
         Product p = new Product();
         p.setOrganizationId(orgId);
+        p.setNumber(number);
         p.setName(name);
         p.setUnitPrice(dto.unitPrice());
         repo.save(p);
-        audit.record(orgId, "PRODUCT_CREATED", "product", p.getId(), name + " @ " + p.getUnitPrice());
+        audit.record(orgId, "PRODUCT_CREATED", "product", p.getId(), p.getNumber() + " " + name + " @ " + p.getUnitPrice());
         return ProductDto.of(p);
     }
 
@@ -83,6 +100,11 @@ public class ProductController {
         String name = dto.name().trim();
         boolean active = dto.active() == null ? p.isActive() : dto.active();
         if (active) requireUniqueName(p.getOrganizationId(), name, p.getId());
+        if (dto.number() != null && !dto.number().isBlank()) {
+            String number = dto.number().trim();
+            requireUniqueNumber(p.getOrganizationId(), number, p.getId());
+            p.setNumber(number);
+        }
         p.setName(name);
         p.setUnitPrice(dto.unitPrice());
         p.setActive(active);
@@ -106,9 +128,19 @@ public class ProductController {
         return new DeleteResult("deleted");
     }
 
+    private String generateNumber(Long orgId) {
+        Integer max = repo.maxItemSeq(orgId);
+        return "ITEM-%06d".formatted((max == null ? 0 : max) + 1);
+    }
+
     private void requireUniqueName(Long orgId, String name, Long exceptId) {
         if (repo.activeNameTaken(orgId, name, exceptId))
             throw new ApiException.Validation(Map.of("name", "A product with this name already exists"));
+    }
+
+    private void requireUniqueNumber(Long orgId, String number, Long exceptId) {
+        if (repo.numberTaken(orgId, number, exceptId))
+            throw new ApiException.Validation(Map.of("number", "A product with this item code already exists"));
     }
 
     private Product load(Long id) {
