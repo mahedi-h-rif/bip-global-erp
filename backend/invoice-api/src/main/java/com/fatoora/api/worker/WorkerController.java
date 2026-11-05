@@ -40,7 +40,8 @@ public class WorkerController {
     private static final String WRITE = "hasAnyRole('ADMIN','ACCOUNTANT')";
 
     public record WorkerRequest(@NotBlank String name, String phone, String iqamaNumber, String nationality, String notes,
-                                Boolean active, Boolean daily, @PositiveOrZero BigDecimal dailyRate) {}
+                                Boolean active, Boolean daily, @PositiveOrZero BigDecimal dailyRate,
+                                @PositiveOrZero BigDecimal days) {}
 
     /** For a daily-wage worker, {@code days} and {@code rate} set the work (days × rate); {@code paidMethod} is how the salary was paid. */
     public record MonthRequest(@PositiveOrZero BigDecimal work, @PositiveOrZero BigDecimal paid,
@@ -136,6 +137,7 @@ public class WorkerController {
         w.setPosition(workers.maxPosition(orgId) + 1);
         apply(w, req);
         workers.save(w);
+        postDailyWork(w);
         audit.record(orgId, "WORKER_CREATED", "worker", w.getId(), w.getName());
         return row(w);
     }
@@ -146,6 +148,7 @@ public class WorkerController {
     WorkerLedger.Row update(@PathVariable Long id, @Valid @RequestBody WorkerRequest req) {
         Worker w = load(id);
         apply(w, req);
+        postDailyWork(w);
         audit.record(w.getOrganizationId(), "WORKER_UPDATED", "worker", w.getId(), w.getName());
         return row(w);
     }
@@ -511,6 +514,33 @@ public class WorkerController {
         if (req.active() != null) w.setActive(req.active());
         if (req.daily() != null) w.setDaily(req.daily());
         w.setDailyRate(req.dailyRate());
+        w.setDays(req.days());
+    }
+
+    /**
+     * For a daily-wage worker, records the work total (days × daily rate) as the current month's cost, keeping
+     * any amount already paid that month. Clearing the days or rate removes the work figure but keeps paid.
+     */
+    private void postDailyWork(Worker w) {
+        if (!w.isDaily()) return;
+        LocalDate now = LocalDate.now(InvoiceApiApplication.KSA);
+        WorkerMonth m = months.findByWorkerIdAndYearAndMonth(w.getId(), now.getYear(), now.getMonthValue()).orElse(null);
+        BigDecimal work = w.getDays() != null && w.getDailyRate() != null ? w.getDays().multiply(w.getDailyRate()) : null;
+        BigDecimal paid = m == null ? null : m.getPaid();
+        if (work == null && (paid == null || paid.signum() == 0)) {
+            if (m != null) months.delete(m);
+            return;
+        }
+        if (m == null) {
+            m = new WorkerMonth();
+            m.setWorkerId(w.getId());
+            m.setYear(now.getYear());
+            m.setMonth(now.getMonthValue());
+        }
+        m.setWork(work);
+        m.setDays(w.getDays());
+        m.setRate(w.getDailyRate());
+        months.save(m);
     }
 
     private Worker load(Long id) {

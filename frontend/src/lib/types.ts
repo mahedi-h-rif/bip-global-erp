@@ -388,6 +388,7 @@ export type WorkerRow = {
   active: boolean;
   daily: boolean;
   dailyRate: string | null;
+  days: string | null;
   months: WorkerCell[];
   work: string;
   paid: string;

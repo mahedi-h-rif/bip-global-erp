@@ -44,13 +44,13 @@ function Balance({ value, strong }: { value: number; strong?: boolean }) {
   );
 }
 
-type Draft = { name: string; phone: string; iqamaNumber: string; nationality: string; notes: string; active: boolean; daily: boolean; dailyRate: string };
-const blankDraft: Draft = { name: "", phone: "", iqamaNumber: "", nationality: "", notes: "", active: true, daily: false, dailyRate: "" };
+type Draft = { name: string; phone: string; iqamaNumber: string; nationality: string; notes: string; active: boolean; daily: boolean; dailyRate: string; days: string };
+const blankDraft: Draft = { name: "", phone: "", iqamaNumber: "", nationality: "", notes: "", active: true, daily: false, dailyRate: "", days: "" };
 
 function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone: () => void; onCancel: () => void }) {
   const t = useT();
   const [d, setD] = useState<Draft>(() => initial
-    ? { name: initial.name, phone: initial.phone ?? "", iqamaNumber: initial.iqamaNumber ?? "", nationality: initial.nationality ?? "", notes: initial.notes ?? "", active: initial.active, daily: initial.daily, dailyRate: initial.dailyRate ?? "" }
+    ? { name: initial.name, phone: initial.phone ?? "", iqamaNumber: initial.iqamaNumber ?? "", nationality: initial.nationality ?? "", notes: initial.notes ?? "", active: initial.active, daily: initial.daily, dailyRate: initial.dailyRate ?? "", days: initial.days ?? "" }
     : blankDraft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,11 @@ function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone
     setBusy(true);
     setError(null);
     try {
-      const body = { ...d, dailyRate: d.daily && d.dailyRate.trim() !== "" ? Number(d.dailyRate) : null };
+      const body = {
+        ...d,
+        dailyRate: d.daily && d.dailyRate.trim() !== "" ? Number(d.dailyRate) : null,
+        days: d.daily && d.days.trim() !== "" ? Number(d.days) : null,
+      };
       if (initial) await api("PUT", `/workers/${initial.id}`, body);
       else await api("POST", "/workers", body);
       onDone();
@@ -91,11 +95,17 @@ function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone
           <option value="daily">{t("Daily-wage")}</option>
         </Select>
       </Field>
-      {d.daily && (
-        <Field label={t("Default daily rate")} hint={t("Used to pre-fill the rate; editable each month.")}>
+      {d.daily && <>
+        <Field label={t("Days worked")}>
+          <Input type="number" min="0" step="0.5" inputMode="decimal" className="text-end" placeholder="—" value={d.days} onChange={(e) => setD({ ...d, days: e.target.value })} />
+        </Field>
+        <Field label={t("Daily wage")}>
           <Input type="number" min="0" step="0.01" inputMode="decimal" className="text-end" placeholder="—" value={d.dailyRate} onChange={(e) => setD({ ...d, dailyRate: e.target.value })} />
         </Field>
-      )}
+        <Field label={t("Total")} hint={t("Days × daily wage; counts as this month's cost")}>
+          <Input readOnly tabIndex={-1} className="text-end bg-canvas" value={d.days && d.dailyRate ? money(num(d.days) * num(d.dailyRate)) : "—"} />
+        </Field>
+      </>}
       <Field label={t("Notes")} className="sm:col-span-2 lg:col-span-4">
         <Input value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} />
       </Field>
@@ -115,25 +125,26 @@ function EntryRow({ w, year, month, onSaved }: { w: WorkerRow; year: number; mon
   const cell = w.months[month - 1];
   const [work, setWork] = useState(cell.work ?? "");
   const [paid, setPaid] = useState(cell.paid ?? "");
-  const [days, setDays] = useState(cell.days ?? "");
-  const [rate, setRate] = useState(cell.rate ?? (w.dailyRate ?? ""));
   const [method, setMethod] = useState<PaymentMethod>(cell.paidMethod ?? "CASH");
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const workValue = w.daily ? (days === "" || rate === "" ? "" : String(num(days) * num(rate))) : work;
+  // Daily-wage workers: work (days × wage) is set on the worker and shown read-only here; only Paid is edited.
+  const workValue = w.daily ? (cell.work ?? "") : work;
 
   async function save(nextMethod: PaymentMethod = method) {
     const same = (input: string, stored: string | null) => (input === "" ? stored == null : stored != null && Number(input) === Number(stored));
-    const unchanged = nextMethod === (cell.paidMethod ?? "CASH") && same(paid, cell.paid)
-      && (w.daily ? same(days, cell.days) && same(rate, cell.rate) : same(work, cell.work));
+    const unchanged = nextMethod === (cell.paidMethod ?? "CASH") && same(paid, cell.paid) && (w.daily || same(work, cell.work));
     if (unchanged) return;
     setState("saving");
     setError(null);
     try {
-      const body = w.daily
-        ? { days: days === "" ? null : days, rate: rate === "" ? null : rate, paid: paid === "" ? null : paid, paidMethod: nextMethod }
-        : { work: work === "" ? null : work, paid: paid === "" ? null : paid, paidMethod: nextMethod };
+      // For a daily worker keep the month's posted work; otherwise save the typed work value.
+      const body = {
+        work: w.daily ? cell.work : work === "" ? null : work,
+        paid: paid === "" ? null : paid,
+        paidMethod: nextMethod,
+      };
       await api("PUT", `/workers/${w.id}/months/${year}/${month}`, body);
       setState("saved");
       onSaved();
@@ -150,15 +161,9 @@ function EntryRow({ w, year, month, onSaved }: { w: WorkerRow; year: number; mon
       <td className="px-4 py-2 font-medium">{w.name}{w.daily && <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Daily")}</span>}</td>
       <td className="px-2 py-1.5">
         {w.daily ? (
-          <div className="flex items-center gap-1">
-            <Input type="number" min="0" step="0.5" inputMode="decimal" className="tabular w-14 text-end" placeholder={t("Days")}
-                   aria-label={`${w.name} · ${t("Days")}`} value={days} onChange={(e) => setDays(e.target.value)} onBlur={() => save()} />
-            <span className="text-muted">×</span>
-            <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-20 text-end" placeholder={t("Rate")}
-                   aria-label={`${w.name} · ${t("Daily rate")}`} value={rate} onChange={(e) => setRate(e.target.value)} onBlur={() => save()} />
-            <span className="text-muted">=</span>
-            <span className="tabular w-20 text-end">{workValue === "" ? <span className="text-muted">—</span> : money(workValue)}</span>
-          </div>
+          <span className="tabular inline-block w-28 text-end" title={t("Set on the worker (days × daily wage)")}>
+            {cell.work != null ? money(cell.work) : <span className="text-muted">—</span>}
+          </span>
         ) : (
           <Input type="number" min="0" step="0.01" inputMode="decimal" className="tabular w-28 text-end" placeholder="—"
                  aria-label={`${w.name} · ${t("Work value")}`} value={work} onChange={(e) => setWork(e.target.value)} onBlur={() => save()} />

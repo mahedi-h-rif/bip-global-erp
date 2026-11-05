@@ -24,10 +24,12 @@ public class Worker {
     private String iqamaNumber;
     private String nationality;
     private String notes;
-    /** A non-permanent, daily-wage worker: months are entered as days worked × a daily rate. */
+    /** A non-permanent, daily-wage worker: cost is days worked × the daily rate, set on the worker. */
     private boolean daily = false;
-    /** Default daily rate for a daily-wage worker; may be overridden per month. */
+    /** Daily rate for a daily-wage worker. */
     private BigDecimal dailyRate;
+    /** Days worked for a daily-wage worker; work total = days × dailyRate, posted to the current month. */
+    private BigDecimal days;
     private boolean active = true;
     /** Order on the ledger, as in the company's register. */
     private int position;

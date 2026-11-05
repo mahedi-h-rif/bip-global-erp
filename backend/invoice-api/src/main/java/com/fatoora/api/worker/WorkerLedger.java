@@ -22,8 +22,8 @@ public final class WorkerLedger {
                        String paidMethod) {}
 
     public record Row(Long id, int no, String name, String phone, String iqamaNumber, String nationality, String notes,
-                      boolean active, boolean daily, BigDecimal dailyRate, List<Cell> months, BigDecimal work,
-                      BigDecimal paid, BigDecimal due) {}
+                      boolean active, boolean daily, BigDecimal dailyRate, BigDecimal days, List<Cell> months,
+                      BigDecimal work, BigDecimal paid, BigDecimal due) {}
 
     public record Totals(BigDecimal work, BigDecimal paid, BigDecimal due) {}
 
@@ -58,7 +58,7 @@ public final class WorkerLedger {
             if (due.signum() > 0) outstanding = outstanding.add(due);
             else advances = advances.add(due.negate());
             rows.add(new Row(w.getId(), ++no, w.getName(), w.getPhone(), w.getIqamaNumber(), w.getNationality(),
-                    w.getNotes(), w.isActive(), w.isDaily(), w.getDailyRate(), cells, work, paid, due));
+                    w.getNotes(), w.isActive(), w.isDaily(), w.getDailyRate(), w.getDays(), cells, work, paid, due));
         }
         List<Totals> monthTotals = new ArrayList<>(12);
         BigDecimal tw = BigDecimal.ZERO, tp = BigDecimal.ZERO;

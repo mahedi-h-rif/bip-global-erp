@@ -123,7 +123,7 @@ export function WorkerDaily({ workers, day, onDay, onSaved }: { workers: WorkerR
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {workers.filter((w) => w.active || byWorker.has(w.id)).map((w) => (
+              {workers.filter((w) => !w.daily && (w.active || byWorker.has(w.id))).map((w) => (
                 <DayRow key={`${w.id}-${day}-${byWorker.get(w.id)?.id ?? "new"}`} w={w} day={day} entry={byWorker.get(w.id)} onSaved={saved} />
               ))}
             </tbody>
