@@ -102,13 +102,17 @@ export function WorkerDaily({ workers, day, onDay, onSaved }: { workers: WorkerR
   const { data, error, mutate } = useSWR<WorkerDayEntry[]>(`/workers/days?year=${year}&month=${month}`, fetcher, { keepPreviousData: true });
   const saved = () => { void mutate(); onSaved(); };
 
-  const today = (data ?? []).filter((e) => e.date === day);
+  // Daily-wage workers keep their own attendance calendar, so leave them out of this monthly-worker day grid.
+  const dailyIds = new Set(workers.filter((w) => w.daily).map((w) => w.id));
+  const entries = (data ?? []).filter((e) => !dailyIds.has(e.workerId));
+
+  const today = entries.filter((e) => e.date === day);
   const byWorker = new Map(today.map((e) => [e.workerId, e]));
   const dayWork = today.reduce((s, e) => s + num(e.work), 0), dayPaid = today.reduce((s, e) => s + num(e.paid), 0);
 
   const dates = new Map<string, WorkerDayEntry[]>();
-  for (const e of data ?? []) dates.set(e.date, [...(dates.get(e.date) ?? []), e]);
-  const monthWork = (data ?? []).reduce((s, e) => s + num(e.work), 0), monthPaid = (data ?? []).reduce((s, e) => s + num(e.paid), 0);
+  for (const e of entries) dates.set(e.date, [...(dates.get(e.date) ?? []), e]);
+  const monthWork = entries.reduce((s, e) => s + num(e.work), 0), monthPaid = entries.reduce((s, e) => s + num(e.paid), 0);
 
   return (
     <>

@@ -14,6 +14,11 @@ public interface ExpenseEntryRepository extends JpaRepository<ExpenseEntry, Long
 
     List<ExpenseEntry> findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(Long orgId, LocalDate from, LocalDate to);
 
+    /** Distinct "paid by" names already used, for the name dropdown. */
+    @Query("select distinct trim(e.paidBy) from ExpenseEntry e where e.organizationId = :orgId "
+            + "and e.paidBy is not null and trim(e.paidBy) <> '' order by trim(e.paidBy)")
+    List<String> distinctPaidBy(Long orgId);
+
     @Modifying
     @Query("delete from ExpenseEntry e where e.organizationId = :orgId and e.source = :source and e.entryDate between :from and :to")
     int deleteImported(Long orgId, AccountSource source, LocalDate from, LocalDate to);

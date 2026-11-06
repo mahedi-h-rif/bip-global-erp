@@ -223,7 +223,14 @@ public class WorkerController {
             days.save(d);
         }
         BigDecimal dWork = nz(req.work()).subtract(nz(oldWork)), dPaid = nz(req.paid()).subtract(nz(oldPaid));
-        if (dWork.signum() != 0 || dPaid.signum() != 0) shift(w.getId(), date, dWork, dPaid);
+        if (w.isDaily()) {
+            // A daily-wage worker's month work is the sum of the days marked present, so recompute it rather
+            // than shift it (shifting on top of the days × rate figure would double-count). Paid still shifts.
+            if (dPaid.signum() != 0) shift(w.getId(), date, BigDecimal.ZERO, dPaid);
+            recomputeDailyMonthWork(w.getId(), date.getYear(), date.getMonthValue());
+        } else if (dWork.signum() != 0 || dPaid.signum() != 0) {
+            shift(w.getId(), date, dWork, dPaid);
+        }
         // Record the payment method on the month when a paid amount is entered for the day.
         if (req.paidMethod() != null && nz(req.paid()).signum() != 0)
             months.findByWorkerIdAndYearAndMonth(w.getId(), date.getYear(), date.getMonthValue())
@@ -491,6 +498,31 @@ public class WorkerController {
         return true;
     }
 
+    /**
+     * Sets a daily-wage worker's month work to the sum of the days marked present that month (the attendance
+     * record is the source of truth). The amount paid is left as it is; a month with neither is removed.
+     */
+    private void recomputeDailyMonthWork(Long workerId, int year, int month) {
+        java.time.YearMonth ym = java.time.YearMonth.of(year, month);
+        BigDecimal sum = days.findByWorkerIdAndEntryDateBetween(workerId, ym.atDay(1), ym.atEndOfMonth()).stream()
+                .map(WorkerDay::getWork).filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+        WorkerMonth m = months.findByWorkerIdAndYearAndMonth(workerId, year, month).orElse(null);
+        BigDecimal work = sum.signum() == 0 ? null : sum;
+        BigDecimal paid = m == null ? null : m.getPaid();
+        if (work == null && nz(paid).signum() == 0) {
+            if (m != null) months.delete(m);
+            return;
+        }
+        if (m == null) {
+            m = new WorkerMonth();
+            m.setWorkerId(workerId);
+            m.setYear(year);
+            m.setMonth(month);
+        }
+        m.setWork(work);
+        months.save(m);
+    }
+
     /** Moves a month's work and paid by a day's change; never below zero, and a month left with nothing is removed. */
     private void shift(Long workerId, LocalDate date, BigDecimal dWork, BigDecimal dPaid) {
         WorkerMonth m = months.findByWorkerIdAndYearAndMonth(workerId, date.getYear(), date.getMonthValue()).orElse(null);
@@ -531,6 +563,9 @@ public class WorkerController {
     private void postDailyWork(Worker w) {
         if (!w.isDaily()) return;
         LocalDate now = LocalDate.now(InvoiceApiApplication.KSA);
+        java.time.YearMonth ym = java.time.YearMonth.from(now);
+        // Once the month has day-by-day attendance, that record drives the month's work; don't overwrite it.
+        if (days.existsByWorkerIdAndEntryDateBetween(w.getId(), ym.atDay(1), ym.atEndOfMonth())) return;
         WorkerMonth m = months.findByWorkerIdAndYearAndMonth(w.getId(), now.getYear(), now.getMonthValue()).orElse(null);
         BigDecimal work = w.getDays() != null && w.getDailyRate() != null ? w.getDays().multiply(w.getDailyRate()) : null;
         BigDecimal paid = m == null ? null : m.getPaid();

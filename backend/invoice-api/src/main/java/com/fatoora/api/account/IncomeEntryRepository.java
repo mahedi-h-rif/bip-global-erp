@@ -14,6 +14,11 @@ public interface IncomeEntryRepository extends JpaRepository<IncomeEntry, Long> 
 
     List<IncomeEntry> findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(Long orgId, LocalDate from, LocalDate to);
 
+    /** Distinct "received by" names already used, for the name dropdown. */
+    @Query("select distinct trim(e.receivedBy) from IncomeEntry e where e.organizationId = :orgId "
+            + "and e.receivedBy is not null and trim(e.receivedBy) <> '' order by trim(e.receivedBy)")
+    List<String> distinctReceivedBy(Long orgId);
+
     @Modifying
     @Query("delete from IncomeEntry e where e.organizationId = :orgId and e.source = :source and e.entryDate between :from and :to")
     int deleteImported(Long orgId, AccountSource source, LocalDate from, LocalDate to);

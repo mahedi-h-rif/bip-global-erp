@@ -12,4 +12,8 @@ public interface WorkerDayRepository extends JpaRepository<WorkerDay, Long> {
     Optional<WorkerDay> findByWorkerIdAndEntryDate(Long workerId, LocalDate date);
 
     List<WorkerDay> findByWorkerIdInAndEntryDateBetweenOrderByEntryDateAscIdAsc(Collection<Long> workerIds, LocalDate from, LocalDate to);
+
+    List<WorkerDay> findByWorkerIdAndEntryDateBetween(Long workerId, LocalDate from, LocalDate to);
+
+    boolean existsByWorkerIdAndEntryDateBetween(Long workerId, LocalDate from, LocalDate to);
 }

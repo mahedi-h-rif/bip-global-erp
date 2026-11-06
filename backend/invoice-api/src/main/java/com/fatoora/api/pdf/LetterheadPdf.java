@@ -382,8 +382,13 @@ public class LetterheadPdf {
      * and a stamp box for the company. Kept on one page.
      */
     public static String signatures(Organization org, String clientName) {
+        return signatures(org, clientName, true);
+    }
+
+    /** {@code companyStamp} false leaves out the company stamp box (quotations are not stamped). */
+    public static String signatures(Organization org, String clientName, boolean companyStamp) {
         return "<table style=\"margin-top:16px; page-break-inside:avoid\"><tr>"
-                + party("padding-right:14px", "For the company · عن الشركة", org.displayName(), "Company stamp · ختم الشركة")
+                + party("padding-right:14px", "For the company · عن الشركة", org.displayName(), companyStamp ? "Company stamp · ختم الشركة" : null)
                 + party("padding-left:14px", "For the client · عن العميل", clientName, null)
                 + "</tr></table>";
     }

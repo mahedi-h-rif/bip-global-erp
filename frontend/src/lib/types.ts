@@ -517,6 +517,21 @@ export type AccountYear = {
   partners: PartnerRow[]; categories: AccountCategory[];
 };
 
+/** Names already used for "received by" / "paid by", for the form dropdowns. */
+export type AccountPeople = { receivedBy: string[]; paidBy: string[] };
+
+/** A person's income and expense totals for a year (person-wise view). */
+export type AccountPerson = { name: string; income: string; incomeCount: number; expense: string; expenseCount: number; net: string };
+
+/** One person's income and expense entries, shown independently. */
+export type AccountPersonHistory = { name: string; income: AccountIncome[]; expenses: AccountExpense[]; incomeTotal: string; expenseTotal: string };
+
+/** What reading an uploaded invoice recovered; source QR is exact, OCR is best-effort, NONE found nothing. */
+export type InvoiceScan = {
+  source: "QR" | "OCR" | "NONE";
+  date: string | null; amount: number | string | null; vendor: string | null; vatNumber: string | null; invoiceNumber: string | null;
+};
+
 export type AccountImportResult = {
   months: { sheet: string; year: number; month: number; income: number; expenses: number; datesGuessed: number }[];
   memos: string[]; yearMonths: number[]; yearMonthsSkipped: number[]; withdrawals: number; partnersCreated: number;

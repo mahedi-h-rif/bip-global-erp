@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { Fragment, useRef, useState, type FormEvent } from "react";
 import useSWR from "swr";
 import {
   Banknote,
@@ -24,6 +24,7 @@ import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Selec
 import { BalanceBars, MonthlyChart } from "@/components/worker-charts";
 import { DayWorkImport, type DayPreview } from "@/components/daywork-import";
 import { DayPicker, WorkerDaily } from "@/components/worker-days";
+import { DailyAttendance } from "@/components/worker-attendance";
 import { WorkerLeaves } from "@/components/worker-leaves";
 import { useT } from "@/lib/i18n";
 
@@ -213,7 +214,13 @@ function WorkerLine({ w, onEdit, onChanged, canDelete }: { w: WorkerRow; onEdit:
             <ChevronDown className={`size-3.5 text-muted transition-transform ${open ? "" : "-rotate-90 rtl:rotate-90"}`} aria-hidden />
             {w.name}
           </button>
+          {w.daily
+            ? <span className="ms-2 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-brand">{t("Daily")}</span>
+            : <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Monthly")}</span>}
           {!w.active && <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Inactive")}</span>}
+          {w.daily && w.dailyRate && (
+            <p className="mt-0.5 text-[11px] text-muted">{w.days ? `${w.days} ${t("days")} × ${money(w.dailyRate)}` : `${money(w.dailyRate)} / ${t("day")}`}</p>
+          )}
         </td>
         <td className="px-4 py-3 text-muted">{w.iqamaNumber ?? "—"}</td>
         <td className="px-4 py-3 text-muted">{w.phone ?? "—"}</td>
@@ -449,6 +456,8 @@ export default function WorkersPage() {
             )}
           </Card>
 
+          {data.workers.some((w) => w.daily) && <DailyAttendance workers={data.workers} onSaved={() => void mutate()} />}
+
           <Card className="mt-6">
             <CardHeader title={t("Worker register")} subtitle={t("Year totals per worker; open a name for the month-by-month account.")} />
             {editing === "new" && <WorkerForm onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />}
@@ -468,13 +477,29 @@ export default function WorkersPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {data.workers.map((w) => editing === w.id ? (
-                      <tr key={w.id}><td colSpan={8} className="p-0">
-                        <WorkerForm initial={w} onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />
-                      </td></tr>
-                    ) : (
-                      <WorkerLine key={w.id} w={w} canDelete={canDelete} onEdit={() => setEditing(w.id)} onChanged={() => void mutate()} />
-                    ))}
+                    {(() => {
+                      const row = (w: WorkerRow) => editing === w.id ? (
+                        <tr key={w.id}><td colSpan={8} className="p-0">
+                          <WorkerForm initial={w} onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />
+                        </td></tr>
+                      ) : (
+                        <WorkerLine key={w.id} w={w} canDelete={canDelete} onEdit={() => setEditing(w.id)} onChanged={() => void mutate()} />
+                      );
+                      const daily = data.workers.filter((w) => w.daily);
+                      if (daily.length === 0) return data.workers.map(row);
+                      const groups = [
+                        { label: t("Monthly workers"), rows: data.workers.filter((w) => !w.daily) },
+                        { label: t("Daily-wage workers"), rows: daily },
+                      ].filter((g) => g.rows.length > 0);
+                      return groups.map((g) => (
+                        <Fragment key={g.label}>
+                          <tr className="bg-canvas/40">
+                            <td colSpan={8} className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{g.label} · {g.rows.length}</td>
+                          </tr>
+                          {g.rows.map(row)}
+                        </Fragment>
+                      ));
+                    })()}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-line bg-canvas/60 font-semibold">

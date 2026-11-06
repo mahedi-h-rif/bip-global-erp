@@ -64,7 +64,8 @@ const workforceNav: NavItem[] = [
 
 // Company money, partners' withdrawals and the business audit: admins only.
 const financeNav: NavItem[] = [
-  { href: "/accounts", label: "Accounts", icon: Landmark },
+  { href: "/accounts", label: "Accounts", icon: Landmark, exact: true },
+  { href: "/accounts/persons", label: "Income / expense by person", icon: UserRound },
   { href: "/audit", label: "Business audit", icon: ClipboardCheck },
 ];
 

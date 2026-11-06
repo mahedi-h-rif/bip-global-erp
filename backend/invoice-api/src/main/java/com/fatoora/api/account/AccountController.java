@@ -31,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -70,6 +71,16 @@ public class AccountController {
     public record ImportResult(List<ImportedMonth> months, List<String> memos, List<Integer> yearMonths,
                                List<Integer> yearMonthsSkipped, int withdrawals, int partnersCreated) {}
 
+    /** Names already used for "received by" / "paid by", for the form dropdowns. */
+    public record People(List<String> receivedBy, List<String> paidBy) {}
+
+    /** A person's totals across a year: money they received (income) and money they paid (expense). */
+    public record PersonRow(String name, BigDecimal income, int incomeCount, BigDecimal expense, int expenseCount, BigDecimal net) {}
+
+    /** One person's income and expense entries, shown independently when their row is opened. */
+    public record PersonHistory(String name, List<AccountReport.Income> income, List<AccountReport.Expense> expenses,
+                                BigDecimal incomeTotal, BigDecimal expenseTotal) {}
+
     private final IncomeEntryRepository income;
     private final ExpenseEntryRepository expenses;
     private final PartnerRepository partners;
@@ -80,12 +91,14 @@ public class AccountController {
     private final LetterheadPdf letterhead;
     private final AuditService audit;
     private final AppUserRepository users;
+    private final InvoiceScanService invoiceScan;
 
     public AccountController(IncomeEntryRepository income, ExpenseEntryRepository expenses, PartnerRepository partners,
                              PartnerEntitlementRepository entitlements, PartnerWithdrawalRepository withdrawals,
                              WorkerMonthRepository workerMonths, OrganizationRepository orgs, LetterheadPdf letterhead,
-                             AuditService audit, AppUserRepository users) {
+                             AuditService audit, AppUserRepository users, InvoiceScanService invoiceScan) {
         this.users = users;
+        this.invoiceScan = invoiceScan;
         this.income = income;
         this.expenses = expenses;
         this.partners = partners;
@@ -147,6 +160,86 @@ public class AccountController {
         Long orgId = CurrentUser.orgId();
         byte[] pdf = letterhead.render(org(orgId), "Yearly cash flow " + year, AccountReport.yearHtml(yearResult(orgId, year)));
         return file(pdf, MediaType.APPLICATION_PDF, "company-cashflow-" + year + ".pdf", true);
+    }
+
+    // --- people, person-wise totals and invoice scan ---------------------------------------------
+
+    /** Names already used for "received by" and "paid by", so the forms can offer them and keep new ones. */
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
+    @GetMapping("/people")
+    @Transactional(readOnly = true)
+    People people() {
+        Long orgId = CurrentUser.orgId();
+        return new People(income.distinctReceivedBy(orgId), expenses.distinctPaidBy(orgId));
+    }
+
+    /** Each person's income and expense totals for the year, most active first. */
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
+    @GetMapping("/persons")
+    @Transactional(readOnly = true)
+    List<PersonRow> persons(@RequestParam(required = false) Integer year) {
+        Long orgId = CurrentUser.orgId();
+        int y = year != null ? year : thisYear();
+        LocalDate from = LocalDate.of(y, 1, 1), to = LocalDate.of(y, 12, 31);
+        Map<String, String> display = new HashMap<>();
+        Map<String, BigDecimal> inSum = new HashMap<>(), exSum = new HashMap<>();
+        Map<String, Integer> inCount = new HashMap<>(), exCount = new HashMap<>();
+        for (IncomeEntry e : income.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to)) {
+            if (!CurrentUser.owns(e.getCreatedBy())) continue;
+            String name = blank(e.getReceivedBy());
+            if (name == null) continue;
+            String key = name.toLowerCase(Locale.ROOT);
+            display.putIfAbsent(key, name);
+            inSum.merge(key, AccountReport.nz(e.getPaid()), BigDecimal::add);
+            inCount.merge(key, 1, Integer::sum);
+        }
+        for (ExpenseEntry e : expenses.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to)) {
+            if (!CurrentUser.owns(e.getCreatedBy())) continue;
+            String name = blank(e.getPaidBy());
+            if (name == null) continue;
+            String key = name.toLowerCase(Locale.ROOT);
+            display.putIfAbsent(key, name);
+            exSum.merge(key, AccountReport.nz(e.getAmount()), BigDecimal::add);
+            exCount.merge(key, 1, Integer::sum);
+        }
+        List<PersonRow> rows = new ArrayList<>();
+        for (Map.Entry<String, String> p : display.entrySet()) {
+            BigDecimal in = inSum.getOrDefault(p.getKey(), BigDecimal.ZERO), ex = exSum.getOrDefault(p.getKey(), BigDecimal.ZERO);
+            rows.add(new PersonRow(p.getValue(), in, inCount.getOrDefault(p.getKey(), 0), ex, exCount.getOrDefault(p.getKey(), 0), in.subtract(ex)));
+        }
+        rows.sort(Comparator.comparing((PersonRow r) -> r.income().add(r.expense())).reversed());
+        return rows;
+    }
+
+    /** One person's income and expense entries for the year. */
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
+    @GetMapping("/persons/history")
+    @Transactional(readOnly = true)
+    PersonHistory personHistory(@RequestParam String name, @RequestParam(required = false) Integer year) {
+        Long orgId = CurrentUser.orgId();
+        int y = year != null ? year : thisYear();
+        LocalDate from = LocalDate.of(y, 1, 1), to = LocalDate.of(y, 12, 31);
+        String target = name.strip();
+        Map<String, String> names = names(orgId);
+        List<AccountReport.Income> in = income.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to).stream()
+                .filter(e -> CurrentUser.owns(e.getCreatedBy()))
+                .filter(e -> target.equalsIgnoreCase(blank(e.getReceivedBy())))
+                .map(e -> AccountReport.income(e, names)).toList();
+        List<AccountReport.Expense> ex = expenses.findByOrganizationIdAndEntryDateBetweenOrderByEntryDateAscIdAsc(orgId, from, to).stream()
+                .filter(e -> CurrentUser.owns(e.getCreatedBy()))
+                .filter(e -> target.equalsIgnoreCase(blank(e.getPaidBy())))
+                .map(e -> AccountReport.expense(e, names)).toList();
+        BigDecimal inTotal = AccountReport.sum(in.stream().map(AccountReport.Income::paid).toList());
+        BigDecimal exTotal = AccountReport.sum(ex.stream().map(AccountReport.Expense::amount).toList());
+        return new PersonHistory(target, in, ex, inTotal, exTotal);
+    }
+
+    /** Best-effort read of an uploaded invoice (ZATCA QR, then OCR) to prefill the income/expense form. */
+    @PreAuthorize("hasAnyRole('ADMIN','BRANCH')")
+    @PutMapping("/scan")
+    InvoiceScanService.ScanResult scan(@RequestBody byte[] file,
+                                       @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType) {
+        return invoiceScan.scan(file, contentType);
     }
 
     // --- income -----------------------------------------------------------------------------------

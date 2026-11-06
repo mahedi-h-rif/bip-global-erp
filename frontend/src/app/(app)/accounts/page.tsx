@@ -29,7 +29,7 @@ export default function AccountsPage() {
   const [notice, setNotice] = useState<{ tone: "ok" | "bad"; text: string; details?: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const monthData = useSWR<AccountMonth>(view !== "year" ? `/accounts/month?year=${year}&month=${month}` : null, fetcher, { keepPreviousData: true });
-  const yearData = useSWR<AccountYear>(view !== "month" && me && !isBranch ? `/accounts/year?year=${year}` : null, fetcher, { keepPreviousData: true });
+  const yearData = useSWR<AccountYear>(me && !isBranch ? `/accounts/year?year=${year}` : null, fetcher, { keepPreviousData: true });
   const current = view === "year" ? yearData : monthData;
   const reload = () => { void monthData.mutate(); void yearData.mutate(); };
 
@@ -123,7 +123,7 @@ export default function AccountsPage() {
       {view === "day" && monthData.data && (
         <DayView day={day} month={monthData.data} year={yearData.data} onDay={setDay} onChanged={reload} />
       )}
-      {view === "month" && monthData.data && <MonthView data={monthData.data} onChanged={reload} />}
+      {view === "month" && monthData.data && <MonthView data={monthData.data} year={yearData.data} onChanged={reload} />}
       {view === "year" && yearData.data && (
         <YearView data={yearData.data} onChanged={reload} onOpenMonth={(m) => { setMonth(m); setView("month"); }} />
       )}

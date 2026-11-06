@@ -268,14 +268,14 @@ public final class AccountReport {
                 .sorted(Comparator.comparing(Category::amount).reversed()).toList();
     }
 
-    private static Income income(IncomeEntry e, Map<String, String> names) {
+    static Income income(IncomeEntry e, Map<String, String> names) {
         BigDecimal paid = nz(e.getPaid());
         return new Income(e.getId(), e.getEntryDate(), e.getCustomerName(), e.getMobile(), e.getDetails(), e.getReceivedBy(),
                 e.getAmount(), paid, dueOf(e.getAmount(), paid), e.getSource(), e.getMethod() == null ? "CASH" : e.getMethod().name(),
                 name(names, e.getCreatedBy()), e.getCreatedAt(), name(names, e.getUpdatedBy()), e.getUpdatedAt());
     }
 
-    private static Expense expense(ExpenseEntry e, Map<String, String> names) {
+    static Expense expense(ExpenseEntry e, Map<String, String> names) {
         return new Expense(e.getId(), e.getEntryDate(), e.getDescription(), e.getCategory().name(), e.getPaidBy(), e.getInvoiceNumber(),
                 e.getAmount(), e.getSource(), e.getMethod() == null ? "CASH" : e.getMethod().name(), name(names, e.getCreatedBy()),
                 e.getCreatedAt(), name(names, e.getUpdatedBy()), e.getUpdatedAt());

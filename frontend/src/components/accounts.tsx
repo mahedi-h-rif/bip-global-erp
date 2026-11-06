@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { Banknote, CircleDollarSign, Coins, CreditCard, Hourglass, Pencil, PiggyBank, Plus, Receipt, Trash2, Users, Wallet } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
-import type { AccountExpense, AccountIncome, AccountMonth, AccountYear, EditedBy, ExpenseCategory, PartnerRow, PartnerWithdrawal, PaymentMethod } from "@/lib/types";
+import { useId, useRef, useState, type FormEvent } from "react";
+import useSWR from "swr";
+import { Banknote, CircleDollarSign, Coins, CreditCard, Hourglass, Pencil, PiggyBank, Plus, Receipt, ScanLine, Trash2, Users, Wallet } from "lucide-react";
+import { api, ApiError, fetcher, uploadFile } from "@/lib/api";
+import type { AccountExpense, AccountIncome, AccountMonth, AccountPeople, AccountYear, EditedBy, ExpenseCategory, InvoiceScan, PartnerRow, PartnerWithdrawal, PaymentMethod } from "@/lib/types";
 import { date, dateTime, money, paymentMethodLabel } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, Select } from "@/components/ui";
 import { MonthlyChart } from "@/components/worker-charts";
@@ -165,10 +166,57 @@ export function WhoLine({ e }: { e: Partial<EditedBy> }) {
   );
 }
 
+/** A name field with a dropdown of names already used; typing a new one keeps it (it is saved on the entry). */
+function NameInput({ value, onChange, options, placeholder }: {
+  value: string; onChange: (e: { target: { value: string } }) => void; options?: string[]; placeholder?: string;
+}) {
+  const listId = useId();
+  return (
+    <>
+      <Input value={value} onChange={onChange} dir="auto" placeholder={placeholder} list={listId} autoComplete="off" />
+      <datalist id={listId}>{(options ?? []).map((o) => <option key={o} value={o} />)}</datalist>
+    </>
+  );
+}
+
+/** Optional: read an uploaded invoice (ZATCA QR first, then OCR) and hand the fields back to prefill the form. */
+function InvoiceScanButton({ onScan }: { onScan: (s: InvoiceScan) => void }) {
+  const t = useT();
+  const ref = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+  async function pick(file: File) {
+    setBusy(true);
+    setNote(null);
+    try {
+      const s = await uploadFile<InvoiceScan>("/accounts/scan", file);
+      const found = s.source !== "NONE" && (s.amount != null || !!s.date || !!s.invoiceNumber || !!s.vendor);
+      if (!found) { setNote({ tone: "bad", text: t("Could not read this invoice; please type the details.") }); return; }
+      onScan(s);
+      setNote({ tone: "ok", text: s.source === "QR" ? t("Read from the invoice QR code.") : t("Read from the invoice — please check the figures.") });
+    } catch {
+      setNote({ tone: "bad", text: t("Could not read this invoice; please type the details.") });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/*,application/pdf" className="hidden"
+             onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void pick(file); }} />
+      <Button type="button" variant="secondary" loading={busy} onClick={() => ref.current?.click()}>
+        <ScanLine className="size-4" aria-hidden />{t("Scan invoice")}
+      </Button>
+      {note && <span className={`text-xs ${note.tone === "ok" ? "text-ok" : "text-bad"}`}>{note.text}</span>}
+    </>
+  );
+}
+
 // --- income ---------------------------------------------------------------------------------------
 
 function IncomeForm({ initial, defaultDate, onDone, onCancel }: { initial?: AccountIncome; defaultDate: string; onDone: () => void; onCancel: () => void }) {
   const t = useT();
+  const { data: people } = useSWR<AccountPeople>("/accounts/people", fetcher);
   const [f, setF] = useState({
     date: initial?.date ?? defaultDate, customerName: initial?.customerName ?? "", mobile: initial?.mobile ?? "",
     details: initial?.details ?? "", receivedBy: initial?.receivedBy ?? "", amount: initial?.amount ?? "", paid: initial?.paid ?? "",
@@ -182,13 +230,20 @@ function IncomeForm({ initial, defaultDate, onDone, onCancel }: { initial?: Acco
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (
     <form onSubmit={submit} className="grid gap-3 border-b border-line bg-canvas/60 p-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-6">
+        <InvoiceScanButton onScan={(s) => setF((prev) => ({ ...prev,
+          date: s.date ?? prev.date,
+          amount: s.amount != null ? String(s.amount) : prev.amount,
+        }))} />
+        <span className="text-xs text-muted">{t("Optional — reads a ZATCA QR or the invoice text to fill the amount and date.")}</span>
+      </div>
       <Field label={t("Date")}><Input type="date" required value={f.date} onChange={set("date")} /></Field>
       <Field label={t("Customer name")} className="lg:col-span-2"><Input value={f.customerName} onChange={set("customerName")} dir="auto" /></Field>
       <Field label={t("Mobile")}><Input value={f.mobile} onChange={set("mobile")} inputMode="tel" dir="ltr" /></Field>
       <Field label={t("Total amount")}><Input type="number" min="0" step="0.01" required value={f.amount} onChange={set("amount")} className="text-end" /></Field>
       <Field label={t("Paid")}><Input type="number" min="0" step="0.01" value={f.paid} onChange={set("paid")} className="text-end" /></Field>
       <Field label={t("Payment method")}><MethodSelect value={f.method} onChange={set("method")} /></Field>
-      <Field label={t("Received by")} className="lg:col-span-2"><Input value={f.receivedBy} onChange={set("receivedBy")} dir="auto" placeholder={t("Who received the amount")} /></Field>
+      <Field label={t("Received by")} className="lg:col-span-2"><NameInput value={f.receivedBy} onChange={set("receivedBy")} options={people?.receivedBy} placeholder={t("Who received the amount")} /></Field>
       <Field label={t("Work / invoice details")} className="sm:col-span-2 lg:col-span-4"><Input value={f.details} onChange={set("details")} dir="auto" /></Field>
       <div className="flex items-end gap-2 lg:col-span-2">
         <Button type="submit" loading={busy}>{initial ? t("Save") : t("Add income")}</Button>
@@ -240,6 +295,7 @@ function IncomeRow({ e, onEdit, onChanged }: { e: AccountIncome; onEdit: () => v
 
 function ExpenseForm({ initial, defaultDate, onDone, onCancel }: { initial?: AccountExpense; defaultDate: string; onDone: () => void; onCancel: () => void }) {
   const t = useT();
+  const { data: people } = useSWR<AccountPeople>("/accounts/people", fetcher);
   const [f, setF] = useState({
     date: initial?.date ?? defaultDate, description: initial?.description ?? "",
     category: (initial?.category === "WORKERS" ? "OTHER" : initial?.category) ?? "", amount: initial?.amount ?? "",
@@ -254,6 +310,15 @@ function ExpenseForm({ initial, defaultDate, onDone, onCancel }: { initial?: Acc
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   return (
     <form onSubmit={submit} className="grid gap-3 border-b border-line bg-canvas/60 p-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-6">
+        <InvoiceScanButton onScan={(s) => setF((prev) => ({ ...prev,
+          date: s.date ?? prev.date,
+          amount: s.amount != null ? String(s.amount) : prev.amount,
+          description: prev.description || (s.vendor ?? prev.description),
+          invoiceNumber: prev.invoiceNumber || (s.invoiceNumber ?? prev.invoiceNumber),
+        }))} />
+        <span className="text-xs text-muted">{t("Optional — reads a ZATCA QR or the invoice text to fill the amount, date and invoice number.")}</span>
+      </div>
       <Field label={t("Date")}><Input type="date" required value={f.date} onChange={set("date")} /></Field>
       <Field label={t("Expense details / what was bought")} className="lg:col-span-3"><Input required value={f.description} onChange={set("description")} dir="auto" /></Field>
       <Field label={t("Category")}>
@@ -264,7 +329,7 @@ function ExpenseForm({ initial, defaultDate, onDone, onCancel }: { initial?: Acc
       </Field>
       <Field label={t("Amount")}><Input type="number" min="0" step="0.01" required value={f.amount} onChange={set("amount")} className="text-end" /></Field>
       <Field label={t("Payment method")}><MethodSelect value={f.method} onChange={set("method")} /></Field>
-      <Field label={t("Paid by")} className="lg:col-span-2"><Input value={f.paidBy} onChange={set("paidBy")} dir="auto" placeholder={t("Who made the payment")} /></Field>
+      <Field label={t("Paid by")} className="lg:col-span-2"><NameInput value={f.paidBy} onChange={set("paidBy")} options={people?.paidBy} placeholder={t("Who made the payment")} /></Field>
       <Field label={t("Invoice / Fatoora no.")} className="lg:col-span-2"><Input value={f.invoiceNumber} onChange={set("invoiceNumber")} dir="ltr" /></Field>
       <div className="flex items-end gap-2 lg:col-span-6">
         <Button type="submit" loading={busy}>{initial ? t("Save") : t("Add expense")}</Button>
@@ -334,7 +399,7 @@ function CategoryBars({ rows }: { rows: { category: ExpenseCategory | "WORKERS";
 }
 
 /** One month of the cash book: figures, income, expenses, customers and expense categories. */
-export function MonthView({ data, onChanged }: { data: AccountMonth; onChanged: () => void }) {
+export function MonthView({ data, year, onChanged }: { data: AccountMonth; year?: AccountYear; onChanged: () => void }) {
   const t = useT();
   const [editing, setEditing] = useState<string | null>(null);
   const first = `${data.year}-${String(data.month).padStart(2, "0")}-01`;
@@ -344,6 +409,8 @@ export function MonthView({ data, onChanged }: { data: AccountMonth; onChanged: 
   const tt = data.totals;
   const receivedSplit = methodSplit(data.income, (e) => e.paid);
   const expenseSplit = methodSplit(data.expenses.filter((e) => e.id != null), (e) => e.amount);
+  const partners = year?.partners ?? [];
+  const monthWithdrawals = partners.flatMap((p) => p.withdrawals).filter((w) => w.date.startsWith(first.slice(0, 7)));
 
   return (
     <>
@@ -432,6 +499,13 @@ export function MonthView({ data, onChanged }: { data: AccountMonth; onChanged: 
         </Card>
       </div>
 
+      {year && (
+        <div className="mt-6">
+          <WithdrawalsCard partners={partners} withdrawals={monthWithdrawals} defaultDate={defaultDate} onChanged={onChanged}
+                           subtitle={t("Money partners took out this month.")} />
+        </div>
+      )}
+
       {data.customers.length > 0 && (
         <Card className="mt-6">
           <CardHeader title={t("Customer-wise bill · paid · due")} />
@@ -476,10 +550,14 @@ export function MonthView({ data, onChanged }: { data: AccountMonth; onChanged: 
 // --- year and partners ----------------------------------------------------------------------------
 
 /** Adds a withdrawal for a partner, or changes one (amount, date, reference, approval, note). */
-function WithdrawalForm({ partnerId, initial, defaultDate, onDone, onCancel }: {
-  partnerId: number; initial?: PartnerWithdrawal; defaultDate: string; onDone: () => void; onCancel: () => void;
+function WithdrawalForm({ partnerId, partners, initial, defaultDate, onDone, onCancel }: {
+  partnerId?: number; partners?: { id: number; name: string }[]; initial?: PartnerWithdrawal; defaultDate: string;
+  onDone: () => void; onCancel: () => void;
 }) {
   const t = useT();
+  const pickPartner = partnerId == null && !initial && !!partners;
+  const [pid, setPid] = useState<string>(String(partnerId ?? initial?.partnerId ?? ""));
+  const [pickError, setPickError] = useState<string | null>(null);
   const [w, setW] = useState({
     date: initial?.date ?? defaultDate, amount: initial?.amount ?? "", reference: initial?.reference ?? "",
     approvedBy: initial?.approvedBy ?? "", notes: initial?.notes ?? "",
@@ -487,12 +565,23 @@ function WithdrawalForm({ partnerId, initial, defaultDate, onDone, onCancel }: {
   const { busy, error, run } = useAction(onDone);
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const body = { ...w, partnerId };
+    const chosen = partnerId ?? initial?.partnerId ?? (pid ? Number(pid) : null);
+    if (!chosen) { setPickError(t("Choose a partner")); return; }
+    setPickError(null);
+    const body = { ...w, partnerId: chosen };
     await run(() => initial ? api("PUT", `/accounts/withdrawals/${initial.id}`, body) : api("POST", "/accounts/withdrawals", body));
   }
   const set = (k: keyof typeof w) => (e: { target: { value: string } }) => setW({ ...w, [k]: e.target.value });
   return (
     <form onSubmit={submit} className="grid gap-3 border-t border-line bg-canvas/60 p-4 sm:grid-cols-4">
+      {pickPartner && (
+        <Field label={t("Partner")} className="sm:col-span-4">
+          <Select required value={pid} onChange={(e) => setPid(e.target.value)}>
+            <option value="">{t("Choose a partner")}</option>
+            {partners!.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </Field>
+      )}
       <Field label={t("Date")}><Input type="date" required value={w.date} onChange={set("date")} /></Field>
       <Field label={t("Amount")}><Input type="number" min="0" step="0.01" required autoFocus className="text-end" value={w.amount} onChange={set("amount")} /></Field>
       <Field label={t("Reference")}><Input value={w.reference} onChange={set("reference")} /></Field>
@@ -502,8 +591,60 @@ function WithdrawalForm({ partnerId, initial, defaultDate, onDone, onCancel }: {
         <Button type="submit" loading={busy}>{initial ? t("Save") : t("Add withdrawal")}</Button>
         <Button type="button" variant="secondary" onClick={onCancel}>{t("Cancel")}</Button>
       </div>
-      {error && <div className="sm:col-span-4"><Alert tone="bad">{error}</Alert></div>}
+      {(pickError || error) && <div className="sm:col-span-4"><Alert tone="bad">{pickError ?? error}</Alert></div>}
     </form>
+  );
+}
+
+/** Lists the withdrawals of one period (a day or a month) with add / edit / delete, choosing a partner on add. */
+function WithdrawalsCard({ partners, withdrawals, defaultDate, onChanged, subtitle }: {
+  partners: { id: number; name: string }[];
+  withdrawals: PartnerWithdrawal[];
+  defaultDate: string;
+  onChanged: () => void;
+  subtitle: string;
+}) {
+  const t = useT();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<number | null>(null);
+  const { busy, error, run } = useAction(onChanged);
+  const partnerName = new Map(partners.map((p) => [p.id, p.name]));
+  const done = () => { setEditing(null); onChanged(); };
+  return (
+    <Card>
+      <CardHeader title={t("Partner withdrawals")} subtitle={subtitle}
+                  action={partners.length > 0 && (
+                    <Button variant="secondary" onClick={() => { setEditing("new"); setConfirm(null); }}>
+                      <Plus className="size-4" aria-hidden />{t("Add withdrawal")}
+                    </Button>
+                  )} />
+      {editing === "new" && <WithdrawalForm partners={partners} defaultDate={defaultDate} onDone={done} onCancel={() => setEditing(null)} />}
+      {withdrawals.length === 0 && editing !== "new" ? (
+        <p className="py-6 text-center text-sm text-muted">{partners.length === 0 ? t("Add partners in the Year view first.") : t("None in this period")}</p>
+      ) : (
+        <ul className="divide-y divide-line text-sm">
+          {withdrawals.map((w) => editing === `w:${w.id}` ? (
+            <li key={w.id}><WithdrawalForm partnerId={w.partnerId} initial={w} defaultDate={w.date} onDone={done} onCancel={() => setEditing(null)} /></li>
+          ) : (
+            <li key={w.id} className="flex items-start justify-between gap-3 px-4 py-2.5">
+              <span>
+                <span className="font-medium" dir="auto">{partnerName.get(w.partnerId) ?? "—"}</span>
+                <span className="block text-xs text-muted">{date(w.date)}{(w.reference || w.notes) ? ` · ${[w.reference, w.notes].filter(Boolean).join(" · ")}` : ""}</span>
+                <WhoLine e={w} />
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="tabular font-medium">{money(w.amount)}</span>
+                <button className={small} onClick={() => setEditing(`w:${w.id}`)} aria-label={t("Edit")}><Pencil className="size-3.5" aria-hidden /></button>
+                {confirm === w.id
+                  ? <button className={`${small} border-bad/40 text-bad`} disabled={busy} onClick={() => run(() => api("DELETE", `/accounts/withdrawals/${w.id}`))}>{t("Confirm delete")}</button>
+                  : <button className={small} onClick={() => setConfirm(w.id)} aria-label={t("Delete")}><Trash2 className="size-3.5" aria-hidden /></button>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <div className="px-4 pb-3"><Alert tone="bad">{error}</Alert></div>}
+    </Card>
   );
 }
 
@@ -581,6 +722,9 @@ export function YearView({ data, onChanged, onOpenMonth }: { data: AccountYear; 
   const [name, setName] = useState("");
   const { busy, error, run } = useAction(onChanged);
   const tt = data.totals;
+  const today = new Date().toLocaleDateString("en-CA");
+  const withdrawalDate = today.startsWith(String(data.year)) ? today : `${data.year}-01-01`;
+  const allWithdrawals = data.partners.flatMap((p) => p.withdrawals).slice().sort((a, b) => a.date.localeCompare(b.date));
 
   return (
     <>
@@ -647,6 +791,11 @@ export function YearView({ data, onChanged, onOpenMonth }: { data: AccountYear; 
         </div>
       </Card>
 
+      <div className="mt-6">
+        <WithdrawalsCard partners={data.partners} withdrawals={allWithdrawals} defaultDate={withdrawalDate} onChanged={onChanged}
+                         subtitle={t("All partner withdrawals this year; add, edit or delete any of them.")} />
+      </div>
+
       <Card className="mt-6">
         <CardHeader title={t("Partners' withdrawal account")} subtitle={t("Money each partner took out, against what they may draw this year.")} />
         <div className="grid gap-4 p-4 lg:grid-cols-2">
@@ -678,8 +827,8 @@ export function DayView({ day, month, year, onDay, onChanged }: {
 
   const income = month.income.filter((e) => e.date === day);
   const expenses = month.expenses.filter((e) => e.id != null && e.date === day);
-  const partnerName = new Map((year?.partners ?? []).map((p) => [p.id, p.name]));
-  const drawn = (year?.partners ?? []).flatMap((p) => p.withdrawals).filter((w) => w.date === day);
+  const partners = year?.partners ?? [];
+  const drawn = partners.flatMap((p) => p.withdrawals).filter((w) => w.date === day);
 
   const billed = income.reduce((s, e) => s + num(e.amount), 0);
   const received = income.reduce((s, e) => s + num(e.paid), 0);
@@ -791,26 +940,15 @@ export function DayView({ day, month, year, onDay, onChanged }: {
             </div>
           )}
         </Card>
-        <Card>
-          <CardHeader title={t("Partner withdrawals")} subtitle={t("Add them from the Year view.")} />
-          {drawn.length === 0 ? <p className="py-6 text-center text-sm text-muted">{t("None on this day")}</p> : (
-            <ul className="divide-y divide-line text-sm">
-              {drawn.map((w) => (
-                <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <span>
-                    <span className="font-medium" dir="auto">{partnerName.get(w.partnerId) ?? "—"}</span>
-                    {(w.reference || w.notes) && <span className="block text-xs text-muted">{[w.reference, w.notes].filter(Boolean).join(" · ")}</span>}
-                  </span>
-                  <AmountCell value={w.amount} label={t("Amount")} className="font-medium"
-                              onSave={async (v) => {
-                                await api("PUT", `/accounts/withdrawals/${w.id}`, { partnerId: w.partnerId, date: w.date, reference: w.reference, approvedBy: w.approvedBy, notes: w.notes, amount: v });
-                                onChanged();
-                              }} />
-                </li>
-              ))}
-            </ul>
+        {year
+          ? <WithdrawalsCard partners={partners} withdrawals={drawn} defaultDate={day} onChanged={onChanged}
+                             subtitle={t("Money partners took out on this day.")} />
+          : (
+            <Card>
+              <CardHeader title={t("Partner withdrawals")} subtitle={t("Add them from the Year view.")} />
+              <p className="py-6 text-center text-sm text-muted">{t("None on this day")}</p>
+            </Card>
           )}
-        </Card>
       </div>
 
       <Card className="mt-6">
