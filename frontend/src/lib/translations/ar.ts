@@ -1221,4 +1221,12 @@ export const ar: Record<string, string> = {
   "fixed monthly salary": "راتب شهري ثابت",
   "paid per day worked": "يُدفع عن كل يوم عمل",
   "Developed by": "تطوير",
+  "Monthly workers total": "إجمالي العمال الشهريين",
+  "Daily-wage workers total": "إجمالي عمال اليومية",
+  "No monthly workers yet": "لا يوجد عمال شهريون بعد",
+  "No daily-wage workers yet": "لا يوجد عمال يومية بعد",
+  "Add one with the Add worker button above.": "أضف واحدًا بزر «إضافة عامل» بالأعلى.",
+  "Add one with the Add worker button, or import the company's Excel ledger.": "أضف واحدًا بزر «إضافة عامل»، أو استورد دفتر الشركة من إكسل.",
+  "Daily-wage worker register": "سجل عمال اليومية",
+  "Monthly worker register": "سجل العمال الشهريين",
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import useSWR from "swr";
 import {
   Banknote,
@@ -20,7 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { api, ApiError, download, fetcher, openFile, printFile, uploadFile } from "@/lib/api";
-import type { PaymentMethod, WorkerLedger, WorkerRow } from "@/lib/types";
+import type { PaymentMethod, WorkerLedger, WorkerRow, WorkerTotals } from "@/lib/types";
 import { money, paymentMethodLabel, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { BalanceBars, MonthlyChart } from "@/components/worker-charts";
@@ -64,11 +64,11 @@ function WorkerTypeBadge({ daily }: { daily: boolean }) {
 type Draft = { name: string; phone: string; iqamaNumber: string; nationality: string; notes: string; active: boolean; daily: boolean; dailyRate: string; days: string };
 const blankDraft: Draft = { name: "", phone: "", iqamaNumber: "", nationality: "", notes: "", active: true, daily: false, dailyRate: "", days: "" };
 
-function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone: () => void; onCancel: () => void }) {
+function WorkerForm({ initial, defaultDaily, onDone, onCancel }: { initial?: WorkerRow; defaultDaily?: boolean; onDone: () => void; onCancel: () => void }) {
   const t = useT();
   const [d, setD] = useState<Draft>(() => initial
     ? { name: initial.name, phone: initial.phone ?? "", iqamaNumber: initial.iqamaNumber ?? "", nationality: initial.nationality ?? "", notes: initial.notes ?? "", active: initial.active, daily: initial.daily, dailyRate: initial.dailyRate ?? "", days: initial.days ?? "" }
-    : blankDraft);
+    : { ...blankDraft, daily: defaultDaily ?? false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -281,7 +281,9 @@ export default function WorkersPage() {
   const thisYear = Number(todayKsa().slice(0, 4));
   const [year, setYear] = useState(thisYear);
   const [month, setMonth] = useState(Number(todayKsa().slice(5, 7)));
-  const [entryMode, setEntryMode] = useState<"day" | "month">("day");
+  // The page shows one worker kind at a time so monthly and daily-wage are never mixed; it opens on monthly.
+  const [workerType, setWorkerType] = useState<"monthly" | "daily">("monthly");
+  const [entryMode, setEntryMode] = useState<"day" | "month">("month");
   const [day, setDay] = useState(todayKsa());
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
@@ -319,12 +321,34 @@ export default function WorkersPage() {
     });
   }
 
+  // Everything on the page is for the chosen worker kind only. Totals, the chart and the balances are worked
+  // out from that kind's workers so the two are kept completely apart.
+  const isDaily = workerType === "daily";
+  const allWorkers = data?.workers ?? [];
+  const monthlyCount = allWorkers.filter((w) => !w.daily).length;
+  const dailyCount = allWorkers.filter((w) => w.daily).length;
+  const shown = allWorkers.filter((w) => (isDaily ? w.daily : !w.daily));
+  const agg = {
+    work: shown.reduce((s, w) => s + num(w.work), 0),
+    paid: shown.reduce((s, w) => s + num(w.paid), 0),
+    due: shown.reduce((s, w) => s + num(w.due), 0),
+    outstanding: shown.reduce((s, w) => s + Math.max(num(w.due), 0), 0),
+    advances: shown.reduce((s, w) => s + Math.max(-num(w.due), 0), 0),
+    active: shown.filter((w) => w.active).length,
+  };
+  const typeMonths: WorkerTotals[] = Array.from({ length: 12 }, (_, i) => {
+    const work = shown.reduce((s, w) => s + num(w.months[i]?.work), 0);
+    const paid = shown.reduce((s, w) => s + num(w.months[i]?.paid), 0);
+    return { work: String(work), paid: String(paid), due: String(work - paid) };
+  });
+  const monthTotal = typeMonths[month - 1];
+
   const stats = data && [
-    { label: t("Total work value"), value: money(data.total.work), icon: CircleDollarSign, hint: t("Value of work completed in {year}", { year: data.year }) },
-    { label: t("Total paid"), value: money(data.total.paid), icon: Banknote, tone: "text-ok", hint: t("Amount given to workers") },
-    { label: t("Outstanding to workers"), value: money(data.outstanding), icon: Hourglass, tone: Number(data.outstanding) > 0 ? "text-bad" : "", hint: t("Still to pay") },
-    { label: t("Paid in advance"), value: money(data.advances), icon: HandCoins, hint: t("Paid ahead of the work") },
-    { label: t("Workers"), value: data.workerCount, icon: Users, hint: t("{n} active", { n: data.activeCount }) },
+    { label: t("Total work value"), value: money(agg.work), icon: CircleDollarSign, hint: t("Value of work completed in {year}", { year: data.year }) },
+    { label: t("Total paid"), value: money(agg.paid), icon: Banknote, tone: "text-ok", hint: t("Amount given to workers") },
+    { label: t("Outstanding to workers"), value: money(agg.outstanding), icon: Hourglass, tone: agg.outstanding > 0 ? "text-bad" : "", hint: t("Still to pay") },
+    { label: t("Paid in advance"), value: money(agg.advances), icon: HandCoins, hint: t("Paid ahead of the work") },
+    { label: isDaily ? t("Daily-wage workers") : t("Monthly workers"), value: shown.length, icon: Users, hint: t("{n} active", { n: agg.active }) },
   ];
 
   return (
@@ -363,6 +387,26 @@ export default function WorkersPage() {
 
       {data && stats && (
         <>
+          {/* The one switch that keeps the two kinds apart: pick monthly or daily-wage, and the whole page follows. */}
+          <div className="mb-5 grid max-w-xl grid-cols-2 gap-2 rounded-xl border border-line bg-white p-1.5 shadow-sm" role="tablist" aria-label={t("Worker type")}>
+            {([
+              { key: "monthly" as const, label: t("Monthly workers"), icon: CalendarClock, count: monthlyCount, hint: t("fixed monthly salary") },
+              { key: "daily" as const, label: t("Daily-wage workers"), icon: CalendarDays, count: dailyCount, hint: t("paid per day worked") },
+            ]).map((o) => {
+              const on = workerType === o.key;
+              return (
+                <button key={o.key} role="tab" aria-selected={on} onClick={() => setWorkerType(o.key)}
+                        className={`flex items-center justify-center gap-2.5 rounded-lg px-4 py-3 transition ${on ? "bg-brand text-white shadow-sm" : "text-muted hover:bg-canvas hover:text-ink"}`}>
+                  <o.icon className="size-5 shrink-0" aria-hidden />
+                  <span className="text-start leading-tight">
+                    <span className="block text-sm font-semibold">{o.label}</span>
+                    <span className={`block text-[11px] ${on ? "text-white/80" : "text-muted"}`}>{o.count} · {o.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {stats.map((s) => (
               <div key={s.label} className="rounded-xl border border-line bg-white p-4 shadow-sm">
@@ -379,16 +423,19 @@ export default function WorkersPage() {
           <div className="mt-6 grid gap-6 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader title={t("Work value and paid by month")} subtitle={t("Hover a month for its figures")} />
-              <div className="p-4"><MonthlyChart months={data.months} /></div>
+              <div className="p-4"><MonthlyChart months={typeMonths} /></div>
             </Card>
             <Card>
               <CardHeader title={t("Balance by worker")} subtitle={t("Owed to the worker, largest first")} />
               <div className="max-h-80 overflow-y-auto p-4">
-                <BalanceBars rows={data.workers.map((w) => ({ name: w.name, due: num(w.due) }))} />
+                <BalanceBars rows={shown.map((w) => ({ name: w.name, due: num(w.due) }))} />
               </div>
             </Card>
           </div>
 
+          {isDaily ? (
+            <DailyAttendance workers={shown} onSaved={() => void mutate()} />
+          ) : (
           <Card className="mt-6">
             <CardHeader
               title={entryMode === "day" ? t("Entry by day") : t("Entry by month")}
@@ -431,10 +478,10 @@ export default function WorkersPage() {
               <DayWorkImport file={dayImport.file} preview={dayImport.preview} onCancel={() => setDayImport(null)}
                              onDone={(text) => { setDayImport(null); setNotice({ tone: "ok", text }); void mutate(); }} />
             )}
-            {data.workers.length === 0 ? (
-              <Empty title={t("No workers yet")}>{t("Add a worker, or import the company's Excel ledger.")}</Empty>
+            {shown.length === 0 ? (
+              <Empty title={t("No monthly workers yet")}>{t("Add one with the Add worker button, or import the company's Excel ledger.")}</Empty>
             ) : entryMode === "day" ? (
-              <WorkerDaily workers={data.workers} day={day} onDay={setDay} onSaved={() => void mutate()} />
+              <WorkerDaily workers={shown} day={day} onDay={setDay} onSaved={() => void mutate()} />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-sm">
@@ -450,18 +497,18 @@ export default function WorkersPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {data.workers.map((w) => (
+                    {shown.map((w) => (
                       <EntryRow key={`${w.id}-${year}-${month}`} w={w} year={year} month={month} onSaved={() => void mutate()} />
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-line bg-canvas/60 font-semibold">
                       <td />
-                      <td className="px-4 py-2.5">{t("Company total")} · {t(MONTHS[month - 1])}</td>
-                      <td className="tabular px-2 py-2.5">{money(data.months[month - 1].work)}</td>
-                      <td className="tabular px-2 py-2.5 text-ok">{money(data.months[month - 1].paid)}</td>
-                      <td className="px-4 py-2.5 text-end"><Balance value={num(data.months[month - 1].due)} strong /></td>
-                      <td className="px-4 py-2.5 text-end"><Balance value={num(data.total.due)} strong /></td>
+                      <td className="px-4 py-2.5">{t("Monthly workers total")} · {t(MONTHS[month - 1])}</td>
+                      <td className="tabular px-2 py-2.5">{money(monthTotal.work)}</td>
+                      <td className="tabular px-2 py-2.5 text-ok">{money(monthTotal.paid)}</td>
+                      <td className="px-4 py-2.5 text-end"><Balance value={num(monthTotal.due)} strong /></td>
+                      <td className="px-4 py-2.5 text-end"><Balance value={agg.due} strong /></td>
                       <td />
                     </tr>
                   </tfoot>
@@ -469,13 +516,17 @@ export default function WorkersPage() {
               </div>
             )}
           </Card>
-
-          {data.workers.some((w) => w.daily) && <DailyAttendance workers={data.workers} onSaved={() => void mutate()} />}
+          )}
 
           <Card className="mt-6">
-            <CardHeader title={t("Worker register")} subtitle={t("Year totals per worker; open a name for the month-by-month account.")} />
-            {editing === "new" && <WorkerForm onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />}
-            {data.workers.length === 0 ? null : (
+            <CardHeader
+              title={isDaily ? t("Daily-wage worker register") : t("Monthly worker register")}
+              subtitle={t("Year totals per worker; open a name for the month-by-month account.")}
+            />
+            {editing === "new" && <WorkerForm defaultDaily={isDaily} onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />}
+            {shown.length === 0 ? (
+              editing === "new" ? null : <Empty title={isDaily ? t("No daily-wage workers yet") : t("No monthly workers yet")}>{t("Add one with the Add worker button above.")}</Empty>
+            ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[820px] text-sm">
                   <thead>
@@ -491,39 +542,21 @@ export default function WorkersPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {(() => {
-                      const row = (w: WorkerRow) => editing === w.id ? (
-                        <tr key={w.id}><td colSpan={8} className="p-0">
-                          <WorkerForm initial={w} onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />
-                        </td></tr>
-                      ) : (
-                        <WorkerLine key={w.id} w={w} canDelete={canDelete} onEdit={() => setEditing(w.id)} onChanged={() => void mutate()} />
-                      );
-                      const daily = data.workers.filter((w) => w.daily);
-                      if (daily.length === 0) return data.workers.map(row);
-                      const groups = [
-                        { label: t("Monthly workers"), hint: t("fixed monthly salary"), rows: data.workers.filter((w) => !w.daily) },
-                        { label: t("Daily-wage workers"), hint: t("paid per day worked"), rows: daily },
-                      ].filter((g) => g.rows.length > 0);
-                      return groups.map((g) => (
-                        <Fragment key={g.label}>
-                          <tr className="bg-canvas/40">
-                            <td colSpan={8} className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                              {g.label} · {g.rows.length} <span className="font-normal normal-case text-muted/80">· {g.hint}</span>
-                            </td>
-                          </tr>
-                          {g.rows.map(row)}
-                        </Fragment>
-                      ));
-                    })()}
+                    {shown.map((w) => editing === w.id ? (
+                      <tr key={w.id}><td colSpan={8} className="p-0">
+                        <WorkerForm initial={w} onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />
+                      </td></tr>
+                    ) : (
+                      <WorkerLine key={w.id} w={w} canDelete={canDelete} onEdit={() => setEditing(w.id)} onChanged={() => void mutate()} />
+                    ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-line bg-canvas/60 font-semibold">
                       <td />
-                      <td className="px-4 py-2.5" colSpan={3}>{t("Company total")}</td>
-                      <td className="tabular px-4 py-2.5 text-end">{money(data.total.work)}</td>
-                      <td className="tabular px-4 py-2.5 text-end text-ok">{money(data.total.paid)}</td>
-                      <td className="px-4 py-2.5 text-end"><Balance value={num(data.total.due)} strong /></td>
+                      <td className="px-4 py-2.5" colSpan={3}>{isDaily ? t("Daily-wage workers total") : t("Monthly workers total")}</td>
+                      <td className="tabular px-4 py-2.5 text-end">{money(agg.work)}</td>
+                      <td className="tabular px-4 py-2.5 text-end text-ok">{money(agg.paid)}</td>
+                      <td className="px-4 py-2.5 text-end"><Balance value={agg.due} strong /></td>
                       <td />
                     </tr>
                   </tfoot>
@@ -535,7 +568,7 @@ export default function WorkersPage() {
             {t("Work value = value of work completed · Paid = amount given · Balance = work value minus paid; a figure in brackets was paid in advance.")}
           </p>
 
-          <WorkerLeaves year={year} workers={data.workers} />
+          <WorkerLeaves year={year} workers={shown} />
         </>
       )}
     </>
