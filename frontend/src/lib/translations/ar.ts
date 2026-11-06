@@ -1198,7 +1198,6 @@ export const ar: Record<string, string> = {
   "Half": "نصف",
   "Days present": "أيام الحضور",
   "{full} full + {half} half": "{full} كامل + {half} نصف",
-  "{n} days": "{n} يوم",
   "Earned": "المستحق",
   "at {rate}/day": "بواقع {rate}/يوم",
   "still to pay": "متبقٍّ للدفع",
