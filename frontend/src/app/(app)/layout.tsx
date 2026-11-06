@@ -33,6 +33,7 @@ import type { Me, Organization } from "@/lib/types";
 import { Alert, Button, Spinner } from "@/components/ui";
 import { LanguagePrompt, LanguageSwitcher } from "@/components/language";
 import { NotificationBell } from "@/components/notification-bell";
+import { OrgFavicon } from "@/components/favicon";
 import { WhatsAppBanner } from "@/components/whatsapp";
 import { VoiceAssistant } from "@/components/voice";
 import { useT } from "@/lib/i18n";
@@ -193,6 +194,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:flex" style={org?.brandColor ? ({ "--color-brand": org.brandColor } as React.CSSProperties) : undefined}>
+      <OrgFavicon org={org} />
       {/* Phones and tablets: a top bar with the company and quick tools; everything else is in the menu. */}
       <header inert={menuOpen} className="sticky top-0 z-30 flex h-14 items-center gap-1 bg-brand px-1.5 text-white shadow-sm lg:hidden">
         <button
