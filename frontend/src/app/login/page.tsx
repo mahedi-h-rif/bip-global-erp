@@ -6,6 +6,7 @@ import { Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import { LanguageSwitcher } from "@/components/language";
+import { SoudaCoreCredit } from "@/components/souda-credit";
 import { useT } from "@/lib/i18n";
 
 /** Tall enough to tap, and 16px text on phones so iOS doesn't zoom the page when a field is focused. */
@@ -101,6 +102,9 @@ export default function LoginPage() {
           </div>
         </div>
       </main>
+      <footer className="px-4 pb-6 pt-2">
+        <SoudaCoreCredit />
+      </footer>
     </div>
   );
 }

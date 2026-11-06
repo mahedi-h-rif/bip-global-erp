@@ -34,6 +34,7 @@ import { Alert, Button, Spinner } from "@/components/ui";
 import { LanguagePrompt, LanguageSwitcher } from "@/components/language";
 import { NotificationBell } from "@/components/notification-bell";
 import { OrgFavicon } from "@/components/favicon";
+import { SoudaCoreCredit } from "@/components/souda-credit";
 import { WhatsAppBanner } from "@/components/whatsapp";
 import { VoiceAssistant } from "@/components/voice";
 import { useT } from "@/lib/i18n";
@@ -301,6 +302,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <LogOut className="size-4 shrink-0 rtl:rotate-180" aria-hidden /> {t("Sign out")}
           </button>
+          <SoudaCoreCredit tone="dark" className="pt-1" />
         </div>
       </aside>
 

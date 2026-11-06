@@ -1220,4 +1220,5 @@ export const ar: Record<string, string> = {
   "Entry by month": "إدخال حسب الشهر",
   "fixed monthly salary": "راتب شهري ثابت",
   "paid per day worked": "يُدفع عن كل يوم عمل",
+  "Developed by": "تطوير",
 };
