@@ -4,6 +4,8 @@ import { Fragment, useRef, useState, type FormEvent } from "react";
 import useSWR from "swr";
 import {
   Banknote,
+  CalendarClock,
+  CalendarDays,
   ChevronDown,
   CircleDollarSign,
   FileDown,
@@ -41,6 +43,20 @@ function Balance({ value, strong }: { value: number; strong?: boolean }) {
     <span className={`tabular ${strong ? "font-semibold" : ""} ${tone(value)}`}>
       {value < 0 ? `(${money(-value)})` : money(value)}
       {value < 0 && <span className="ms-1 text-[10px] font-medium uppercase">{t("advance")}</span>}
+    </span>
+  );
+}
+
+/** The worker's pay type, shown the same way everywhere so monthly and daily-wage workers are never confused. */
+function WorkerTypeBadge({ daily }: { daily: boolean }) {
+  const t = useT();
+  return daily ? (
+    <span className="ms-2 inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-brand">
+      <CalendarDays className="size-3" aria-hidden />{t("Daily-wage")}
+    </span>
+  ) : (
+    <span className="ms-2 inline-flex items-center gap-1 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">
+      <CalendarClock className="size-3" aria-hidden />{t("Monthly")}
     </span>
   );
 }
@@ -90,14 +106,14 @@ function WorkerForm({ initial, onDone, onCancel }: { initial?: WorkerRow; onDone
           <option value="0">{t("Inactive")}</option>
         </Select>
       </Field>
-      <Field label={t("Worker type")}>
+      <Field label={t("Worker type")} hint={d.daily ? t("Paid per day worked; mark days in the attendance calendar") : t("Fixed monthly salary")}>
         <Select value={d.daily ? "daily" : "permanent"} onChange={(e) => setD({ ...d, daily: e.target.value === "daily" })}>
-          <option value="permanent">{t("Permanent")}</option>
-          <option value="daily">{t("Daily-wage")}</option>
+          <option value="permanent">{t("Monthly — fixed salary")}</option>
+          <option value="daily">{t("Daily-wage — paid per day")}</option>
         </Select>
       </Field>
       {d.daily && <>
-        <Field label={t("Days worked")}>
+        <Field label={t("Days worked")} hint={t("Or mark each day in the attendance calendar")}>
           <Input type="number" min="0" step="0.5" inputMode="decimal" className="text-end" placeholder="—" value={d.days} onChange={(e) => setD({ ...d, days: e.target.value })} />
         </Field>
         <Field label={t("Daily wage")}>
@@ -159,7 +175,7 @@ function EntryRow({ w, year, month, onSaved }: { w: WorkerRow; year: number; mon
   return (
     <tr className={w.active ? "" : "opacity-60"}>
       <td className="px-4 py-2 text-muted tabular">{w.no}</td>
-      <td className="px-4 py-2 font-medium">{w.name}{w.daily && <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Daily")}</span>}</td>
+      <td className="px-4 py-2 font-medium">{w.name}{w.daily && <WorkerTypeBadge daily />}</td>
       <td className="px-2 py-1.5">
         {w.daily ? (
           <span className="tabular inline-block w-28 text-end" title={t("Set on the worker (days × daily wage)")}>
@@ -214,9 +230,7 @@ function WorkerLine({ w, onEdit, onChanged, canDelete }: { w: WorkerRow; onEdit:
             <ChevronDown className={`size-3.5 text-muted transition-transform ${open ? "" : "-rotate-90 rtl:rotate-90"}`} aria-hidden />
             {w.name}
           </button>
-          {w.daily
-            ? <span className="ms-2 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-brand">{t("Daily")}</span>
-            : <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Monthly")}</span>}
+          <WorkerTypeBadge daily={w.daily} />
           {!w.active && <span className="ms-2 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">{t("Inactive")}</span>}
           {w.daily && w.dailyRate && (
             <p className="mt-0.5 text-[11px] text-muted">{w.days ? `${w.days} ${t("days")} × ${money(w.dailyRate)}` : `${money(w.dailyRate)} / ${t("day")}`}</p>
@@ -377,7 +391,7 @@ export default function WorkersPage() {
 
           <Card className="mt-6">
             <CardHeader
-              title={entryMode === "day" ? t("Daily entry") : t("Monthly entry")}
+              title={entryMode === "day" ? t("Entry by day") : t("Entry by month")}
               subtitle={entryMode === "day"
                 ? t("Type each worker's work value and amount paid for the day; it is added to that month's total. Each figure saves when you leave the field.")
                 : t("Type the work value and amount paid for each worker; each figure saves when you leave the field.")}
@@ -387,7 +401,7 @@ export default function WorkersPage() {
                     {(["day", "month"] as const).map((v) => (
                       <button key={v} role="tab" aria-selected={entryMode === v} onClick={() => setEntryMode(v)}
                               className={`rounded-md px-2.5 py-1 text-xs font-medium ${entryMode === v ? "bg-brand text-white" : "text-muted hover:text-ink"}`}>
-                        {v === "day" ? t("Daily") : t("Monthly")}
+                        {v === "day" ? t("By day") : t("By month")}
                       </button>
                     ))}
                   </div>
@@ -488,13 +502,15 @@ export default function WorkersPage() {
                       const daily = data.workers.filter((w) => w.daily);
                       if (daily.length === 0) return data.workers.map(row);
                       const groups = [
-                        { label: t("Monthly workers"), rows: data.workers.filter((w) => !w.daily) },
-                        { label: t("Daily-wage workers"), rows: daily },
+                        { label: t("Monthly workers"), hint: t("fixed monthly salary"), rows: data.workers.filter((w) => !w.daily) },
+                        { label: t("Daily-wage workers"), hint: t("paid per day worked"), rows: daily },
                       ].filter((g) => g.rows.length > 0);
                       return groups.map((g) => (
                         <Fragment key={g.label}>
                           <tr className="bg-canvas/40">
-                            <td colSpan={8} className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{g.label} · {g.rows.length}</td>
+                            <td colSpan={8} className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                              {g.label} · {g.rows.length} <span className="font-normal normal-case text-muted/80">· {g.hint}</span>
+                            </td>
                           </tr>
                           {g.rows.map(row)}
                         </Fragment>
