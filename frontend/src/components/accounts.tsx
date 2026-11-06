@@ -556,7 +556,7 @@ function WithdrawalForm({ partnerId, partners, initial, defaultDate, onDone, onC
 }) {
   const t = useT();
   const pickPartner = partnerId == null && !initial && !!partners;
-  const [pid, setPid] = useState<string>(String(partnerId ?? initial?.partnerId ?? ""));
+  const [pname, setPname] = useState("");
   const [pickError, setPickError] = useState<string | null>(null);
   const [w, setW] = useState({
     date: initial?.date ?? defaultDate, amount: initial?.amount ?? "", reference: initial?.reference ?? "",
@@ -565,8 +565,22 @@ function WithdrawalForm({ partnerId, partners, initial, defaultDate, onDone, onC
   const { busy, error, run } = useAction(onDone);
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const chosen = partnerId ?? initial?.partnerId ?? (pid ? Number(pid) : null);
-    if (!chosen) { setPickError(t("Choose a partner")); return; }
+    let chosen = partnerId ?? initial?.partnerId ?? null;
+    if (!chosen && pickPartner) {
+      const name = pname.trim();
+      if (!name) { setPickError(t("Choose a partner, or type a new name to add them")); return; }
+      const match = partners?.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+      if (match) {
+        chosen = match.id;
+      } else {
+        // A new name: add the partner first, then record the withdrawal against the new id.
+        try {
+          const created = await api("POST", "/accounts/partners", { name }) as { id: number };
+          chosen = created.id;
+        } catch (err) { setPickError(err instanceof ApiError ? err.message : t("Failed")); return; }
+      }
+    }
+    if (!chosen) { setPickError(t("Choose a partner, or type a new name to add them")); return; }
     setPickError(null);
     const body = { ...w, partnerId: chosen };
     await run(() => initial ? api("PUT", `/accounts/withdrawals/${initial.id}`, body) : api("POST", "/accounts/withdrawals", body));
@@ -575,11 +589,8 @@ function WithdrawalForm({ partnerId, partners, initial, defaultDate, onDone, onC
   return (
     <form onSubmit={submit} className="grid gap-3 border-t border-line bg-canvas/60 p-4 sm:grid-cols-4">
       {pickPartner && (
-        <Field label={t("Partner")} className="sm:col-span-4">
-          <Select required value={pid} onChange={(e) => setPid(e.target.value)}>
-            <option value="">{t("Choose a partner")}</option>
-            {partners!.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
+        <Field label={t("Partner")} className="sm:col-span-4" hint={t("Pick a partner, or type a new name to add them")}>
+          <NameInput value={pname} onChange={(e) => setPname(e.target.value)} options={partners?.map((p) => p.name)} placeholder={t("Partner name")} />
         </Field>
       )}
       <Field label={t("Date")}><Input type="date" required value={w.date} onChange={set("date")} /></Field>
@@ -613,14 +624,14 @@ function WithdrawalsCard({ partners, withdrawals, defaultDate, onChanged, subtit
   return (
     <Card>
       <CardHeader title={t("Partner withdrawals")} subtitle={subtitle}
-                  action={partners.length > 0 && (
+                  action={
                     <Button variant="secondary" onClick={() => { setEditing("new"); setConfirm(null); }}>
                       <Plus className="size-4" aria-hidden />{t("Add withdrawal")}
                     </Button>
-                  )} />
+                  } />
       {editing === "new" && <WithdrawalForm partners={partners} defaultDate={defaultDate} onDone={done} onCancel={() => setEditing(null)} />}
       {withdrawals.length === 0 && editing !== "new" ? (
-        <p className="py-6 text-center text-sm text-muted">{partners.length === 0 ? t("Add partners in the Year view first.") : t("None in this period")}</p>
+        <p className="py-6 text-center text-sm text-muted">{t("None in this period")}</p>
       ) : (
         <ul className="divide-y divide-line text-sm">
           {withdrawals.map((w) => editing === `w:${w.id}` ? (

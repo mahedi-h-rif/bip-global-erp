@@ -61,6 +61,9 @@ public class AccountController {
 
     public record PartnerRequest(@NotBlank String name, Boolean active) {}
 
+    /** The partner after an add: the caller uses the id to record a withdrawal right away. */
+    public record PartnerRef(Long id, String name) {}
+
     public record EntitlementRequest(@PositiveOrZero BigDecimal amount) {}
 
     public record WithdrawalRequest(@NotNull Long partnerId, @NotNull LocalDate date, @NotNull @PositiveOrZero BigDecimal amount,
@@ -326,12 +329,21 @@ public class AccountController {
     @PostMapping("/partners")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
-    void addPartner(@Valid @RequestBody PartnerRequest req) {
-        Partner p = new Partner();
-        p.setOrganizationId(CurrentUser.orgId());
-        p.setName(req.name().strip());
-        partners.save(p);
-        audit.record(p.getOrganizationId(), "PARTNER_ADDED", "partner", p.getId(), p.getName());
+    PartnerRef addPartner(@Valid @RequestBody PartnerRequest req) {
+        Long orgId = CurrentUser.orgId();
+        String name = req.name().strip();
+        // Reuse a partner of the same name rather than making a duplicate (lets withdrawals add a partner inline).
+        Partner p = partners.findByOrganizationIdOrderByIdAsc(orgId).stream()
+                .filter(x -> x.getName() != null && x.getName().equalsIgnoreCase(name))
+                .findFirst().orElse(null);
+        if (p == null) {
+            p = new Partner();
+            p.setOrganizationId(orgId);
+            p.setName(name);
+            partners.save(p);
+            audit.record(orgId, "PARTNER_ADDED", "partner", p.getId(), p.getName());
+        }
+        return new PartnerRef(p.getId(), p.getName());
     }
 
     @PreAuthorize("hasRole('ADMIN')")

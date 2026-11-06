@@ -1230,4 +1230,7 @@ export const ar: Record<string, string> = {
   "Daily-wage worker register": "سجل عمال اليومية",
   "Monthly worker register": "سجل العمال الشهريين",
   "Back to Accounts": "العودة إلى الحسابات",
+  "Pick a partner, or type a new name to add them": "اختر شريكًا، أو اكتب اسمًا جديدًا لإضافته",
+  "Choose a partner, or type a new name to add them": "اختر شريكًا، أو اكتب اسمًا جديدًا لإضافته",
+  "Partner name": "اسم الشريك",
 };
