@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { ArrowLeft, Coins, Receipt, UserRound } from "lucide-react";
 import { fetcher } from "@/lib/api";
@@ -26,6 +27,9 @@ export default function PersonsPage() {
 
   return (
     <>
+      <Link href="/accounts" className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink">
+        <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />{t("Back to Accounts")}
+      </Link>
       <PageHeader
         title={t("Income / expense by person")}
         subtitle={t("Who received money and who paid it, grouped by name (SAR)")}

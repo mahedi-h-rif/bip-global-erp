@@ -1229,4 +1229,5 @@ export const ar: Record<string, string> = {
   "Add one with the Add worker button, or import the company's Excel ledger.": "أضف واحدًا بزر «إضافة عامل»، أو استورد دفتر الشركة من إكسل.",
   "Daily-wage worker register": "سجل عمال اليومية",
   "Monthly worker register": "سجل العمال الشهريين",
+  "Back to Accounts": "العودة إلى الحسابات",
 };

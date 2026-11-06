@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
-import { FileDown, FileSpreadsheet, Printer, Upload } from "lucide-react";
+import { FileDown, FileSpreadsheet, Printer, Upload, UserRound } from "lucide-react";
 import { ApiError, download, fetcher, openFile, printFile, uploadFile } from "@/lib/api";
 import type { AccountImportResult, AccountMonth, AccountYear, Me } from "@/lib/types";
 import { todayKsa } from "@/lib/format";
@@ -106,6 +107,12 @@ export default function AccountsPage() {
             <Button variant="secondary" loading={busy === "print"} onClick={() => run("print", () => printFile(`${base}/pdf${q}`))}>
               <Printer className="size-4" aria-hidden />{t("Print")}
             </Button>
+            {!isBranch && (
+              <Link href="/accounts/persons"
+                    className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90">
+                <UserRound className="size-4" aria-hidden />{t("Income / expense by person")}
+              </Link>
+            )}
           </div>
         }
       />
