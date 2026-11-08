@@ -48,6 +48,11 @@ public class Organization {
     private String logo;
     /** Who signs agreements and quotations for the company. */
     private String signatoryName;
+    private String bankName;
+    private String bankAccountName;
+    private String bankAccountNo;
+    private String bankIban;
+    private String invoiceFooter;
     private String signatoryTitle;
     private String logoContentType;
     private String invoicePrefix = "INV";

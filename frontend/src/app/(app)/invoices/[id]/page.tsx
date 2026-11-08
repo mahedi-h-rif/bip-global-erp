@@ -13,6 +13,7 @@ import { PaymentsCard } from "@/components/payments-card";
 import { EditDeleteActions } from "@/components/invoice-actions";
 import { WhatsAppInvoiceButton } from "@/components/whatsapp";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { ReturnItems } from "@/components/return-items";
 import { useT } from "@/lib/i18n";
 
 type ZatcaMessage = { code?: string; message?: string; category?: string };
@@ -246,6 +247,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                   <Button variant="secondary" onClick={() => setNoteType("CREDIT_NOTE")}><FileMinus2 className="size-4" aria-hidden /> {t("Credit note")}</Button>
                   <Button variant="secondary" onClick={() => setNoteType("DEBIT_NOTE")}><FilePlus2 className="size-4" aria-hidden /> {t("Debit note")}</Button>
                   <ButtonLink variant="secondary" href={`/delivery-notes/new?invoiceId=${inv.id}`}><Truck className="size-4" aria-hidden /> {t("Delivery note")}</ButtonLink>
+                  <ReturnItems invoiceId={inv.id} />
                 </div>
               ) : (
                 <form

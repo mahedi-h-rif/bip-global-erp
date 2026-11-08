@@ -87,7 +87,7 @@ public class InvoicePdfService {
         }
     }
 
-    private static java.io.InputStream font(String name) {
+    static java.io.InputStream font(String name) {
         return InvoicePdfService.class.getResourceAsStream("/fonts/" + name);
     }
 
@@ -191,6 +191,9 @@ public class InvoicePdfService {
                 .append(row("Issue date", DATE.format(issued) + " " + TIME.format(issued), "تاريخ الإصدار"))
                 .append(row("Supply date", DATE.format(inv.getSupplyDate() == null ? issued.toLocalDate() : inv.getSupplyDate()),
                         "تاريخ التوريد"));
+        if (inv.getDueDate() != null) meta.append(row("Payment due date", DATE.format(inv.getDueDate()), "تاريخ الاستحقاق"));
+        if (inv.getCustomerRef() != null) meta.append(row("Customer PO no.", esc(inv.getCustomerRef()), "رقم أمر الشراء"));
+        if (inv.getSalesEmployee() != null) meta.append(row("Sales employee", esc(inv.getSalesEmployee()), "مندوب المبيعات"));
         if (inv.getType() != DocumentType.INVOICE) {
             meta.append(row("Original invoice", esc(inv.getBillingReference()), "الفاتورة الأصلية"))
                     .append(row("Reason", esc(inv.getReason()), "سبب الإصدار"));
@@ -284,6 +287,7 @@ public class InvoicePdfService {
                     </td>
                   </tr></table>
 
+                  %s
                   <div class="foot">UUID %s · ICV %d · Invoice hash %s</div>
                 </body></html>
                 """.formatted(
@@ -300,7 +304,32 @@ public class InvoicePdfService {
                 money(totals.taxExclusive()), cur,
                 money(totals.vatTotal()), cur,
                 money(totals.taxInclusive()), cur,
+                extras(inv, org, totals.taxInclusive()),
                 inv.getUuid(), inv.getIcv(), esc(inv.getInvoiceHash()));
+    }
+
+    /** Amount in words, references ("Based on …"), bank details and the company's footer line. */
+    private static String extras(Invoice inv, Organization org, java.math.BigDecimal total) {
+        StringBuilder b = new StringBuilder("<div style=\"margin-top:8px; font-size:8pt\">");
+        b.append("<div><b>Amount in words:</b> ").append(esc(com.fatoora.api.common.AmountInWords.english(total, inv.getCurrency())))
+                .append("</div><div style=\"direction:rtl; text-align:right\"><b>المبلغ كتابة:</b> ")
+                .append(esc(com.fatoora.api.common.AmountInWords.arabic(total))).append("</div>");
+        if (inv.getInternalNote() != null && inv.getInternalNote().startsWith("Based on"))
+            b.append("<div style=\"margin-top:4px\"><b>Remarks:</b> ").append(esc(inv.getInternalNote())).append("</div>");
+        if (org.getBankIban() != null && !org.getBankIban().isBlank()) {
+            b.append("<table style=\"margin-top:6px; width:60%; border:1px solid #d6dbe6\"><tr><td colspan=\"2\" style=\"padding:3px 6px; font-weight:700\">Bank details · البيانات البنكية</td></tr>");
+            for (String[] r : new String[][]{{"Account name · اسم الحساب", org.getBankAccountName()}, {"Bank · البنك", org.getBankName()},
+                    {"Account no. · رقم الحساب", org.getBankAccountNo()}, {"IBAN · الآيبان", org.getBankIban()}})
+                if (r[1] != null && !r[1].isBlank())
+                    b.append("<tr><td style=\"padding:2px 6px; color:#555\">").append(r[0]).append("</td><td style=\"padding:2px 6px\">")
+                            .append(esc(r[1])).append("</td></tr>");
+            b.append("</table>");
+        }
+        b.append("<div style=\"margin-top:6px; color:#555\">This is a system-generated e-invoice and does not need a signature · "
+                + "هذه فاتورة إلكترونية صادرة من النظام ولا تحتاج إلى توقيع</div>");
+        if (org.getInvoiceFooter() != null && !org.getInvoiceFooter().isBlank())
+            b.append("<div style=\"margin-top:4px; color:#555\">").append(esc(org.getInvoiceFooter())).append("</div>");
+        return b.append("</div>").toString();
     }
 
     /** The classic invoice header: logo, English name and contacts, then the registration name and city. */
@@ -393,7 +422,7 @@ public class InvoicePdfService {
         };
     }
 
-    private static String qrDataUri(String payload) {
+    static String qrDataUri(String payload) {
         try {
             // ISO 18004 quiet zone is 4 modules. Render at a whole number of pixels per module so the
             // viewer's downscaling doesn't blur the module edges (a 9-tag ZATCA payload is very dense).

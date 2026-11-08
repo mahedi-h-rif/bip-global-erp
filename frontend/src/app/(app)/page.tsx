@@ -1,5 +1,6 @@
 "use client";
 
+import { ErpDashboard } from "@/components/erp-dashboard";
 import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -47,6 +48,7 @@ export default function DashboardPage() {
         subtitle={isBranch ? t("Your invoices and your cash book: only what you created") : t("Sales, collections, dues and ZATCA submissions at a glance")}
         actions={<ButtonLink href="/invoices/new"><Plus className="size-4" aria-hidden /> {t("New invoice")}</ButtonLink>}
       />
+      {!isBranch && <ErpDashboard />}
 
       {expiring.map((c) => (
         <div key={c.egsUnitId} className="mb-4">

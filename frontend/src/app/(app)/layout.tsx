@@ -28,6 +28,9 @@ import {
   Users,
   Wallet,
   Boxes,
+  Store,
+  BarChart3,
+  CreditCard,
   IdCard,
   WalletCards as Wallet2,
   Truck,
@@ -49,6 +52,7 @@ import { SoudaCoreCredit } from "@/components/souda-credit";
 import { WhatsAppBanner } from "@/components/whatsapp";
 import { VoiceAssistant } from "@/components/voice";
 import { useT } from "@/lib/i18n";
+import { QuickSearch } from "@/components/erp-dashboard";
 
 type NavItem = { href: string; label: string; icon: typeof FileText; exact?: boolean };
 
@@ -65,6 +69,7 @@ const nav: NavItem[] = [
 ];
 
 const salesFlowNav: NavItem[] = [
+  { href: "/pos", label: "Point of sale", icon: Store },
   { href: "/sales-orders", label: "Sales orders", icon: ClipboardCheck },
   { href: "/delivery-notes", label: "Delivery notes", icon: Truck },
   { href: "/receipts", label: "Incoming payments", icon: HandCoins },
@@ -97,6 +102,7 @@ const workforceNav: NavItem[] = [
 
 // Company money, partners' withdrawals and the business audit: admins only.
 const financeNav: NavItem[] = [
+  { href: "/erp-reports", label: "Reports", icon: BarChart3 },
   { href: "/accounts", label: "Accounts", icon: Landmark, exact: true },
   { href: "/audit", label: "Business audit", icon: ClipboardCheck },
 ];
@@ -121,6 +127,8 @@ const branchNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { href: "/settings", label: "Company", icon: Settings, exact: true },
   { href: "/settings/users", label: "Users", icon: UserCog },
+  { href: "/settings/roles", label: "Departments & permissions", icon: ShieldCheck },
+  { href: "/settings/bank", label: "Bank details", icon: CreditCard },
   { href: "/settings/agreement", label: "Agreement template", icon: FileSignature },
   { href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/settings/audit", label: "Audit log", icon: ScrollText },
@@ -138,6 +146,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const t = useT();
   const { data: me, error: meError, mutate: retryMe } = useSWR<Me>("/auth/me", fetcher);
   const { data: org } = useSWR<Organization>(me ? "/organization" : null, fetcher);
+  // Department roles: hide the modules the user's role does not grant (the API enforces the same rules).
+  const { data: perms } = useSWR<{ restricted: boolean; permissions: Record<string, string[]> }>(me ? "/settings/my-permissions" : null, fetcher);
   const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -190,7 +200,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isBranch = me.role === "BRANCH";
   const active = (item: NavItem) =>
     item.href === "/" || item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
-  const link = (item: NavItem) => (
+  const moduleOf = (href: string): string | null => {
+    const p = href.split("/")[1];
+    if (["quotations", "sales-orders", "delivery-notes", "invoices", "receipts", "customers", "pos"].includes(p)) return "sales";
+    if (["suppliers", "purchase-orders", "goods-receipts", "supplier-invoices", "supplier-payments"].includes(p)) return "purchasing";
+    if (["products", "inventory"].includes(p)) return "inventory";
+    if (["hr", "payroll", "workers", "documents"].includes(p)) return "hr";
+    if (["accounts", "dues", "erp-reports", "audit"].includes(p)) return "finance";
+    return null;
+  };
+  const allowed = (item: NavItem) => {
+    const m = moduleOf(item.href);
+    return !perms?.restricted || m == null || (perms.permissions[m] ?? []).includes("view");
+  };
+  const link = (item: NavItem) => !allowed(item) ? null : (
     <Link
       key={item.href}
       href={item.href}
@@ -279,6 +302,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {!isBranch && <div className="-mx-1 mt-2 hidden items-center gap-1 lg:flex">{tools}</div>}
         </div>
 
+        {!isBranch && <QuickSearch />}
         <nav
           ref={navRef}
           aria-label={t("Main")}
