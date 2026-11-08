@@ -147,6 +147,13 @@ export interface Product {
   unitCode?: string;
   /** Total on hand across warehouses; null for services. */
   onHand?: number | null;
+  nameAr?: string | null;
+  category?: string | null;
+  brand?: string | null;
+  barcode?: string | null;
+  salesItem?: boolean;
+  purchaseItem?: boolean;
+  avgCost?: number | null;
 }
 
 export interface DueInvoice {
@@ -866,4 +873,184 @@ export interface Receipt {
   cancelledAt: string | null;
   cancelledBy: string | null;
   cancelReason: string | null;
+}
+
+// --- purchasing ---------------------------------------------------------------------------------
+
+export interface Supplier {
+  id?: number;
+  code?: string;
+  name: string;
+  nameAr?: string | null;
+  vatNumber?: string | null;
+  crNumber?: string | null;
+  address?: string | null;
+  city?: string | null;
+  country?: string;
+  phone?: string | null;
+  email?: string | null;
+  contactPerson?: string | null;
+  currency?: string;
+  paymentTermsDays?: number;
+  active?: boolean;
+  payable?: number;
+}
+
+export interface PoLine {
+  id?: number | null;
+  productId?: number | null;
+  name: string;
+  quantity: number | string;
+  unitCode?: string;
+  unitCost: number | string;
+  vatRate?: number | string;
+  received?: number;
+  remaining?: number;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  number: string;
+  supplierId: number;
+  supplierName: string;
+  supplierRef: string | null;
+  orderDate: string;
+  deliveryDate: string | null;
+  warehouseId: number | null;
+  warehouseName: string | null;
+  currency: string;
+  exchangeRate: number;
+  status: "PENDING" | "APPROVED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+  remarks: string | null;
+  totalExclVat: number;
+  vatTotal: number;
+  totalInclVat: number;
+  totalSar: number;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  lines: PoLine[];
+  attachments: { id: number; fileName: string; contentType: string; createdBy: string; createdAt: string }[];
+}
+
+export interface GrnLine {
+  id?: number | null;
+  purchaseOrderLineId?: number | null;
+  productId?: number | null;
+  name: string;
+  quantity: number | string;
+  unitCode?: string;
+  unitCost: number | string;
+  vatRate?: number | string;
+  landedUnitCost?: number | null;
+  invoiced?: number | null;
+  remaining?: number | null;
+}
+
+export interface GrnRequest {
+  purchaseOrderId?: number | null;
+  supplierId?: number | null;
+  supplierRef?: string | null;
+  receiptDate?: string | null;
+  warehouseId: number | null;
+  currency?: string;
+  exchangeRate?: number | string;
+  remarks?: string | null;
+  lines: GrnLine[];
+  costs: { description: string; amount: number | string }[];
+}
+
+export interface GoodsReceipt extends GrnRequest {
+  id: number;
+  number: string;
+  purchaseOrderNumber: string | null;
+  supplierName: string;
+  warehouseName: string;
+  status: "POSTED" | "CANCELLED";
+  landedCostTotal: number;
+  totalExclVat: number;
+  vatTotal: number;
+  totalInclVat: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface SupplierInvoiceLine {
+  goodsReceiptLineId?: number | null;
+  productId?: number | null;
+  name: string;
+  quantity: number | string;
+  unitCost: number | string;
+  vatRate?: number | string;
+}
+
+export interface SupplierInvoiceRequest {
+  supplierId: number | null;
+  supplierInvoiceNo?: string | null;
+  invoiceDate?: string | null;
+  dueDate?: string | null;
+  currency?: string;
+  exchangeRate?: number | string;
+  remarks?: string | null;
+  lines: SupplierInvoiceLine[];
+}
+
+export interface SupplierInvoice extends SupplierInvoiceRequest {
+  id: number;
+  number: string;
+  supplierName: string;
+  status: "OPEN" | "CANCELLED";
+  totalExclVat: number;
+  vatTotal: number;
+  totalInclVat: number;
+  totalSar: number;
+  vatSar: number;
+  paid: number;
+  due: number;
+  overdueDays: number;
+  createdBy: string;
+  createdAt: string;
+  goodsReceipts: string[];
+}
+
+export interface SupplierPayment {
+  id: number;
+  number: string;
+  supplierId: number;
+  supplierName: string;
+  paymentDate: string;
+  method: string;
+  reference: string | null;
+  amount: number;
+  note: string | null;
+  status: "POSTED" | "CANCELLED";
+  cancelReason: string | null;
+  createdBy: string;
+  createdAt: string;
+  allocations: { supplierInvoiceId: number; amount: number; invoiceNumber: string }[];
+}
+
+export interface AuditRow {
+  systemDate: string;
+  postingDate: string;
+  document: string;
+  kind: string;
+  warehouseName: string;
+  quantity: number;
+  cost: number | null;
+  transValue: number;
+  cumulativeQty: number;
+  cumulativeValue: number;
+}
+
+export interface InventoryAudit {
+  productId: number;
+  productName: string;
+  productNumber: string | null;
+  openingQty: number;
+  openingValue: number;
+  rows: AuditRow[];
+  closingQty: number;
+  closingValue: number;
 }

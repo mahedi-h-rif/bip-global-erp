@@ -29,6 +29,11 @@ import {
   Wallet,
   Boxes,
   Truck,
+  ShoppingCart,
+  PackageCheck,
+  Factory,
+  Receipt as ReceiptIcon,
+  Banknote,
   HandCoins,
   X,
 } from "lucide-react";
@@ -61,6 +66,14 @@ const salesFlowNav: NavItem[] = [
   { href: "/sales-orders", label: "Sales orders", icon: ClipboardCheck },
   { href: "/delivery-notes", label: "Delivery notes", icon: Truck },
   { href: "/receipts", label: "Incoming payments", icon: HandCoins },
+];
+
+const purchasingNav: NavItem[] = [
+  { href: "/suppliers", label: "Suppliers", icon: Factory },
+  { href: "/purchase-orders", label: "Purchase orders", icon: ShoppingCart },
+  { href: "/goods-receipts", label: "Goods receipts", icon: PackageCheck },
+  { href: "/supplier-invoices", label: "Supplier invoices", icon: ReceiptIcon },
+  { href: "/supplier-payments", label: "Supplier payments", icon: Banknote },
 ];
 
 const inventoryNav: NavItem[] = [
@@ -273,6 +286,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {nav.map(link)}
           {heading("Sales flow")}
           {salesFlowNav.map(link)}
+          {heading("Purchasing")}
+          {purchasingNav.map(link)}
           {heading("Inventory")}
           {inventoryNav.map(link)}
           {heading("Due")}

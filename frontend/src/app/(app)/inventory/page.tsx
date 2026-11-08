@@ -2,14 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import useSWR from "swr";
-import { ArrowLeftRight, Boxes, History, Pencil, Plus, Search, SlidersHorizontal, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
-import { api, ApiError, fetcher } from "@/lib/api";
-import type { Me, Product, StockMovement, StockRow, StockTransfer, Warehouse } from "@/lib/types";
+import { ArrowLeftRight, Boxes, FileSpreadsheet, History, Pencil, Plus, ScrollText, Search, SlidersHorizontal, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
+import { api, ApiError, download, fetcher } from "@/lib/api";
+import type { InventoryAudit, Me, Product, StockMovement, StockRow, StockTransfer, Warehouse } from "@/lib/types";
 import { dateTime, money, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
-type Tab = "stock" | "warehouses" | "transfers" | "movements";
+type Tab = "stock" | "warehouses" | "transfers" | "movements" | "audit";
 
 const qty = (v: number | string | null | undefined) => Number(v ?? 0).toLocaleString("en-US", { maximumFractionDigits: 3 });
 
@@ -25,6 +25,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { id: "warehouses", label: "Warehouses", icon: WarehouseIcon },
     { id: "transfers", label: "Transfers", icon: ArrowLeftRight },
     { id: "movements", label: "Movement history", icon: History },
+    { id: "audit", label: "Inventory audit", icon: ScrollText },
   ];
   return (
     <div className="mb-4 flex flex-wrap gap-2" role="tablist">
@@ -489,6 +490,72 @@ function MovementsTab({ warehouses, products }: { warehouses: Warehouse[]; produ
   );
 }
 
+function AuditTab({ warehouses, products }: { warehouses: Warehouse[]; products: Product[] }) {
+  const t = useT();
+  const stockItems = products.filter((p) => p.trackStock);
+  const [productId, setProductId] = useState(String(stockItems[0]?.id ?? ""));
+  const [warehouseId, setWarehouseId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const params = new URLSearchParams({ productId });
+  if (warehouseId) params.set("warehouseId", warehouseId);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const { data, error } = useSWR<InventoryAudit>(productId ? `/stock/audit?${params}` : null, fetcher, { keepPreviousData: true });
+  return (
+    <Card>
+      <div className="flex flex-wrap items-end gap-3 border-b border-line p-4">
+        <Field label={t("Item")}>
+          <Select className="w-72" value={productId} onChange={(e) => setProductId(e.target.value)}>
+            {stockItems.map((p) => <option key={p.id} value={p.id}>{p.number} · {p.name}</option>)}
+          </Select>
+        </Field>
+        <Field label={t("Warehouse")}>
+          <Select className="w-52" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+            <option value="">{t("All warehouses")}</option>
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+          </Select>
+        </Field>
+        <Field label={t("From")}><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <Field label={t("To")}><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <Button variant="secondary" disabled={!productId} onClick={() => download(`/stock/audit.xlsx?${params}`, "inventory-audit.xlsx")}><FileSpreadsheet className="size-4" aria-hidden /> Excel</Button>
+      </div>
+      {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
+      {!productId && <Empty title={t("No stock items")} />}
+      {data && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-line text-xs text-muted">
+              <th className="px-3 py-2.5 text-start font-medium">{t("Posting date")}</th><th className="px-3 py-2.5 text-start font-medium">{t("Document")}</th>
+              <th className="px-3 py-2.5 text-start font-medium">{t("Warehouse")}</th><th className="px-3 py-2.5 text-end font-medium">{t("Quantity")}</th>
+              <th className="px-3 py-2.5 text-end font-medium">{t("Cost")}</th><th className="px-3 py-2.5 text-end font-medium">{t("Trans. value")}</th>
+              <th className="px-3 py-2.5 text-end font-medium">{t("Cumulative qty")}</th><th className="px-3 py-2.5 text-end font-medium">{t("Cumulative value")}</th>
+            </tr></thead>
+            <tbody className="divide-y divide-line">
+              <tr className="bg-slate-50 text-muted"><td className="px-3 py-2" colSpan={6}>{t("Opening balance")}</td>
+                <td className="tabular px-3 py-2 text-end">{qty(data.openingQty)}</td><td className="tabular px-3 py-2 text-end">{money(data.openingValue)}</td></tr>
+              {data.rows.map((r, i) => (
+                <tr key={i}>
+                  <td className="tabular px-3 py-2">{r.postingDate}</td>
+                  <td className="px-3 py-2"><span className="tabular font-medium">{r.document}</span> <span className="text-xs text-muted">{t(kindLabel[r.kind] ?? r.kind)}</span></td>
+                  <td className="px-3 py-2">{r.warehouseName}</td>
+                  <td className={`tabular px-3 py-2 text-end ${Number(r.quantity) < 0 ? "text-bad" : "text-ok"}`}>{qty(r.quantity)}</td>
+                  <td className="tabular px-3 py-2 text-end">{r.cost == null ? "—" : Number(r.cost).toFixed(4)}</td>
+                  <td className="tabular px-3 py-2 text-end">{money(r.transValue)}</td>
+                  <td className="tabular px-3 py-2 text-end">{qty(r.cumulativeQty)}</td>
+                  <td className="tabular px-3 py-2 text-end">{money(r.cumulativeValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr className="border-t border-line font-semibold"><td colSpan={6} className="px-3 py-2 text-end">{t("Closing balance")}</td>
+              <td className="tabular px-3 py-2 text-end">{qty(data.closingQty)}</td><td className="tabular px-3 py-2 text-end">{money(data.closingValue)}</td></tr></tfoot>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function InventoryPage() {
   const t = useT();
   const [tab, setTab] = useState<Tab>("stock");
@@ -509,6 +576,8 @@ export default function InventoryPage() {
         <WarehousesTab warehouses={warehouses} canWrite={canWrite} onChange={() => mutateWh()} />
       ) : tab === "transfers" ? (
         <TransfersTab warehouses={warehouses} products={products} canWrite={canWrite} />
+      ) : tab === "audit" ? (
+        <AuditTab warehouses={warehouses} products={products} />
       ) : (
         <MovementsTab warehouses={warehouses} products={products} />
       )}

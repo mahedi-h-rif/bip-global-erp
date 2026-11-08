@@ -56,6 +56,16 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
             <Input required type="number" min="0" step="any" value={p.unitPrice} onChange={(e) => setP({ ...p, unitPrice: e.target.value })} />
           </Field>
         </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Field label={t("Arabic name")} optional><Input dir="rtl" value={p.nameAr ?? ""} onChange={(e) => setP({ ...p, nameAr: e.target.value })} /></Field>
+          <Field label={t("Category")} optional><Input dir="auto" value={p.category ?? ""} onChange={(e) => setP({ ...p, category: e.target.value })} /></Field>
+          <Field label={t("Brand")} optional><Input dir="auto" value={p.brand ?? ""} onChange={(e) => setP({ ...p, brand: e.target.value })} /></Field>
+          <Field label={t("Barcode")} optional><Input dir="ltr" value={p.barcode ?? ""} onChange={(e) => setP({ ...p, barcode: e.target.value })} /></Field>
+        </div>
+        <div className="flex flex-wrap gap-6 text-sm">
+          <label className="inline-flex items-center gap-2"><input type="checkbox" checked={p.salesItem !== false} onChange={(e) => setP({ ...p, salesItem: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />{t("Sales item")}</label>
+          <label className="inline-flex items-center gap-2"><input type="checkbox" checked={p.purchaseItem !== false} onChange={(e) => setP({ ...p, purchaseItem: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />{t("Purchase item")}</label>
+        </div>
         <label className="inline-flex items-center gap-2 text-sm">
           <input type="checkbox" checked={!!p.trackStock} onChange={(e) => setP({ ...p, trackStock: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />
           {t("Track stock (goods kept in warehouses). Leave off for services.")}
@@ -162,6 +172,7 @@ export default function ProductsPage() {
                     <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted">{p.number ?? "—"}</td>
                     <td className="px-4 py-3 font-medium" dir="auto">
                       {p.name}
+                      {(p.nameAr || p.brand || p.barcode) && <span className="block text-xs font-normal text-muted">{[p.nameAr, p.brand, p.category, p.barcode].filter(Boolean).join(" · ")}</span>}
                       {!p.active && <span className="ms-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{t("Deactivated")}</span>}
                     </td>
                     <td className="tabular px-4 py-3 text-end">{money(p.unitPrice)}</td>

@@ -17,9 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -166,18 +164,21 @@ public class PurchaseController {
         return po(orgId, id);
     }
 
-    @PostMapping(value = "/purchase-orders/{id}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    /** Raw upload (the portal's uploadFile convention): body = file bytes, {@code name} = original file name. */
+    @PutMapping("/purchase-orders/{id}/attachments")
     @PreAuthorize(WRITE)
     @Transactional
-    PoDto attach(@PathVariable Long id, @RequestParam("file") MultipartFile file) throws IOException {
+    PoDto attach(@PathVariable Long id, @RequestParam String name, @RequestBody byte[] data,
+                 @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType) {
         Long orgId = CurrentUser.orgId();
         PoDto d = po(orgId, id);
-        if (file.isEmpty() || file.getSize() > 10 * 1024 * 1024)
+        if (data.length == 0 || data.length > 10 * 1024 * 1024)
             throw ApiException.badRequest("file_size", "Attach a file of at most 10 MB");
+        String type = contentType == null || contentType.isBlank() ? MediaType.APPLICATION_OCTET_STREAM_VALUE : contentType;
+        String file = name.isBlank() ? "attachment" : name.length() > 255 ? name.substring(0, 255) : name;
         jdbc.update("INSERT INTO purchase_attachment (purchase_order_id, file_name, content_type, data, created_by) VALUES (?, ?, ?, ?, ?)",
-                id, Objects.requireNonNullElse(file.getOriginalFilename(), "attachment"),
-                Objects.requireNonNullElse(file.getContentType(), MediaType.APPLICATION_OCTET_STREAM_VALUE), file.getBytes(), CurrentUser.get().email());
-        audit.record(orgId, "PURCHASE_ATTACHMENT_ADDED", "purchase_order", id, d.number() + " " + file.getOriginalFilename());
+                id, file, type, data, CurrentUser.get().email());
+        audit.record(orgId, "PURCHASE_ATTACHMENT_ADDED", "purchase_order", id, d.number() + " " + file);
         return po(orgId, id);
     }
 
