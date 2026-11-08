@@ -2,32 +2,36 @@
 
 import Link from "next/link";
 import { use, useState } from "react";
-import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { Trash2 } from "lucide-react";
+import { XCircle } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Receipt } from "@/lib/types";
-import { date, money, paymentMethodLabel } from "@/lib/format";
-import { Alert, Button, Card, PageHeader, Spinner } from "@/components/ui";
+import { date, dateTime, money, paymentMethodLabel } from "@/lib/format";
+import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner } from "@/components/ui";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { useT } from "@/lib/i18n";
 
 export default function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const t = useT();
-  const router = useRouter();
-  const { data: r, error } = useSWR<Receipt>(`/receipts/${id}`, fetcher);
+  const { data: r, error, mutate } = useSWR<Receipt>(`/receipts/${id}`, fetcher);
   const [problem, setProblem] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
   if (error) return <Alert tone="bad">{error.message}</Alert>;
   if (!r) return <Spinner />;
 
-  async function remove() {
-    if (!window.confirm(t("Delete payment {number}? Its amounts are taken off the invoices again.", { number: r!.number }))) return;
+  async function cancel() {
+    setBusy(true);
+    setProblem(null);
     try {
-      await api("DELETE", `/receipts/${r!.id}`);
-      router.push("/receipts");
+      await mutate(await api<Receipt>("POST", `/receipts/${r!.id}/cancel`, { reason }), { revalidate: false });
+      setCancelling(false);
     } catch (e) {
-      setProblem(e instanceof ApiError ? e.message : t("Could not reach the server"));
+      setProblem(e instanceof ApiError ? (e.fields ? Object.values(e.fields).join(", ") : e.message) : t("Could not reach the server"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -36,9 +40,23 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
       <PageHeader
         title={t("Incoming payment {number}", { number: r.number })}
         subtitle={<span dir="auto">{r.customerName}</span>}
-        actions={<span className="flex gap-2"><RelationshipMapButton type="RECEIPT" id={r.id} /><Button variant="ghost" onClick={remove}><Trash2 className="size-4" aria-hidden /> {t("Delete")}</Button></span>}
+        actions={<span className="flex gap-2"><RelationshipMapButton type="RECEIPT" id={r.id} />
+          {r.status === "POSTED" && !cancelling && <Button variant="ghost" onClick={() => setCancelling(true)}><XCircle className="size-4" aria-hidden /> {t("Cancel payment")}</Button>}</span>}
       />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}
+      {r.status === "CANCELLED" && (
+        <div className="mb-4"><Alert tone="warn" title={t("Cancelled")}>{t("Cancelled by {by} on {at}: {reason}. Its amounts were taken off the invoices; post the payment again if needed.", { by: r.cancelledBy ?? "", at: dateTime(r.cancelledAt), reason: r.cancelReason ?? "" })}</Alert></div>
+      )}
+      {cancelling && (
+        <Card className="mb-4">
+          <CardHeader title={t("Cancel payment {number}", { number: r.number })} subtitle={t("The payment stays on record, marked cancelled. Its amounts come off the invoices, which become due again.")} />
+          <form className="flex flex-wrap items-end gap-3 p-5" onSubmit={(e) => { e.preventDefault(); void cancel(); }}>
+            <Field label={t("Reason")} className="min-w-72 flex-1"><Input required value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("e.g. posted with the wrong date")} /></Field>
+            <Button type="submit" variant="danger" loading={busy}>{t("Cancel payment")}</Button>
+            <Button type="button" variant="ghost" onClick={() => setCancelling(false)}>{t("Keep it")}</Button>
+          </form>
+        </Card>
+      )}
       <Card>
         <dl className="grid gap-x-6 gap-y-3 p-5 text-sm md:grid-cols-4">
           <div><dt className="text-xs text-muted">{t("Date")}</dt><dd>{date(r.receiptDate)}</dd></div>

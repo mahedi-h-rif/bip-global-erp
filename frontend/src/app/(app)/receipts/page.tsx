@@ -38,7 +38,7 @@ export default function ReceiptsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {data.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50">
+                  <tr key={r.id} className={`hover:bg-slate-50 ${r.status === "CANCELLED" ? "text-muted line-through" : ""}`}>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/receipts/${r.id}`}>{r.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(r.receiptDate)}</td>
                     <td className="px-4 py-3" dir="auto">{r.customerName}</td>

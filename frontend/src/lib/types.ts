@@ -862,4 +862,8 @@ export interface Receipt {
   createdBy: string;
   createdAt: string;
   allocations: { invoiceId: number; amount: number; invoiceNumber: string }[];
+  status: "POSTED" | "CANCELLED";
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
 }

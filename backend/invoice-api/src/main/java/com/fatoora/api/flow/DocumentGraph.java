@@ -89,8 +89,17 @@ public class DocumentGraph {
                 ids("SELECT id FROM invoice WHERE original_invoice_id = ?", id).forEach(x -> out.add(e(Type.INVOICE, id, Type.INVOICE, x)));
                 ids("SELECT original_invoice_id FROM invoice WHERE id = ? AND original_invoice_id IS NOT NULL", id).forEach(x -> out.add(e(Type.INVOICE, x, Type.INVOICE, id)));
                 ids("SELECT DISTINCT receipt_id FROM invoice_payment WHERE invoice_id = ? AND receipt_id IS NOT NULL", id).forEach(x -> out.add(e(Type.INVOICE, id, Type.RECEIPT, x)));
+                // Cancelled receipts stay on the map, linked through the allocations they had.
+                jdbc.queryForList("SELECT id FROM receipt WHERE status = 'CANCELLED' AND (';' || cancelled_allocations) LIKE ?",
+                        Long.class, "%;" + id + ":%").forEach(x -> out.add(e(Type.INVOICE, id, Type.RECEIPT, x)));
             }
-            case RECEIPT -> ids("SELECT DISTINCT invoice_id FROM invoice_payment WHERE receipt_id = ?", id).forEach(x -> out.add(e(Type.INVOICE, x, Type.RECEIPT, id)));
+            case RECEIPT -> {
+                ids("SELECT DISTINCT invoice_id FROM invoice_payment WHERE receipt_id = ?", id).forEach(x -> out.add(e(Type.INVOICE, x, Type.RECEIPT, id)));
+                String snap = jdbc.queryForList("SELECT cancelled_allocations FROM receipt WHERE id = ?", String.class, id).stream()
+                        .filter(Objects::nonNull).findFirst().orElse("");
+                for (String part : snap.split(";"))
+                    if (!part.isBlank()) out.add(e(Type.INVOICE, Long.parseLong(part.split(":")[0]), Type.RECEIPT, id));
+            }
             default -> out.addAll(purchaseNeighbours(t, id));
         }
         jdbc.query("SELECT from_type, from_id, to_type, to_id FROM doc_link WHERE organization_id = ? AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))",
@@ -151,7 +160,7 @@ public class DocumentGraph {
                     FROM invoice i LEFT JOIN customer c ON c.id = i.customer_id WHERE i.id = ? AND i.organization_id = ?""";
             case RECEIPT -> """
                     SELECT r.number, r.receipt_date AS d, COALESCE(c.name_en, c.name_ar) AS party, r.reference AS ref,
-                           r.amount AS total, r.method AS status, FALSE AS open
+                           r.amount AS total, CASE WHEN r.status = 'CANCELLED' THEN 'CANCELLED' ELSE r.method END AS status, FALSE AS open
                     FROM receipt r JOIN customer c ON c.id = r.customer_id WHERE r.id = ? AND r.organization_id = ?""";
             default -> purchaseNodeSql(t);
         };

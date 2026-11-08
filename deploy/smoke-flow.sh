@@ -42,7 +42,7 @@ echo "$SOJ" | j 'd["status"]' | grep -q OPEN && ok "sales order $SON OPEN" || ba
 echo "$SOJ" | j 'd["remarks"]' | grep -q "Based on Quotation" && ok "order remarks 'Based on Quotation'" || bad "order remarks"
 call GET "/api/v1/quotations/$Q" | j 'd["status"]' | grep -q ACCEPTED && ok "quotation ACCEPTED" || bad "quotation status"
 OVER=$(echo "$PRE" | jx "pass" | { read -r b; call POST /api/v1/sales-orders "$b"; })
-echo "$OVER" | grep -q over_order && ok "second order beyond quoted qty refused" || bad "over-order: $OVER"
+echo "$OVER" | grep -q quotation_ordered && ok "second order from the same quotation refused" || bad "over-order: $OVER"
 
 # --- Partial deliveries ---------------------------------------------------------------------------
 D1=$(call GET "/api/v1/delivery-notes/from-sales-order/$SO" | jx 'd["lines"][0]["quantity"]=4; d["driverName"]="Ali"; d["vehicleNo"]="ABC 1234"' | { read -r b; call POST /api/v1/delivery-notes "$b"; } | j 'd["id"]') && ok "delivery 1 (4 of 10 + transport)"
@@ -86,6 +86,13 @@ if [ "${ISSUE:-0}" = 1 ]; then
   call GET "/api/v1/invoices/$INV" | j 'float(d["dueAmount"])' | grep -q '^415.0$' && ok "invoice 1 due 415" || bad "inv1 due"
   tooMuch=$(call POST /api/v1/receipts "{\"customerId\":$C,\"method\":\"CASH\",\"allocations\":[{\"invoiceId\":$INV,\"amount\":999}]}")
   echo "$tooMuch" | grep -q "exceed" && ok "receipt above due refused" || bad "over-receipt: $tooMuch"
+  RCID=$(echo "$RC" | j 'd["id"]')
+  cx=$(call POST "/api/v1/receipts/$RCID/cancel" '{"reason":"Posted with the wrong date"}')
+  echo "$cx" | j 'd["status"]' | grep -q CANCELLED && ok "receipt cancelled (kept on record)" || bad "cancel receipt: $cx"
+  echo "$cx" | j 'len(d["allocations"])' | grep -q 2 && ok "cancelled receipt keeps its 2 allocations" || bad "snapshot"
+  call GET "/api/v1/invoices/$INV" | j 'float(d["dueAmount"])' | grep -q '^2415.0$' && ok "invoice 1 due again 2415 after cancel" || bad "due after cancel"
+  RC2=$(call POST /api/v1/receipts "{\"customerId\":$C,\"method\":\"BANK_TRANSFER\",\"receiptDate\":\"$(date +%F)\",\"allocations\":[{\"invoiceId\":$INV,\"amount\":2000},{\"invoiceId\":$INV2,\"amount\":115}]}")
+  echo "$RC2" | j 'd["status"]' | grep -q POSTED && ok "payment reposted $(echo "$RC2" | j 'd["number"]')" || bad "repost $RC2"
 fi
 
 # --- Relationship map -----------------------------------------------------------------------------

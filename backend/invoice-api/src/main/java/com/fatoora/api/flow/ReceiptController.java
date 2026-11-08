@@ -42,7 +42,9 @@ public class ReceiptController {
 
     public record Dto(Long id, String number, Long customerId, String customerName, LocalDate receiptDate, String method,
                       String reference, BigDecimal amount, String note, String createdBy, Instant createdAt,
-                      List<Allocation> allocations) {}
+                      List<Allocation> allocations, String status, Instant cancelledAt, String cancelledBy, String cancelReason) {}
+
+    public record CancelRequest(@NotBlank @Size(max = 500) String reason) {}
 
     /** An issued invoice of the customer that still has something to pay. */
     public record OpenInvoice(Long invoiceId, String number, LocalDate issueDate, LocalDate dueDate, String customerRef,
@@ -136,18 +138,29 @@ public class ReceiptController {
         return dto(orgId, id);
     }
 
-    /** Removes the receipt and every payment it allocated. */
-    @DeleteMapping("/{id}")
+    /**
+     * Cancels a posted receipt: its payments come off the invoices (so they are due again and the payment can be
+     * reposted correctly), while the receipt itself stays on record, marked cancelled, with what it had allocated.
+     */
+    @PostMapping("/{id}/cancel")
     @PreAuthorize(WRITE)
     @Transactional
-    void delete(@PathVariable Long id) {
-        Dto d = dto(CurrentUser.orgId(), id);
-        jdbc.update("DELETE FROM receipt WHERE id = ?", id);
-        audit.record(CurrentUser.orgId(), "RECEIPT_DELETED", "receipt", id, d.number() + " " + d.amount());
+    Dto cancel(@PathVariable Long id, @Valid @RequestBody CancelRequest req) {
+        Long orgId = CurrentUser.orgId();
+        Dto d = dto(orgId, id);
+        if ("CANCELLED".equals(d.status())) return d;
+        String snapshot = String.join(";", d.allocations().stream()
+                .map(a -> a.invoiceId() + ":" + a.amount().toPlainString() + ":" + a.invoiceNumber()).toList());
+        jdbc.update("DELETE FROM invoice_payment WHERE receipt_id = ?", id);
+        jdbc.update("""
+                UPDATE receipt SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = ?, cancel_reason = ?,
+                  cancelled_allocations = ? WHERE id = ?""", CurrentUser.get().email(), req.reason().trim(), snapshot, id);
+        audit.record(orgId, "RECEIPT_CANCELLED", "receipt", id, d.number() + " " + d.amount() + " SAR: " + req.reason().trim());
+        return dto(orgId, id);
     }
 
     private Dto dto(Long orgId, Long id) {
-        List<Allocation> alloc = jdbc.query("""
+        List<Allocation> live = jdbc.query("""
                 SELECT p.invoice_id, p.amount, i.number FROM invoice_payment p JOIN invoice i ON i.id = p.invoice_id
                 WHERE p.receipt_id = ? ORDER BY p.id""", (rs, i) -> new Allocation(rs.getLong(1), rs.getBigDecimal(2), rs.getString(3)), id);
         return jdbc.query("""
@@ -156,8 +169,22 @@ public class ReceiptController {
                 (rs, i) -> new Dto(rs.getLong("id"), rs.getString("number"), rs.getLong("customer_id"), rs.getString("cname"),
                         rs.getObject("receipt_date", LocalDate.class), rs.getString("method"), rs.getString("reference"),
                         rs.getBigDecimal("amount"), rs.getString("note"), rs.getString("created_by"),
-                        rs.getTimestamp("created_at").toInstant(), alloc), id, orgId)
+                        rs.getTimestamp("created_at").toInstant(),
+                        "CANCELLED".equals(rs.getString("status")) ? snapshot(rs.getString("cancelled_allocations")) : live,
+                        rs.getString("status"),
+                        rs.getTimestamp("cancelled_at") == null ? null : rs.getTimestamp("cancelled_at").toInstant(),
+                        rs.getString("cancelled_by"), rs.getString("cancel_reason")), id, orgId)
                 .stream().findFirst().orElseThrow(() -> ApiException.notFound("Receipt"));
+    }
+
+    private static List<Allocation> snapshot(String s) {
+        if (s == null || s.isBlank()) return List.of();
+        List<Allocation> out = new ArrayList<>();
+        for (String part : s.split(";")) {
+            String[] f = part.split(":", 3);
+            out.add(new Allocation(Long.parseLong(f[0]), new BigDecimal(f[1]), f.length > 2 ? f[2] : null));
+        }
+        return out;
     }
 
     private static String blank(String s) {

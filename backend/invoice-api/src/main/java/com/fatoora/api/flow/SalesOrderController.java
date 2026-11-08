@@ -98,6 +98,7 @@ public class SalesOrderController {
     Request prefill(@PathVariable Long quotationId) {
         Long orgId = CurrentUser.orgId();
         Map<String, Object> q = quotation(orgId, quotationId);
+        requireNoOtherOrder(quotationId, null);
         Map<Long, BigDecimal> ordered = flow.orderedByQuotationLine(quotationId, null);
         List<Line> lines = jdbc.query("SELECT * FROM quotation_line WHERE quotation_id = ? ORDER BY position", (rs, i) -> {
             BigDecimal left = rs.getBigDecimal("quantity").subtract(ordered.getOrDefault(rs.getLong("id"), BigDecimal.ZERO));
@@ -181,6 +182,7 @@ public class SalesOrderController {
             return;
         }
         quotation(orgId, req.quotationId());
+        requireNoOtherOrder(req.quotationId(), exceptOrderId);
         Map<Long, BigDecimal> quoted = new HashMap<>();
         jdbc.query("SELECT id, quantity FROM quotation_line WHERE quotation_id = ?",
                 rs -> { quoted.put(rs.getLong(1), rs.getBigDecimal(2)); }, req.quotationId());
@@ -226,6 +228,19 @@ public class SalesOrderController {
     static BigDecimal lineNet(BigDecimal qty, BigDecimal price, BigDecimal discountPct) {
         BigDecimal gross = qty.multiply(price);
         return gross.subtract(gross.multiply(discountPct).divide(HUNDRED, 6, RoundingMode.HALF_UP)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * BIP's rule (meeting 7 Nov): one quotation becomes one sales order; a long order is split into deliveries,
+     * not into several orders. A cancelled order frees the quotation again.
+     */
+    private void requireNoOtherOrder(Long quotationId, Long exceptOrderId) {
+        List<String> others = jdbc.queryForList("""
+                SELECT number FROM sales_order WHERE quotation_id = ? AND status <> 'CANCELLED' AND (?::bigint IS NULL OR id <> ?::bigint)""",
+                String.class, quotationId, exceptOrderId, exceptOrderId);
+        if (!others.isEmpty())
+            throw ApiException.conflict("quotation_ordered", "This quotation is already on sales order " + others.getFirst()
+                    + ". Deliver that order in parts instead of making a second order.");
     }
 
     private boolean hasDeliveries(Long id) {

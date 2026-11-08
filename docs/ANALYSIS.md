@@ -76,3 +76,21 @@ quantities in the line tables via `base_line_id`). This gives, exactly like SAP 
 - "Based on …" remarks generated automatically,
 - a **Relationship Map** endpoint that walks the graph from any document,
 - open-quantity status: an order is *Open* until fully delivered, *Closed* when done.
+
+---
+
+## 4. What was said (Bangla narration, machine-translated with Whisper medium)
+Translation is rough; these points are consistent across the transcript and the screens.
+
+| Time | Point | Effect on the build |
+|---|---|---|
+| 01:48–02:45 | "Our sequence is: first the sales order, then the delivery note, then the invoice." Copy To from a quotation can also go straight to delivery or invoice. | Phase A flow ✅ |
+| 02:22–02:45, 07:23–08:11 | Long orders: one order of 500–550 units for six months, ~100 delivered per month; each delivery invoiced separately; the order shows *closed* once fully delivered. | Partial deliveries, per-delivery invoicing, auto-close ✅ |
+| 08:11–08:39 | Once delivered, an order is locked — "we can't edit or change it, we have to make it new". | Orders with deliveries can't be edited ✅ |
+| 10:24–10:52 | "We can't make one quotation and two sales orders … one quotation, one sales order, five deliveries." | **Rule enforced:** a quotation can have one active sales order (`quotation_ordered`) ✅ |
+| 14:42–15:54 | Incoming payment for the first invoice shows on the map; a payment posted with the wrong date was *cancelled and reposted*, shown with a cross, not deleted. | **Receipts are cancelled, never deleted** (V25), kept on the map ✅ |
+| 16:14–18:40 | Purchase orders to local or international vendors (e.g. China); goods receipt into a chosen warehouse (e.g. 36 rolls of stretch film). | Phase B (suppliers, PO with currency, GRN per warehouse) |
+| 27:23–27:45 | Costs paid after purchase (transport account) are added to the purchase. | Phase B: **landed costs** on goods receipts → item cost |
+| 20:10–22:31 | Separate sales, purchase, finance and cost departments, each with its own authority. | Phase G1: roles + permission matrix per department |
+| 28:20–29:46 | Digi POS: products with brand and unit, add purchase, add sale, list with export, print with logo. | Item master (C3), reports with export (G2) |
+| 29:48–31:52 | Quotation print shows name, logo and website; from the quotation view it converts (to proforma / invoice). | Quotation print ✅ (letterhead); proforma print → Phase F |
