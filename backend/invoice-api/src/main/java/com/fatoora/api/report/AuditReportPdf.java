@@ -196,7 +196,7 @@ final class AuditReportPdf {
         return "<table style=\"margin-top:14px\"><tr>"
                 + cell.formatted("Prepared by · أعدّه", esc(preparedBy == null ? "" : preparedBy))
                 + cell.formatted("Reviewed by · راجعه", "")
-                + cell.formatted("Approved by · اعتمده", "Company stamp · ختم الشركة")
+                + cell.formatted("Approved by · اعتمده", "")
                 + "</tr></table>";
     }
 

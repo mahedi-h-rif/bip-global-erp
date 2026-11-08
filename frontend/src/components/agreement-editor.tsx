@@ -152,7 +152,7 @@ function Form({ initial, template, customers, router }: {
       <AgreementTextForm value={text} onChange={setText} />
 
       <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur md:-mx-8 md:px-8">
-        <p className="me-auto text-xs text-muted">{t("Printed on the company letterhead with signature and stamp spaces for both parties, to sign on paper.")}</p>
+        <p className="me-auto text-xs text-muted">{t("Printed on the company letterhead with signature spaces for both parties, to sign on paper.")}</p>
         <Button loading={busy === "save"} disabled={busy != null}
           onClick={() => act("save", async () => { const id = await save(); router.push(`/agreements/${id}`); router.refresh(); })}>
           <Save className="size-4" aria-hidden /> {t("Save agreement")}

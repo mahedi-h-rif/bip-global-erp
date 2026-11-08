@@ -396,7 +396,7 @@ export const hi: Record<string, string> = {
   "Agreement": "अनुबंध",
   "Started from your standard agreement; change anything for this client.": "आपके स्टैंडर्ड अनुबंध से शुरू; इस क्लाइंट के लिए कुछ भी बदलें।",
   "Signed on": "हस्ताक्षर की तारीख",
-  "Printed on the company letterhead with signature and stamp spaces for both parties, to sign on paper.": "कंपनी के लेटरहेड पर छपता है, दोनों पक्षों के हस्ताक्षर और मुहर की जगह के साथ, कागज़ पर हस्ताक्षर के लिए।",
+  "Printed on the company letterhead with signature spaces for both parties, to sign on paper.": "कंपनी के लेटरहेड पर छपता है, दोनों पक्षों के हस्ताक्षर की जगह के साथ, कागज़ पर हस्ताक्षर के लिए।",
   "Save agreement": "अनुबंध सहेजें",
   "Opening and parties": "प्रारंभ और पक्ष",
   "Who the agreement is between. Client and company details are filled in automatically.": "अनुबंध किनके बीच है। क्लाइंट और कंपनी का विवरण अपने आप भर जाता है।",

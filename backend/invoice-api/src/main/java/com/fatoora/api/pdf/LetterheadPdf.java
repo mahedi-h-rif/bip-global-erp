@@ -415,27 +415,16 @@ public class LetterheadPdf {
                 </div>""".formatted(esc(en), esc(ar), kv);
     }
 
-    /**
-     * Signature section, signed and stamped by hand on the printed paper: a signature line for each party
-     * and a stamp box for the company. Kept on one page.
-     */
+    /** Signature section, signed by hand on the printed paper: a signature line for each party. Kept on one page. */
     public static String signatures(Organization org, String clientName) {
-        return signatures(org, clientName, true);
-    }
-
-    /** {@code companyStamp} false leaves out the company stamp box (quotations are not stamped). */
-    public static String signatures(Organization org, String clientName, boolean companyStamp) {
         return "<table style=\"margin-top:16px; page-break-inside:avoid\"><tr>"
-                + party("padding-right:14px", "For the company · عن الشركة", org.displayName(), companyStamp ? "Company stamp · ختم الشركة" : null)
-                + party("padding-left:14px", "For the client · عن العميل", clientName, null)
+                + party("padding-right:14px", "For the company · عن الشركة", org.displayName())
+                + party("padding-left:14px", "For the client · عن العميل", clientName)
                 + "</tr></table>";
     }
 
-    /** One party's column; {@code stamp} null leaves out the stamp box. */
-    private static String party(String padding, String heading, String name, String stamp) {
-        String box = stamp == null ? ""
-                : "<td style=\"width:120px; height:104px; border:1px dashed #9aa3b5; text-align:center; vertical-align:middle; font-size:7pt; color:#9aa3b5\">"
-                + esc(stamp) + "</td>";
+    /** One party's column: heading, name and a signature line. */
+    private static String party(String padding, String heading, String name) {
         return """
                 <td style="width:50%%; vertical-align:top; %s">
                   <div style="font-weight:700">%s</div>
@@ -445,9 +434,8 @@ public class LetterheadPdf {
                       <div style="height:80px"></div>
                       <div style="border-top:1px solid #1b2233; padding-top:3px">Signature · التوقيع</div>
                     </td>
-                    %s
                   </tr></table>
-                </td>""".formatted(padding, esc(heading), esc(nz(name)), box);
+                </td>""".formatted(padding, esc(heading), esc(nz(name)));
     }
 
     static String joined(String sep, String... parts) {

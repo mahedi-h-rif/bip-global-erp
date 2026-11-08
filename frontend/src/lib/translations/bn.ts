@@ -396,7 +396,7 @@ export const bn: Record<string, string> = {
   "Agreement": "চুক্তি",
   "Started from your standard agreement; change anything for this client.": "আপনার স্ট্যান্ডার্ড চুক্তি থেকে শুরু; এই ক্লায়েন্টের জন্য যেকোনো কিছু পরিবর্তন করুন।",
   "Signed on": "স্বাক্ষরের তারিখ",
-  "Printed on the company letterhead with signature and stamp spaces for both parties, to sign on paper.": "কোম্পানির লেটারহেডে প্রিন্ট হবে, উভয় পক্ষের স্বাক্ষর ও সিলের জায়গা সহ, কাগজে স্বাক্ষরের জন্য।",
+  "Printed on the company letterhead with signature spaces for both parties, to sign on paper.": "কোম্পানির লেটারহেডে প্রিন্ট হবে, উভয় পক্ষের স্বাক্ষরের জায়গা সহ, কাগজে স্বাক্ষরের জন্য।",
   "Save agreement": "চুক্তি সংরক্ষণ",
   "Opening and parties": "শুরু ও পক্ষসমূহ",
   "Who the agreement is between. Client and company details are filled in automatically.": "চুক্তিটি কাদের মধ্যে। ক্লায়েন্ট ও কোম্পানির তথ্য স্বয়ংক্রিয়ভাবে পূরণ হয়।",

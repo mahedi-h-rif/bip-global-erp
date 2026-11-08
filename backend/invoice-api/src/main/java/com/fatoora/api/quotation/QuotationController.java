@@ -278,7 +278,7 @@ public class QuotationController {
                 LetterheadPdf.money(q.getTotalInclVat()),
                 q.getNotes() == null ? "" : "<h2>Notes · ملاحظات</h2><p>" + LetterheadPdf.text(q.getNotes()) + "</p>",
                 q.getTerms() == null ? "" : "<h2>Terms &amp; conditions · الشروط والأحكام</h2><p>" + LetterheadPdf.text(q.getTerms()) + "</p>",
-                LetterheadPdf.signatures(org, clientName, false));
+                LetterheadPdf.signatures(org, clientName));
     }
 
     private static String td(String content, String align) {

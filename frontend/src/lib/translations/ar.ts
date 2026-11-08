@@ -396,7 +396,7 @@ export const ar: Record<string, string> = {
   "Agreement": "الاتفاقية",
   "Started from your standard agreement; change anything for this client.": "تبدأ من اتفاقيتك القياسية؛ غيّر ما تشاء لهذا العميل.",
   "Signed on": "تاريخ التوقيع",
-  "Printed on the company letterhead with signature and stamp spaces for both parties, to sign on paper.": "تُطبع على ورق الشركة الرسمي مع مساحات للتوقيع والختم للطرفين، للتوقيع ورقياً.",
+  "Printed on the company letterhead with signature spaces for both parties, to sign on paper.": "تُطبع على ورق الشركة الرسمي مع مساحات للتوقيع للطرفين، للتوقيع ورقياً.",
   "Save agreement": "حفظ الاتفاقية",
   "Opening and parties": "التمهيد والأطراف",
   "Who the agreement is between. Client and company details are filled in automatically.": "أطراف الاتفاقية. تُعبأ بيانات العميل والشركة تلقائياً.",
