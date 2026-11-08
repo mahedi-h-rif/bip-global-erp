@@ -29,6 +29,14 @@ public class Product {
     private BigDecimal costPrice;
     private BigDecimal lowStockThreshold;
     private String unitCode = "PCE";
+    /** Moving-average cost (SAR), maintained by stock movements. */
+    private BigDecimal avgCost;
+    private String nameAr;
+    private String category;
+    private String brand;
+    private String barcode;
+    private boolean isSalesItem = true;
+    private boolean isPurchaseItem = true;
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 

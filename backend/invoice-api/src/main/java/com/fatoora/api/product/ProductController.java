@@ -40,7 +40,11 @@ public class ProductController {
             @DecimalMin("0") BigDecimal lowStockThreshold,
             @Size(max = 10) String unitCode,
             /** Read-only: total on hand across all warehouses (null for services). */
-            BigDecimal onHand) {
+            BigDecimal onHand,
+            @Size(max = 1000) String nameAr, @Size(max = 100) String category, @Size(max = 100) String brand,
+            @Size(max = 60) String barcode, Boolean salesItem, Boolean purchaseItem,
+            /** Read-only: moving-average cost. */
+            BigDecimal avgCost) {
 
         static ProductDto of(Product p) {
             return of(p, null);
@@ -49,7 +53,8 @@ public class ProductController {
         static ProductDto of(Product p, BigDecimal onHand) {
             return new ProductDto(p.getId(), p.getNumber(), p.getName(), p.getUnitPrice(), p.isActive(), p.getUpdatedAt(),
                     p.isTrackStock(), p.getCostPrice(), p.getLowStockThreshold(), p.getUnitCode(),
-                    p.isTrackStock() ? (onHand == null ? BigDecimal.ZERO : onHand) : null);
+                    p.isTrackStock() ? (onHand == null ? BigDecimal.ZERO : onHand) : null,
+                    p.getNameAr(), p.getCategory(), p.getBrand(), p.getBarcode(), p.isSalesItem(), p.isPurchaseItem(), p.getAvgCost());
         }
     }
 
@@ -156,6 +161,18 @@ public class ProductController {
         p.setCostPrice(dto.costPrice());
         p.setLowStockThreshold(dto.lowStockThreshold());
         if (dto.unitCode() != null && !dto.unitCode().isBlank()) p.setUnitCode(dto.unitCode().trim().toUpperCase());
+        p.setNameAr(blank(dto.nameAr()));
+        p.setCategory(blank(dto.category()));
+        p.setBrand(blank(dto.brand()));
+        p.setBarcode(blank(dto.barcode()));
+        if (dto.salesItem() != null) p.setSalesItem(dto.salesItem());
+        if (dto.purchaseItem() != null) p.setPurchaseItem(dto.purchaseItem());
+        // A manual cost on a product with no moving average yet seeds the average.
+        if (p.getAvgCost() == null && dto.costPrice() != null) p.setAvgCost(dto.costPrice());
+    }
+
+    private static String blank(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     private String generateNumber(Long orgId) {

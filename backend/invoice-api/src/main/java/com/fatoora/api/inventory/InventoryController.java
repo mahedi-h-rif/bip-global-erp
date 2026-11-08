@@ -41,11 +41,13 @@ public class InventoryController {
 
     public record MovementRow(Long id, Instant at, Long productId, String productName, Long warehouseId, String warehouseName,
                               BigDecimal quantity, BigDecimal balanceAfter, String kind, String refType, Long refId,
-                              String refNumber, String note, String createdBy) {}
+                              String refNumber, String note, String createdBy, BigDecimal unitCost, BigDecimal value) {}
 
     /** {@code quantity} is the change (+ in, − out); {@code countedQuantity} instead sets the level to a physical count. */
     public record AdjustRequest(@NotNull Long productId, @NotNull Long warehouseId, BigDecimal quantity,
-                                BigDecimal countedQuantity, @Size(max = 1000) String note, Boolean opening) {}
+                                BigDecimal countedQuantity, @Size(max = 1000) String note, Boolean opening,
+                                /** SAR cost of stock added from outside (opening stock); re-averages the item cost. */
+                                @DecimalMin("0") BigDecimal unitCost) {}
 
     public record TransferLine(@NotNull Long productId, String productName, @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity) {}
 
@@ -74,7 +76,7 @@ public class InventoryController {
         Long orgId = CurrentUser.orgId();
         stock.defaultWarehouse(orgId);
         return jdbc.query("""
-                SELECT w.*, COALESCE((SELECT sum(s.quantity * COALESCE(p.cost_price, 0)) FROM stock_level s
+                SELECT w.*, COALESCE((SELECT sum(s.quantity * COALESCE(p.avg_cost, p.cost_price, 0)) FROM stock_level s
                                       JOIN product p ON p.id = s.product_id WHERE s.warehouse_id = w.id), 0) AS value
                 FROM warehouse w WHERE w.organization_id = ? AND (? OR w.active) ORDER BY w.is_default DESC, w.name""",
                 (rs, i) -> new WarehouseDto(rs.getLong("id"), rs.getString("code"), rs.getString("name"),
@@ -129,7 +131,7 @@ public class InventoryController {
         Long orgId = CurrentUser.orgId();
         String like = q == null || q.isBlank() ? null : "%" + q.trim().toLowerCase() + "%";
         List<StockRow> rows = jdbc.query("""
-                SELECT p.id AS pid, p.number, p.name AS pname, p.unit_code, p.cost_price, p.low_stock_threshold,
+                SELECT p.id AS pid, p.number, p.name AS pname, p.unit_code, COALESCE(p.avg_cost, p.cost_price) AS cost_price, p.low_stock_threshold,
                        w.id AS wid, w.name AS wname, COALESCE(s.quantity, 0) AS qty
                 FROM product p CROSS JOIN warehouse w
                 LEFT JOIN stock_level s ON s.product_id = p.id AND s.warehouse_id = w.id
@@ -153,7 +155,8 @@ public class InventoryController {
                 (rs, i) -> new MovementRow(rs.getLong("id"), rs.getTimestamp("created_at").toInstant(), rs.getLong("product_id"),
                         rs.getString("pname"), rs.getLong("warehouse_id"), rs.getString("wname"), rs.getBigDecimal("quantity"),
                         rs.getBigDecimal("balance_after"), rs.getString("kind"), rs.getString("ref_type"),
-                        (Long) rs.getObject("ref_id"), rs.getString("ref_number"), rs.getString("note"), rs.getString("created_by")),
+                        (Long) rs.getObject("ref_id"), rs.getString("ref_number"), rs.getString("note"), rs.getString("created_by"),
+                        rs.getBigDecimal("unit_cost"), rs.getBigDecimal("value")),
                 CurrentUser.orgId(), productId, productId, warehouseId, warehouseId, Math.min(Math.max(limit, 1), 1000));
     }
 
@@ -177,10 +180,87 @@ public class InventoryController {
         if (delta.signum() == 0) return levels(req.warehouseId(), null, false);
         StockService.Kind kind = Boolean.TRUE.equals(req.opening()) ? StockService.Kind.OPENING : StockService.Kind.ADJUST;
         stock.apply(orgId, List.of(new StockService.Move(req.productId(), req.warehouseId(), delta, kind,
-                "adjustment", null, null, blank(req.note()))), false, CurrentUser.get().email());
+                "adjustment", null, null, blank(req.note()), delta.signum() > 0 ? req.unitCost() : null)), false, CurrentUser.get().email());
         audit.record(orgId, "STOCK_ADJUSTED", "product", req.productId(),
                 kind + " " + StockService.plain(delta) + " @ warehouse " + req.warehouseId() + (req.note() == null ? "" : ": " + req.note()));
         return levels(req.warehouseId(), null, false);
+    }
+
+    // --- inventory audit report (moving-average valuation ledger) ---------------------------------
+
+    public record AuditRow(Instant systemDate, LocalDate postingDate, String document, String kind, String warehouseName,
+                           BigDecimal quantity, BigDecimal cost, BigDecimal transValue, BigDecimal cumulativeQty, BigDecimal cumulativeValue) {}
+
+    public record AuditReport(Long productId, String productName, String productNumber, BigDecimal openingQty, BigDecimal openingValue,
+                              List<AuditRow> rows, BigDecimal closingQty, BigDecimal closingValue) {}
+
+    /** SAP-style inventory audit: every movement of one item with its cost and the running quantity and value. */
+    @GetMapping("/stock/audit")
+    AuditReport audit(@RequestParam Long productId, @RequestParam(required = false) Long warehouseId,
+                      @RequestParam(required = false) LocalDate from, @RequestParam(required = false) LocalDate to) {
+        Long orgId = CurrentUser.orgId();
+        Map<String, Object> p = jdbc.queryForList("SELECT name, number FROM product WHERE id = ? AND organization_id = ?", productId, orgId)
+                .stream().findFirst().orElseThrow(() -> ApiException.notFound("Product"));
+        java.sql.Timestamp start = from == null ? null : java.sql.Timestamp.from(from.atStartOfDay(com.fatoora.api.InvoiceApiApplication.KSA).toInstant());
+        java.sql.Timestamp end = to == null ? null : java.sql.Timestamp.from(to.plusDays(1).atStartOfDay(com.fatoora.api.InvoiceApiApplication.KSA).toInstant());
+        Map<String, Object> opening = jdbc.queryForMap("""
+                SELECT COALESCE(sum(quantity), 0) AS q, COALESCE(sum(value), 0) AS v FROM stock_movement
+                WHERE organization_id = ? AND product_id = ? AND (?::bigint IS NULL OR warehouse_id = ?::bigint)
+                  AND ?::timestamptz IS NOT NULL AND created_at < ?::timestamptz""", orgId, productId, warehouseId, warehouseId, start, start);
+        BigDecimal cq = (BigDecimal) opening.get("q"), cv = (BigDecimal) opening.get("v");
+        BigDecimal oq = cq, ov = cv;
+        List<AuditRow> rows = new ArrayList<>();
+        for (Map<String, Object> m : jdbc.queryForList("""
+                SELECT m.*, w.name AS wname FROM stock_movement m JOIN warehouse w ON w.id = m.warehouse_id
+                WHERE m.organization_id = ? AND m.product_id = ? AND (?::bigint IS NULL OR m.warehouse_id = ?::bigint)
+                  AND (?::timestamptz IS NULL OR m.created_at >= ?::timestamptz) AND (?::timestamptz IS NULL OR m.created_at < ?::timestamptz)
+                ORDER BY m.created_at, m.id""", orgId, productId, warehouseId, warehouseId, start, start, end, end)) {
+            BigDecimal q = (BigDecimal) m.get("quantity");
+            BigDecimal v = m.get("value") == null ? BigDecimal.ZERO : (BigDecimal) m.get("value");
+            cq = cq.add(q);
+            cv = cv.add(v);
+            Instant at = ((java.sql.Timestamp) m.get("created_at")).toInstant();
+            String doc = m.get("ref_number") != null ? (String) m.get("ref_number") : String.valueOf(m.get("kind"));
+            rows.add(new AuditRow(at, at.atZone(com.fatoora.api.InvoiceApiApplication.KSA).toLocalDate(), doc, (String) m.get("kind"),
+                    (String) m.get("wname"), q, (BigDecimal) m.get("unit_cost"), v, cq, cv));
+        }
+        return new AuditReport(productId, (String) p.get("name"), (String) p.get("number"), oq, ov, rows, cq, cv);
+    }
+
+    @GetMapping("/stock/audit.xlsx")
+    org.springframework.http.ResponseEntity<byte[]> auditExcel(@RequestParam Long productId, @RequestParam(required = false) Long warehouseId,
+                                                               @RequestParam(required = false) LocalDate from,
+                                                               @RequestParam(required = false) LocalDate to) throws java.io.IOException {
+        AuditReport r = audit(productId, warehouseId, from, to);
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(); var out = new java.io.ByteArrayOutputStream()) {
+            var sh = wb.createSheet("Inventory audit");
+            String[] head = {"Posting date", "Document", "Type", "Warehouse", "Quantity", "Cost", "Trans. value", "Cumulative qty", "Cumulative value"};
+            var hr = sh.createRow(0);
+            for (int i = 0; i < head.length; i++) hr.createCell(i).setCellValue(head[i]);
+            int n = 1;
+            var open = sh.createRow(n++);
+            open.createCell(1).setCellValue("Opening balance");
+            open.createCell(7).setCellValue(r.openingQty().doubleValue());
+            open.createCell(8).setCellValue(r.openingValue().doubleValue());
+            for (AuditRow a : r.rows()) {
+                var row = sh.createRow(n++);
+                row.createCell(0).setCellValue(a.postingDate().toString());
+                row.createCell(1).setCellValue(a.document());
+                row.createCell(2).setCellValue(a.kind());
+                row.createCell(3).setCellValue(a.warehouseName());
+                row.createCell(4).setCellValue(a.quantity().doubleValue());
+                if (a.cost() != null) row.createCell(5).setCellValue(a.cost().doubleValue());
+                row.createCell(6).setCellValue(a.transValue().doubleValue());
+                row.createCell(7).setCellValue(a.cumulativeQty().doubleValue());
+                row.createCell(8).setCellValue(a.cumulativeValue().doubleValue());
+            }
+            for (int i = 0; i < head.length; i++) sh.autoSizeColumn(i);
+            wb.write(out);
+            String name = "inventory-audit-" + (r.productNumber() == null ? r.productId() : r.productNumber()) + ".xlsx";
+            return org.springframework.http.ResponseEntity.ok()
+                    .contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + name).body(out.toByteArray());
+        }
     }
 
     // --- transfers ---------------------------------------------------------------------------------

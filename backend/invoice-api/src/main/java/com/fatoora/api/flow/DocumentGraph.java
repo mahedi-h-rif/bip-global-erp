@@ -184,7 +184,7 @@ public class DocumentGraph {
                     FROM goods_receipt g JOIN supplier s ON s.id = g.supplier_id WHERE g.id = ? AND g.organization_id = ?""";
             case SUPPLIER_INVOICE -> """
                     SELECT v.number, v.invoice_date AS d, s.name AS party, v.supplier_invoice_no AS ref, v.total_incl_vat AS total, v.status,
-                           v.total_incl_vat > COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a WHERE a.supplier_invoice_id = v.id), 0) AS open
+                           v.status = 'OPEN' AND v.total_sar > COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a JOIN supplier_payment sp ON sp.id = a.supplier_payment_id WHERE a.supplier_invoice_id = v.id AND sp.status = 'POSTED'), 0) AS open
                     FROM supplier_invoice v JOIN supplier s ON s.id = v.supplier_id WHERE v.id = ? AND v.organization_id = ?""";
             case SUPPLIER_PAYMENT -> """
                     SELECT p.number, p.payment_date AS d, s.name AS party, p.reference AS ref, p.amount AS total, p.method AS status,

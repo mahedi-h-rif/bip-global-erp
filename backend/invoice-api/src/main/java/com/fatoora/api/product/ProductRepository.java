@@ -11,7 +11,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findByIdAndOrganizationId(Long id, Long organizationId);
 
     @Query("select p from Product p where p.organizationId = :orgId and (:all = true or p.active = true) "
-            + "and (:q is null or lower(p.name) like :q or lower(p.number) like :q) order by lower(p.name)")
+            + "and (:q is null or lower(p.name) like :q or lower(p.number) like :q or lower(p.barcode) like :q or lower(p.nameAr) like :q) order by lower(p.name)")
     List<Product> search(Long orgId, String q, boolean all);
 
     @Query("select count(p) > 0 from Product p where p.organizationId = :orgId and p.active = true "

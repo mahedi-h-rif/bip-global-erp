@@ -31,9 +31,18 @@ public class StockService {
         this.jdbc = jdbc;
     }
 
-    /** One stock change. {@code quantity} is signed (+ in, − out). Returns the new level. */
+    /**
+     * One stock change. {@code quantity} is signed (+ in, − out). {@code unitCost} (SAR) is the cost of goods coming
+     * in from outside (receipt, opening stock, a counted surplus); it re-averages the item's cost. Everything else
+     * moves at the current moving average.
+     */
     public record Move(Long productId, Long warehouseId, BigDecimal quantity, Kind kind,
-                       String refType, Long refId, String refNumber, String note) {}
+                       String refType, Long refId, String refNumber, String note, BigDecimal unitCost) {
+        public Move(Long productId, Long warehouseId, BigDecimal quantity, Kind kind,
+                    String refType, Long refId, String refNumber, String note) {
+            this(productId, warehouseId, quantity, kind, refType, refId, refNumber, note, null);
+        }
+    }
 
     /**
      * Applies the moves atomically. With {@code allowNegative=false}, any move that would take a level below
@@ -57,14 +66,32 @@ public class StockService {
                 throw ApiException.badRequest("insufficient_stock", "Not enough stock of \"%s\" in %s: %s available, %s needed"
                         .formatted(name, wh, plain(current), plain(m.quantity().negate())));
             }
+            // Moving average over all warehouses: the product row is locked so two receipts can't race.
+            java.util.Map<String, Object> p = jdbc.queryForMap(
+                    "SELECT avg_cost, cost_price FROM product WHERE id = ? FOR UPDATE", m.productId());
+            BigDecimal avg = p.get("avg_cost") != null ? (BigDecimal) p.get("avg_cost")
+                    : p.get("cost_price") != null ? (BigDecimal) p.get("cost_price") : BigDecimal.ZERO;
+            BigDecimal unitCost = avg;
+            if (m.quantity().signum() > 0 && m.unitCost() != null) {
+                BigDecimal onHand = jdbc.queryForObject("""
+                        SELECT COALESCE(sum(s.quantity), 0) FROM stock_level s JOIN warehouse w ON w.id = s.warehouse_id
+                        WHERE s.product_id = ? AND w.organization_id = ?""", BigDecimal.class, m.productId(), orgId);
+                BigDecimal base = onHand.max(BigDecimal.ZERO);
+                BigDecimal total = base.add(m.quantity());
+                avg = total.signum() == 0 ? m.unitCost()
+                        : base.multiply(avg).add(m.quantity().multiply(m.unitCost())).divide(total, 6, java.math.RoundingMode.HALF_UP);
+                unitCost = m.unitCost();
+                jdbc.update("UPDATE product SET avg_cost = ? WHERE id = ?", avg, m.productId());
+            }
+            BigDecimal value = m.quantity().multiply(unitCost).setScale(2, java.math.RoundingMode.HALF_UP);
             jdbc.update("UPDATE stock_level SET quantity = ? WHERE warehouse_id = ? AND product_id = ?",
                     after, m.warehouseId(), m.productId());
             jdbc.update("""
                     INSERT INTO stock_movement (organization_id, product_id, warehouse_id, quantity, balance_after, kind,
-                                                ref_type, ref_id, ref_number, note, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                ref_type, ref_id, ref_number, note, created_by, unit_cost, value)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     orgId, m.productId(), m.warehouseId(), m.quantity(), after, m.kind().name(),
-                    m.refType(), m.refId(), m.refNumber(), m.note(), actor);
+                    m.refType(), m.refId(), m.refNumber(), m.note(), actor, unitCost, value);
         }
     }
 
@@ -132,6 +159,10 @@ public class StockService {
                 DO UPDATE SET next_value = document_sequence.next_value + 1
                 RETURNING next_value - 1""", Long.class, orgId, docType, year);
         return "%s-%d-%06d".formatted(prefix, year, v);
+    }
+
+    public static String plainOf(BigDecimal v) {
+        return plain(v);
     }
 
     static String plain(BigDecimal v) {
