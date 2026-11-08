@@ -14,7 +14,7 @@ const notoBengali = Noto_Sans_Bengali({ subsets: ["bengali"], variable: "--font-
 const notoDevanagari = Noto_Sans_Devanagari({ subsets: ["devanagari"], variable: "--font-noto-devanagari", preload: false });
 
 export const metadata: Metadata = {
-  title: { default: "Invoice Portal", template: "%s · Invoice Portal" },
+  title: { default: "SoudaCore ERP", template: "%s · SoudaCore ERP" },
   description: "ZATCA-compliant e-invoicing portal",
   robots: { index: false, follow: false },
 };

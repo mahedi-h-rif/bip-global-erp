@@ -285,7 +285,7 @@ public class QuotationController {
         return "<td style=\"border-bottom:1px solid #e3e7ef; padding:6px 4px; text-align:" + align + "\">" + content + "</td>";
     }
 
-    static String displayName(Customer c) {
+    public static String displayName(Customer c) {
         return c.getNameEn() != null && !c.getNameEn().isBlank() ? c.getNameEn() : c.getNameAr();
     }
 

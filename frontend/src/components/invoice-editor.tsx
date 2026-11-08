@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Banknote, CheckCircle2, Clock, PackagePlus, Plus, Save, Send, Trash2, UserPlus } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
-import type { Customer, InvoiceDetail, InvoiceKind, Line, PaymentMethod, Product, SendMode, VatCategory } from "@/lib/types";
+import type { Customer, InvoiceDetail, Warehouse, InvoiceKind, Line, PaymentMethod, Product, SendMode, VatCategory } from "@/lib/types";
 import { exemptionCodes, lineTotals, money, todayKsa, typeLabel, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, RequiredMark, Select } from "@/components/ui";
 import { Trans, useLanguage, useT } from "@/lib/i18n";
@@ -119,6 +119,8 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
   const { data: customers } = useSWR<Customer[]>("/customers", fetcher);
   const { data: products, mutate: mutateProducts } = useSWR<Product[]>("/products", fetcher);
   const isNote = initial != null && initial.type !== "INVOICE";
+  const { data: warehouses } = useSWR<Warehouse[]>("/warehouses", fetcher);
+  const [warehouseId, setWarehouseId] = useState<string>(initial?.warehouseId ? String(initial.warehouseId) : "");
 
   const [kind, setKind] = useState<InvoiceKind>(initial?.kind ?? "SIMPLIFIED");
   const [customerId, setCustomerId] = useState<string>(initial?.customerId ? String(initial.customerId) : "");
@@ -205,6 +207,7 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
       reason: reason || null,
       internalNote: initial?.internalNote ?? null,
       dueDate: initial?.dueDate ?? null,
+      warehouseId: warehouseId ? Number(warehouseId) : null,
       lines: lines.map((l) => ({
         ...l,
         quantity: Number(l.quantity),
@@ -349,6 +352,14 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
             />
           </Field>
           <div className="grid grid-cols-2 gap-4">
+            {!isNote && warehouses && warehouses.length > 1 && (
+              <Field label={t("Warehouse")} optional hint={t("Stock items are taken from here when issued")} className="col-span-2">
+                <Select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+                  <option value="">{t("Default warehouse")}</option>
+                  {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field label={t("Supply date")} optional hint={t("Leave empty for the issue date")}>
               <Input type="date" value={supplyDate} onChange={(e) => setSupplyDate(e.target.value)} />
             </Field>

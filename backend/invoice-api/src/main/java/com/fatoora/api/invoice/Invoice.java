@@ -48,6 +48,8 @@ public class Invoice {
     private String buyerSnapshot;
     private String sellerSnapshot;
     private Long originalInvoiceId;
+    /** Warehouse the goods ship from; stock-tracked lines are deducted from it when the invoice is issued. */
+    private Long warehouseId;
     private String billingReference;
     private String reason;
     private String internalNote;

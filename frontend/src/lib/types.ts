@@ -71,6 +71,7 @@ export interface Submission {
 
 export interface InvoiceDetail {
   id: number;
+  warehouseId?: number | null;
   number: string | null;
   uuid: string | null;
   kind: InvoiceKind;
@@ -140,6 +141,12 @@ export interface Product {
   unitPrice: number | string;
   active?: boolean;
   updatedAt?: string;
+  trackStock?: boolean;
+  costPrice?: number | string | null;
+  lowStockThreshold?: number | string | null;
+  unitCode?: string;
+  /** Total on hand across warehouses; null for services. */
+  onHand?: number | null;
 }
 
 export interface DueInvoice {
@@ -659,4 +666,99 @@ export interface WhatsAppStatus {
 export interface SendOutcome {
   status: "SENT" | "LOGGED" | "FAILED" | "OPENED";
   error: string | null;
+}
+
+// --- inventory -------------------------------------------------------------------------------
+
+export interface Warehouse {
+  id?: number;
+  code: string;
+  name: string;
+  location?: string | null;
+  isDefault?: boolean;
+  active?: boolean;
+  stockValue?: number;
+}
+
+export interface StockRow {
+  productId: number;
+  productNumber: string | null;
+  productName: string;
+  unitCode: string;
+  warehouseId: number;
+  warehouseName: string;
+  quantity: number;
+  costPrice: number | null;
+  value: number;
+  lowStockThreshold: number | null;
+  low: boolean;
+}
+
+export interface StockMovement {
+  id: number;
+  at: string;
+  productId: number;
+  productName: string;
+  warehouseId: number;
+  warehouseName: string;
+  quantity: number;
+  balanceAfter: number;
+  kind: string;
+  refType: string | null;
+  refId: number | null;
+  refNumber: string | null;
+  note: string | null;
+  createdBy: string | null;
+}
+
+export interface TransferLine { productId: number; productName?: string; quantity: number | string }
+
+export interface StockTransfer {
+  id: number;
+  number: string;
+  fromWarehouseId: number;
+  fromWarehouse: string;
+  toWarehouseId: number;
+  toWarehouse: string;
+  transferDate: string;
+  note: string | null;
+  createdBy: string;
+  createdAt: string;
+  lines: TransferLine[];
+}
+
+export interface DeliveryLine {
+  invoiceLineId?: number | null;
+  productId?: number | null;
+  name: string;
+  quantity: number | string;
+  unitCode?: string;
+  remaining?: number | null;
+}
+
+export interface DeliveryNoteRequest {
+  invoiceId?: number | null;
+  customerId?: number | null;
+  clientName?: string | null;
+  deliveryAddress?: string | null;
+  warehouseId?: number | null;
+  deliveryDate?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  vehicleNo?: string | null;
+  note?: string | null;
+  lines: DeliveryLine[];
+}
+
+export interface DeliveryNote extends DeliveryNoteRequest {
+  id: number;
+  number: string;
+  invoiceNumber: string | null;
+  customerName: string | null;
+  warehouseName: string | null;
+  status: "DRAFT" | "DELIVERED" | "CANCELLED";
+  receivedBy: string | null;
+  receivedAt: string | null;
+  createdBy: string;
+  createdAt: string;
 }

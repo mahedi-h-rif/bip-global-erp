@@ -242,7 +242,7 @@ public class InvoiceService {
                 i.getStatus() == InvoiceStatus.DRAFT, i.getDueDate(),
                 b == null ? null : b.notes(), b == null ? null : b.adjusted(), b == null ? null : b.paid(),
                 b == null ? null : b.due(), b == null ? null : b.overpaid(), b == null ? null : b.status(), paid,
-                isTestDocument(i));
+                isTestDocument(i), i.getWarehouseId());
     }
 
     @Transactional(readOnly = true)
@@ -321,6 +321,7 @@ public class InvoiceService {
         inv.setReason(emptyToNull(req.reason()));
         inv.setInternalNote(emptyToNull(req.internalNote()));
         inv.setDueDate(type == DocumentType.INVOICE ? req.dueDate() : null);
+        inv.setWarehouseId(req.warehouseId());
         if (type != DocumentType.INVOICE && req.originalInvoiceId() != null) {
             Invoice original = load(inv.getOrganizationId(), req.originalInvoiceId());
             inv.setOriginalInvoiceId(original.getId());

@@ -5,8 +5,8 @@ import useSWR from "swr";
 import { Archive, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Product } from "@/lib/types";
-import { money } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Spinner } from "@/components/ui";
+import { money, unitCodes } from "@/lib/format";
+import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 const blank: Product = { name: "", unitPrice: "" };
@@ -27,7 +27,9 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
     setBusy(true);
     setError(null);
     try {
-      const body = { ...p, number: code.trim() || undefined, name: p.name.trim(), unitPrice: Number(p.unitPrice) };
+      const num = (v: unknown) => (v === "" || v == null ? null : Number(v));
+      const body = { ...p, number: code.trim() || undefined, name: p.name.trim(), unitPrice: Number(p.unitPrice),
+        trackStock: !!p.trackStock, costPrice: num(p.costPrice), lowStockThreshold: num(p.lowStockThreshold), unitCode: p.unitCode || "PCE" };
       if (p.id) await api("PUT", `/products/${p.id}`, body);
       else await api("POST", "/products", body);
       onDone();
@@ -54,6 +56,25 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
             <Input required type="number" min="0" step="any" value={p.unitPrice} onChange={(e) => setP({ ...p, unitPrice: e.target.value })} />
           </Field>
         </div>
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={!!p.trackStock} onChange={(e) => setP({ ...p, trackStock: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />
+          {t("Track stock (goods kept in warehouses). Leave off for services.")}
+        </label>
+        {p.trackStock && (
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label={t("Cost price (SAR)")} optional error={error?.fields?.costPrice}>
+              <Input type="number" min="0" step="any" value={p.costPrice ?? ""} onChange={(e) => setP({ ...p, costPrice: e.target.value })} />
+            </Field>
+            <Field label={t("Low-stock alert at")} optional error={error?.fields?.lowStockThreshold}>
+              <Input type="number" min="0" step="any" value={p.lowStockThreshold ?? ""} onChange={(e) => setP({ ...p, lowStockThreshold: e.target.value })} />
+            </Field>
+            <Field label={t("Unit")} optional>
+              <Select value={p.unitCode ?? "PCE"} onChange={(e) => setP({ ...p, unitCode: e.target.value })}>
+                {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
+              </Select>
+            </Field>
+          </div>
+        )}
         <div className="flex gap-2">
           <Button type="submit" loading={busy}>{t("Save product")}</Button>
           <Button type="button" variant="ghost" onClick={onDone}>{t("Cancel")}</Button>
@@ -131,6 +152,7 @@ export default function ProductsPage() {
                   <th className="px-4 py-2.5 text-start font-medium">{t("Name")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Unit price (excl. VAT)")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("With 15% VAT")}</th>
+                  <th className="px-4 py-2.5 text-end font-medium">{t("On hand")}</th>
                   <th className="w-28" />
                 </tr>
               </thead>
@@ -144,6 +166,9 @@ export default function ProductsPage() {
                     </td>
                     <td className="tabular px-4 py-3 text-end">{money(p.unitPrice)}</td>
                     <td className="tabular px-4 py-3 text-end text-muted">{money(Math.round(Number(p.unitPrice) * 115) / 100)}</td>
+                    <td className={`tabular px-4 py-3 text-end ${p.trackStock && p.lowStockThreshold != null && Number(p.onHand) <= Number(p.lowStockThreshold) ? "font-semibold text-bad" : ""}`}>
+                      {p.trackStock ? `${Number(p.onHand ?? 0)} ${p.unitCode ?? ""}` : <span className="text-xs text-muted">{t("Service")}</span>}
+                    </td>
                     <td className="px-2 py-2 text-end">
                       {canWrite && (
                         <span className="inline-flex gap-1">

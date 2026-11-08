@@ -3,11 +3,11 @@
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { CheckCircle2, Clock, FileCode2, FileDown, FileMinus2, FilePlus2, Lock, Printer, Send, Trash2, XCircle } from "lucide-react";
+import { Truck, CheckCircle2, Clock, FileCode2, FileDown, FileMinus2, FilePlus2, Lock, Printer, Send, Trash2, XCircle } from "lucide-react";
 import { api, ApiError, download, fetcher, printFile } from "@/lib/api";
 import type { InvoiceDetail, Me } from "@/lib/types";
 import { countdown, date, dateTime, kindLabel, money, typeLabel } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner, StatusBadge } from "@/components/ui";
+import { Alert, Button, ButtonLink, Card, CardHeader, Field, Input, PageHeader, Spinner, StatusBadge } from "@/components/ui";
 import { InvoiceEditor } from "@/components/invoice-editor";
 import { PaymentsCard } from "@/components/payments-card";
 import { EditDeleteActions } from "@/components/invoice-actions";
@@ -240,6 +240,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 <div className="flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => setNoteType("CREDIT_NOTE")}><FileMinus2 className="size-4" aria-hidden /> {t("Credit note")}</Button>
                   <Button variant="secondary" onClick={() => setNoteType("DEBIT_NOTE")}><FilePlus2 className="size-4" aria-hidden /> {t("Debit note")}</Button>
+                  <ButtonLink variant="secondary" href={`/delivery-notes/new?invoiceId=${inv.id}`}><Truck className="size-4" aria-hidden /> {t("Delivery note")}</ButtonLink>
                 </div>
               ) : (
                 <form

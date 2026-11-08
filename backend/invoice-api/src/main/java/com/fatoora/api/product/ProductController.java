@@ -34,10 +34,22 @@ public class ProductController {
             @NotBlank @Size(max = 1000) String name,
             @NotNull @DecimalMin("0") BigDecimal unitPrice,
             Boolean active,
-            Instant updatedAt) {
+            Instant updatedAt,
+            Boolean trackStock,
+            @DecimalMin("0") BigDecimal costPrice,
+            @DecimalMin("0") BigDecimal lowStockThreshold,
+            @Size(max = 10) String unitCode,
+            /** Read-only: total on hand across all warehouses (null for services). */
+            BigDecimal onHand) {
 
         static ProductDto of(Product p) {
-            return new ProductDto(p.getId(), p.getNumber(), p.getName(), p.getUnitPrice(), p.isActive(), p.getUpdatedAt());
+            return of(p, null);
+        }
+
+        static ProductDto of(Product p, BigDecimal onHand) {
+            return new ProductDto(p.getId(), p.getNumber(), p.getName(), p.getUnitPrice(), p.isActive(), p.getUpdatedAt(),
+                    p.isTrackStock(), p.getCostPrice(), p.getLowStockThreshold(), p.getUnitCode(),
+                    p.isTrackStock() ? (onHand == null ? BigDecimal.ZERO : onHand) : null);
         }
     }
 
@@ -48,8 +60,10 @@ public class ProductController {
 
     private final ProductRepository repo;
     private final AuditService audit;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public ProductController(ProductRepository repo, AuditService audit) {
+    public ProductController(ProductRepository repo, AuditService audit, org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
         this.repo = repo;
         this.audit = audit;
     }
@@ -58,7 +72,11 @@ public class ProductController {
     @GetMapping
     List<ProductDto> list(@RequestParam(required = false) String q, @RequestParam(defaultValue = "false") boolean all) {
         String like = q == null || q.isBlank() ? null : "%" + q.trim().toLowerCase() + "%";
-        return repo.search(CurrentUser.orgId(), like, all).stream().map(ProductDto::of).toList();
+        Map<Long, BigDecimal> onHand = new java.util.HashMap<>();
+        jdbc.query("SELECT s.product_id, sum(s.quantity) FROM stock_level s JOIN warehouse w ON w.id = s.warehouse_id "
+                + "WHERE w.organization_id = ? GROUP BY s.product_id",
+                rs -> { onHand.put(rs.getLong(1), rs.getBigDecimal(2)); }, CurrentUser.orgId());
+        return repo.search(CurrentUser.orgId(), like, all).stream().map(p -> ProductDto.of(p, onHand.get(p.getId()))).toList();
     }
 
     /** The next auto item code, so the create form can pre-fill it (editable). */
@@ -87,6 +105,7 @@ public class ProductController {
         p.setNumber(number);
         p.setName(name);
         p.setUnitPrice(dto.unitPrice());
+        applyStockFields(p, dto);
         repo.save(p);
         audit.record(orgId, "PRODUCT_CREATED", "product", p.getId(), p.getNumber() + " " + name + " @ " + p.getUnitPrice());
         return ProductDto.of(p);
@@ -107,6 +126,7 @@ public class ProductController {
         }
         p.setName(name);
         p.setUnitPrice(dto.unitPrice());
+        applyStockFields(p, dto);
         p.setActive(active);
         audit.record(p.getOrganizationId(), "PRODUCT_UPDATED", "product", p.getId(), name + " @ " + p.getUnitPrice());
         return ProductDto.of(p);
@@ -118,7 +138,10 @@ public class ProductController {
     @Transactional
     DeleteResult delete(@PathVariable Long id) {
         Product p = load(id);
-        if (repo.usedOnInvoices(p.getId())) {
+        boolean hasStockHistory = Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM stock_movement WHERE product_id = ?) OR EXISTS (SELECT 1 FROM delivery_note_line WHERE product_id = ?)",
+                Boolean.class, p.getId(), p.getId()));
+        if (repo.usedOnInvoices(p.getId()) || hasStockHistory) {
             p.setActive(false);
             audit.record(p.getOrganizationId(), "PRODUCT_DEACTIVATED", "product", p.getId(), p.getName());
             return new DeleteResult("deactivated");
@@ -126,6 +149,13 @@ public class ProductController {
         repo.delete(p);
         audit.record(p.getOrganizationId(), "PRODUCT_DELETED", "product", p.getId(), p.getName());
         return new DeleteResult("deleted");
+    }
+
+    private static void applyStockFields(Product p, ProductDto dto) {
+        if (dto.trackStock() != null) p.setTrackStock(dto.trackStock());
+        p.setCostPrice(dto.costPrice());
+        p.setLowStockThreshold(dto.lowStockThreshold());
+        if (dto.unitCode() != null && !dto.unitCode().isBlank()) p.setUnitCode(dto.unitCode().trim().toUpperCase());
     }
 
     private String generateNumber(Long orgId) {

@@ -88,8 +88,8 @@ export default function LoginPage() {
                 <LockKeyhole className="size-5" aria-hidden />
               </span>
             )}
-            <h1 className="text-xl font-semibold">{t("Invoice Portal")}</h1>
-            <p className="mt-1 text-sm text-muted">{t("ZATCA e-invoicing · staff access only")}</p>
+            <h1 className="text-xl font-semibold">{t("SoudaCore ERP")}</h1>
+            <p className="mt-1 text-sm text-muted">{t("BIP Gulf Logistics · staff access only")}</p>
           </div>
           <div className="rounded-xl border border-line bg-white p-5 shadow-sm sm:p-6">
             {/* The same height as the form, so the page doesn't jump when it appears. */}

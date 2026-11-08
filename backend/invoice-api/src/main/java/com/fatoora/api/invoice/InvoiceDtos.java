@@ -44,7 +44,8 @@ public final class InvoiceDtos {
             String reason,
             String internalNote,
             LocalDate dueDate,
-            @NotEmpty List<@Valid LineDto> lines) {}
+            @NotEmpty List<@Valid LineDto> lines,
+            Long warehouseId) {}
 
     public record IssueRequest(SendMode sendMode) {}
 
@@ -76,7 +77,8 @@ public final class InvoiceDtos {
             BigDecimal paidAmount, BigDecimal dueAmount, BigDecimal overpaidAmount, PaymentStatus paymentStatus,
             List<PaymentService.PaymentDto> payments,
             // Signed by a sandbox or simulation device: not a legal invoice, so it may be deleted.
-            boolean test) {}
+            boolean test,
+            Long warehouseId) {}
 
     public record Dashboard(
             long drafts, long awaitingSubmission, long rejected, BigDecimal issuedThisMonth,

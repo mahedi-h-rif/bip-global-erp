@@ -27,6 +27,8 @@ import {
   UserCog,
   Users,
   Wallet,
+  Boxes,
+  Truck,
   X,
 } from "lucide-react";
 import { api, fetcher } from "@/lib/api";
@@ -52,6 +54,11 @@ const nav: NavItem[] = [
   { href: "/pad", label: "Letterhead pad", icon: NotebookPen },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
+];
+
+const inventoryNav: NavItem[] = [
+  { href: "/inventory", label: "Stock & warehouses", icon: Boxes },
+  { href: "/delivery-notes", label: "Delivery notes", icon: Truck },
 ];
 
 const dueNav: NavItem[] = [
@@ -185,7 +192,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ) : (
     <ShieldCheck className="size-6 shrink-0" aria-hidden />
   );
-  const name = org?.legalNameEn || org?.legalNameAr || t("Invoice Portal");
+  const name = org?.legalNameEn || org?.legalNameAr || t("SoudaCore ERP");
   const arabicName = org?.legalNameEn && org.legalNameAr ? org.legalNameAr : null;
   const tools = !isBranch && (
     <>
@@ -258,6 +265,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {!isBranch && <>
           {isAdmin && link(dashboardNav)}
           {nav.map(link)}
+          {heading("Inventory")}
+          {inventoryNav.map(link)}
           {heading("Due")}
           {dueNav.map(link)}
           {heading("Workforce")}

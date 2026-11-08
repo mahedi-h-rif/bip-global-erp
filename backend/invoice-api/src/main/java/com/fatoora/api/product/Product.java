@@ -24,6 +24,11 @@ public class Product {
     private String name;
     private BigDecimal unitPrice;
     private boolean active = true;
+    /** Goods carry stock per warehouse; services (the default) never do. */
+    private boolean trackStock;
+    private BigDecimal costPrice;
+    private BigDecimal lowStockThreshold;
+    private String unitCode = "PCE";
     private Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 

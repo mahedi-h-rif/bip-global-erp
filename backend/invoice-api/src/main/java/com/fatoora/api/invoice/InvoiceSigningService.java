@@ -50,10 +50,12 @@ public class InvoiceSigningService {
     private final JdbcTemplate jdbc;
     private final JsonMapper json;
     private final FatooraProperties props;
+    private final com.fatoora.api.inventory.StockService stock;
 
     public InvoiceSigningService(InvoiceRepository invoices, OrganizationRepository orgs, CustomerRepository customers,
                                  EgsUnitRepository units, EgsService egs, JdbcTemplate jdbc, JsonMapper json,
-                                 FatooraProperties props) {
+                                 FatooraProperties props, com.fatoora.api.inventory.StockService stock) {
+        this.stock = stock;
         this.invoices = invoices;
         this.orgs = orgs;
         this.customers = customers;
@@ -90,6 +92,9 @@ public class InvoiceSigningService {
         SigningMaterial material = egs.signingMaterial(unit.getId());
         checkCertificateVat(material, seller, unit);
 
+        // Stock first: if a tracked product is short, nothing (number, ICV, hash) has been consumed yet.
+        stock.onIssue(inv, actor());
+
         LocalDateTime issueTime = LocalDateTime.now(InvoiceApiApplication.KSA).truncatedTo(ChronoUnit.SECONDS);
         String number = nextNumber(org, inv.getType(), issueTime.getYear());
         long icv = unit.getIcv() + 1;
@@ -107,6 +112,7 @@ public class InvoiceSigningService {
 
         Instant issuedAt = issueTime.atZone(InvoiceApiApplication.KSA).toInstant();
         inv.setNumber(number);
+        stock.labelInvoiceMovements(inv.getId(), number);
         inv.setUuid(doc.uuid());
         inv.setIssuedAt(issuedAt);
         inv.setSupplyDate(doc.supplyDate());
@@ -208,6 +214,14 @@ public class InvoiceSigningService {
             problems.add(who + " postal code must be 5 digits");
         if (who.equals("Customer") && problems.stream().anyMatch(p -> p.startsWith("Customer")))
             problems.add("Fill in the customer's \"National address for B2B tax invoices\" section");
+    }
+
+    private static String actor() {
+        try {
+            return com.fatoora.api.auth.CurrentUser.get().email();
+        } catch (IllegalStateException e) {
+            return "system";
+        }
     }
 
     private static boolean blank(String s) {
