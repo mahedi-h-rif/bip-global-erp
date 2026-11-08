@@ -24,6 +24,7 @@ import {
   Settings,
   ShieldCheck,
   UserRound,
+  UserCog,
   Users,
   Wallet,
   X,
@@ -89,6 +90,7 @@ const branchNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { href: "/settings", label: "Company", icon: Settings, exact: true },
+  { href: "/settings/users", label: "Users", icon: UserCog },
   { href: "/settings/agreement", label: "Agreement template", icon: FileSignature },
   { href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/settings/audit", label: "Audit log", icon: ScrollText },

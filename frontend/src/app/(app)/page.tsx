@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { AlertTriangle, Clock, FilePen, Plus, ShieldAlert, TrendingUp } from "lucide-react";
 import { fetcher } from "@/lib/api";
-import type { AccountMonth, Dashboard, Me } from "@/lib/types";
-import { countdown, date, money, todayKsa, typeLabel } from "@/lib/format";
+import type { AccountMonth, Dashboard, Me, UserMonth } from "@/lib/types";
+import { countdown, date, dateTime, money, todayKsa, typeLabel } from "@/lib/format";
+import { roleLabel } from "@/lib/roles";
 import { Alert, ButtonLink, Card, CardHeader, Empty, PageHeader, Spinner } from "@/components/ui";
 import { SalesReportPanel } from "@/components/sales-report";
 import { Trans, useT } from "@/lib/i18n";
@@ -90,7 +91,12 @@ export default function DashboardPage() {
             ))}
           </div>
         </Card>
-      ) : <SalesReportPanel />}
+      ) : (
+        <>
+          <SalesReportPanel />
+          <UsersThisMonth />
+        </>
+      )}
 
       <Card className="mt-6">
         <CardHeader
@@ -124,5 +130,47 @@ export default function DashboardPage() {
         )}
       </Card>
     </>
+  );
+}
+
+/** The admin's view of every login this month: invoices issued and their value, quotations and actions. */
+function UsersThisMonth() {
+  const t = useT();
+  const { data } = useSWR<UserMonth[]>("/users/this-month", fetcher, { refreshInterval: 60_000 });
+  if (!data || data.length === 0) return null;
+  return (
+    <Card className="mt-6">
+      <CardHeader title={t("This month by user")} subtitle={t("What each login issued and did this month; open a user for their full history")}
+        action={<Link className="text-sm font-medium text-brand hover:underline" href="/settings/users">{t("Users")}</Link>} />
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-xs text-muted">
+              <th className="px-4 py-2.5 text-start font-medium">{t("User")}</th>
+              <th className="px-4 py-2.5 text-end font-medium">{t("Invoices")}</th>
+              <th className="px-4 py-2.5 text-end font-medium">{t("Invoiced")}</th>
+              <th className="px-4 py-2.5 text-end font-medium">{t("Quotations")}</th>
+              <th className="px-4 py-2.5 text-end font-medium">{t("Actions")}</th>
+              <th className="px-4 py-2.5 text-start font-medium">{t("Last active")}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {data.map((u) => (
+              <tr key={u.id} className={u.enabled ? "" : "opacity-60"}>
+                <td className="px-4 py-2.5">
+                  <Link href={`/settings/users/${u.id}`} className="font-medium text-brand hover:underline">{u.fullName}</Link>
+                  <span className="ms-2 text-xs text-muted">{t(roleLabel(u.role))}</span>
+                </td>
+                <td className="tabular px-4 py-2.5 text-end">{u.invoices}</td>
+                <td className="tabular px-4 py-2.5 text-end">{money(u.issued)}</td>
+                <td className="tabular px-4 py-2.5 text-end">{u.quotations}</td>
+                <td className="tabular px-4 py-2.5 text-end">{u.actions}</td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-muted">{u.lastActiveAt ? dateTime(u.lastActiveAt) : "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

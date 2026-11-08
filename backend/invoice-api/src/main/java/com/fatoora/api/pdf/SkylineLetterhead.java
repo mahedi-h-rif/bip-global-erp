@@ -27,8 +27,11 @@ public final class SkylineLetterhead {
 
     public static final String NAVY = "#163A5C", BLUE = "#0071B5", RED = "#ED1B24";
 
-    /** Page margins (mm). The body stays between the header rule and the skyline's dense lower half. */
-    static final int TOP = 41, BOTTOM = 46, SIDE = 15;
+    /**
+     * Page margins (mm). The body runs from under the header rule down to just above the footer band; the skyline
+     * is faded enough to sit behind text.
+     */
+    static final int TOP = 41, BOTTOM = 25, SIDE = 15;
 
     private static final String BACKDROP = dataUri("page-skyline.png");
     private static final String PHONE = dataUri("icon-phone.png");
@@ -63,6 +66,7 @@ public final class SkylineLetterhead {
                 #sky-footer .pageno { font-size: 7pt; color: #7a8799; }
                 #sky-footer .pageno::after { content: "Page " counter(page) " / " counter(pages); }
                 #sky-watermark { position: fixed; left: 0; width: %dmm; text-align: center; }
+                h1, h2, h3 { page-break-after: avoid; }
                 .sky-ref { width: 100%%; border-collapse: collapse; margin: 0 0 14px 0; }
                 .sky-ref td { font-size: 8.8pt; color: #4b5668; padding: 0 4px; vertical-align: bottom; white-space: nowrap; }
                 .sky-ref td.blank { border-bottom: 1px dotted #9aa3b5; width: 30%%; }

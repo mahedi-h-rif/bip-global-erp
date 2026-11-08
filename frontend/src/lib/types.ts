@@ -305,6 +305,45 @@ export interface Dashboard {
   certificates: { egsUnitId: number; name: string; expiresAt: string; daysLeft: number }[];
 }
 
+export type UserRole = "OPERATOR" | "ADMIN" | "ACCOUNTANT" | "VIEWER" | "BRANCH";
+
+/** A login of the company, for the admin's Users page. */
+export interface AppUserRow {
+  id: number;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  enabled: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  /** Audit-log entries this month. */
+  actionsThisMonth: number;
+  lastActiveAt: string | null;
+}
+
+/** One login's totals: records created by kind, and this month's invoices, value and quotations. */
+export interface UserActivity {
+  user: AppUserRow;
+  created: Record<string, number>;
+  invoicesThisMonth: number;
+  issuedThisMonth: number;
+  quotationsThisMonth: number;
+}
+
+/** One login's month on the admin dashboard. */
+export interface UserMonth {
+  id: number;
+  fullName: string;
+  email: string;
+  role: UserRole;
+  enabled: boolean;
+  invoices: number;
+  issued: number;
+  quotations: number;
+  actions: number;
+  lastActiveAt: string | null;
+}
+
 export interface AuditEntry {
   id: number;
   actor: string;

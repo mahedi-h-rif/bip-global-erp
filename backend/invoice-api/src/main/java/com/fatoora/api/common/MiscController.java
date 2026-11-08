@@ -40,7 +40,13 @@ public class MiscController {
 
     @GetMapping("/audit")
     @PreAuthorize("hasRole('ADMIN')")
-    Page<AuditLog> audit(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
-        return audit.list(CurrentUser.orgId(), page, size);
+    Page<AuditLog> audit(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size,
+                         @RequestParam(required = false) String actor, @RequestParam(required = false) String q,
+                         @RequestParam(required = false) java.time.LocalDate from,
+                         @RequestParam(required = false) java.time.LocalDate to) {
+        var ksa = com.fatoora.api.InvoiceApiApplication.KSA;
+        return audit.list(CurrentUser.orgId(), actor, q,
+                from == null ? null : from.atStartOfDay(ksa).toInstant(),
+                to == null ? null : to.plusDays(1).atStartOfDay(ksa).toInstant(), page, size);
     }
 }

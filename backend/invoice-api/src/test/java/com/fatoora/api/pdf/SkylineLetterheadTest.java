@@ -94,6 +94,31 @@ class SkylineLetterheadTest {
     }
 
     @Test
+    void everyStyleRendersTheBody() throws Exception {
+        Organization org = org();
+        for (String style : new String[]{"CLASSIC", "MODERN", "SKYLINE"}) {
+            org.setLetterheadStyle(style);
+            byte[] pdf = new LetterheadPdf().render(org, "Quotation", "<h1>Quotation Q-7</h1><p>Body text here.</p>"
+                    + LetterheadPdf.signatures(org, "Client"));
+            save("style-" + style.toLowerCase() + ".pdf", pdf);
+            try (var doc = Loader.loadPDF(pdf)) {
+                String text = new PDFTextStripper().getText(doc);
+                assertTrue(text.contains("Quotation Q-7") && text.contains("Body text here."), style);
+            }
+        }
+    }
+
+    @Test
+    void skylineBodyFillsDownToTheFooterBand() throws Exception {
+        Organization org = org();
+        // 34 paragraphs need the space down to the footer band (they overflowed the old 46 mm bottom margin).
+        String body = "<p>Line of body text to fill the page.</p>".repeat(34);
+        try (var doc = Loader.loadPDF(new LetterheadPdf().render(org, "t", body))) {
+            assertEquals(1, doc.getNumberOfPages());
+        }
+    }
+
+    @Test
     void wordPadHasTheLetterhead() throws Exception {
         Organization org = org();
         byte[] blank = com.fatoora.api.pad.PadWord.build(org, null, null);

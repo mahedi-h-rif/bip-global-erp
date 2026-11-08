@@ -33,7 +33,7 @@ import java.util.function.Supplier;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain api(HttpSecurity http, JwtService jwt) throws Exception {
+    SecurityFilterChain api(HttpSecurity http, JwtService jwt, com.fatoora.api.user.AppUserRepository users) throws Exception {
         http
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .csrf(csrf -> csrf.spa())
@@ -52,7 +52,7 @@ public class SecurityConfig {
                         // Signed in; a branch login is further held to its own areas (see BRANCH_ALLOWED).
                         .requestMatchers("/api/v1/**").access(SecurityConfig::branchScope)
                         .anyRequest().denyAll())
-                .addFilterBefore(new JwtCookieFilter(jwt), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtCookieFilter(jwt, users), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

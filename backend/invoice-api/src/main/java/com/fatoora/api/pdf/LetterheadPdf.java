@@ -251,7 +251,8 @@ public class LetterheadPdf {
                 InvoicePdfService.esc(nz(org.getCity())),
                 addr, reg, contactLine,
                 watermark(org),
-                landmark(color));
+                landmark(color),
+                bodyHtml);
     }
 
     /** A faint landmark line illustration (date palms, a mosque and towers) in the brand colour, as a PNG. */

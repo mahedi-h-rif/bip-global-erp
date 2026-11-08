@@ -5,7 +5,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 /** The authenticated staff member, resolved from the session cookie on every request. */
-public record CurrentUser(Long userId, Long organizationId, String email, AppUser.Role role) {
+public record CurrentUser(Long userId, Long organizationId, String email, AppUser.Role role) implements java.security.Principal {
+
+    /** The login email: what the audit log and "created by" record. */
+    @Override
+    public String getName() {
+        return email;
+    }
 
     public static CurrentUser get() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

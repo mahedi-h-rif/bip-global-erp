@@ -71,7 +71,7 @@ public class AuthController {
         }
         limiter.succeeded(key);
         user.setLastLoginAt(Instant.now());
-        audit.record(user.getOrganizationId(), "LOGIN", "user", user.getId(), null);
+        audit.recordAs(user.getEmail(), user.getOrganizationId(), "LOGIN", "user", user.getId(), null);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie(jwt.issue(user), jwt.ttl()).toString())

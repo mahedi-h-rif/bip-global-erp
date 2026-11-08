@@ -67,7 +67,7 @@ final class SkylineWord {
         size.setH(BigInteger.valueOf(16838));
         CTPageMar mar = sect.isSetPgMar() ? sect.getPgMar() : sect.addNewPgMar();
         mar.setTop(twips(41));
-        mar.setBottom(twips(46));
+        mar.setBottom(twips(25));
         mar.setLeft(twips(15));
         mar.setRight(twips(15));
         mar.setHeader(twips(8));

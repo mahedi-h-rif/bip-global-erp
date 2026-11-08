@@ -50,6 +50,8 @@ tasks.withType<Test> {
     useJUnitPlatform()
     // End-to-end tests call ZATCA's developer sandbox; run them with -Dzatca.live=true
     systemProperty("zatca.live", System.getProperty("zatca.live", "false"))
+    // Tests against a local PostgreSQL (no ZATCA): run them with -Ddb.it=true
+    systemProperty("db.it", System.getProperty("db.it", "false"))
     testLogging { events("passed", "failed", "skipped"); showStandardStreams = true }
 }
 
