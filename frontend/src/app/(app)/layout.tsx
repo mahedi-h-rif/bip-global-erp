@@ -28,6 +28,8 @@ import {
   Users,
   Wallet,
   Boxes,
+  IdCard,
+  WalletCards as Wallet2,
   Truck,
   ShoppingCart,
   PackageCheck,
@@ -87,6 +89,8 @@ const dueNav: NavItem[] = [
 ];
 
 const workforceNav: NavItem[] = [
+  { href: "/hr", label: "HR", icon: IdCard },
+  { href: "/payroll", label: "Payroll", icon: Wallet2 },
   { href: "/workers", label: "Workers", icon: HardHat },
   { href: "/documents", label: "Documents", icon: FolderLock },
 ];

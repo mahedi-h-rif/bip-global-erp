@@ -1054,3 +1054,55 @@ export interface InventoryAudit {
   closingQty: number;
   closingValue: number;
 }
+
+// --- HR & payroll -------------------------------------------------------------------------------
+
+export interface Employee {
+  id?: number;
+  code?: string;
+  name: string;
+  nameAr?: string | null;
+  nationality?: string;
+  idNumber?: string | null;
+  idExpiry?: string | null;
+  passportNumber?: string | null;
+  passportExpiry?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  joinDate: string;
+  endDate?: string | null;
+  status?: "ACTIVE" | "TERMINATED";
+  phone?: string | null;
+  email?: string | null;
+  bankName?: string | null;
+  iban?: string | null;
+  basic: number | string;
+  housing?: number | string;
+  transport?: number | string;
+  otherAllowance?: number | string;
+  gosiPct?: number | string | null;
+  annualLeaveDays?: number | string;
+  notes?: string | null;
+  grossSalary?: number;
+  leaveBalance?: number;
+  advanceOutstanding?: number;
+  idExpiresInDays?: number | null;
+  passportExpiresInDays?: number | null;
+}
+
+export interface LeaveEntry { id?: number; employeeId: number; employeeName?: string; type: "ANNUAL" | "SICK" | "UNPAID" | "OTHER"; startDate: string; endDate: string; days?: number; notes?: string | null }
+export interface Holiday { id?: number; date: string; name: string }
+export interface SalaryAdvance { id?: number; employeeId: number; employeeName?: string; date?: string; amount: number | string; installment: number | string; notes?: string | null; repaid?: number; outstanding?: number }
+
+export interface PayrollLine {
+  id: number; employeeId: number; employeeCode: string; employeeName: string; jobTitle: string | null; iban: string | null;
+  basic: number; housing: number; transport: number; otherAllowance: number; overtime: number; additions: number; gosi: number;
+  advanceDeduction: number; unpaidLeaveDays: number; unpaidLeaveDeduction: number; otherDeductions: number; daysWorked: number;
+  gross: number; deductions: number; net: number; notes: string | null;
+}
+
+export interface PayrollRun {
+  id: number; number: string; year: number; month: number; status: "DRAFT" | "APPROVED" | "PAID"; paymentMethod: string | null;
+  approvedBy: string | null; approvedAt: string | null; paidBy: string | null; paidAt: string | null; createdBy: string; createdAt: string;
+  totalGross: number; totalDeductions: number; totalNet: number; lines: PayrollLine[];
+}
