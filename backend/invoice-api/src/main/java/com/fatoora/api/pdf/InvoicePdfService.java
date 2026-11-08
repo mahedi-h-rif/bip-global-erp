@@ -167,7 +167,8 @@ public class InvoicePdfService {
         InvoiceTotals totals = InvoiceTotals.of(inv.getLines().stream().map(InvoiceLineEntity::toModel).toList());
         var issued = inv.getIssuedAt().atZone(InvoiceApiApplication.KSA);
         String[] title = title(inv.getKind(), inv.getType());
-        String color = org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor();
+        boolean skyline = LetterheadPdf.isSkyline(org);
+        String color = skyline ? SkylineLetterhead.NAVY : org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor();
         String cur = esc(inv.getCurrency());
 
         StringBuilder rows = new StringBuilder();
@@ -210,7 +211,7 @@ public class InvoicePdfService {
                 <html><head><meta charset="UTF-8"/>
                 <title>%s</title>
                 <style>
-                  @page { size: A4; margin: 14mm 12mm; }
+                  %s
                   * { font-family: 'Plex'; }
                   body { font-size: 9pt; color: #1b2233; }
                   table { width: 100%%; border-collapse: collapse; }
@@ -245,17 +246,7 @@ public class InvoicePdfService {
                   .foot { margin-top: 18px; font-size: 7pt; color: #8a91a3; }
                 </style></head>
                 <body>
-                  <table class="head"><tr>
-                    %s
-                    <td>
-                      <div class="brand-en">%s</div>
-                      %s
-                    </td>
-                    <td class="rtl">
-                      <div class="brand-ar">%s</div>
-                      <div class="muted">%s</div>
-                    </td>
-                  </tr></table>
+                  %s
 
                   <table class="title"><tr>
                     <td>%s</td>
@@ -297,13 +288,10 @@ public class InvoicePdfService {
                 </body></html>
                 """.formatted(
                 esc(inv.getNumber()),
+                // On the SKYLINE letterhead the page chrome (header, footer, backdrop) carries the company identity.
+                skyline ? SkylineLetterhead.css() + " body { margin: 0; }" : "@page { size: A4; margin: 14mm 12mm; }",
                 color, color, color, color, color, color,
-                logo(org),
-                esc(brandEn),
-                contact(org),
-                // The registration name (Arabic when there is one); not repeated when it is the English name.
-                esc(brandEn.equals(seller.name()) ? null : seller.name()),
-                esc(nz(seller.address() == null ? null : seller.address().city())),
+                skyline ? SkylineLetterhead.chrome(org) : classicHead(org, seller, brandEn),
                 title[1], title[0],
                 meta,
                 party("Seller", "البائع", seller, org.getLegalNameEn()), buyerBlock,
@@ -313,6 +301,28 @@ public class InvoicePdfService {
                 money(totals.vatTotal()), cur,
                 money(totals.taxInclusive()), cur,
                 inv.getUuid(), inv.getIcv(), esc(inv.getInvoiceHash()));
+    }
+
+    /** The classic invoice header: logo, English name and contacts, then the registration name and city. */
+    private static String classicHead(Organization org, Party seller, String brandEn) {
+        return """
+                <table class="head"><tr>
+                  %s
+                  <td>
+                    <div class="brand-en">%s</div>
+                    %s
+                  </td>
+                  <td class="rtl">
+                    <div class="brand-ar">%s</div>
+                    <div class="muted">%s</div>
+                  </td>
+                </tr></table>""".formatted(
+                logo(org),
+                esc(brandEn),
+                contact(org),
+                // The registration name (Arabic when there is one); not repeated when it is the English name.
+                esc(brandEn.equals(seller.name()) ? null : seller.name()),
+                esc(nz(seller.address() == null ? null : seller.address().city())));
     }
 
     static String[] title(InvoiceKind kind, DocumentType type) {

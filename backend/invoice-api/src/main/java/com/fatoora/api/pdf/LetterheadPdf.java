@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Company letterhead for quotations and agreements (not ZATCA documents): the logo and names in a header,
+ * Company letterhead for quotations, agreements, pads and reports: the logo and names in a header,
  * a faint logo watermark and a footer with address, registration and contact details on every page.
  */
 @Component
@@ -36,7 +36,17 @@ public class LetterheadPdf {
 
     /** Renders {@code bodyHtml} (well-formed XHTML, already escaped) on the letterhead. */
     public byte[] render(Organization org, String title, String bodyHtml) {
+        return render(org, title, bodyHtml, false);
+    }
+
+    /**
+     * {@code letter}: a letter on the pad, which on the SKYLINE letterhead starts with "Ref. No. / Date" lines
+     * to fill in.
+     */
+    public byte[] render(Organization org, String title, String bodyHtml, boolean letter) {
         String color = org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor();
+        if (isSkyline(org))
+            return toPdf(skylineHtml(org, title, (letter ? SkylineLetterhead.refLine() : "") + bodyHtml));
         if ("MODERN".equalsIgnoreCase(org.getLetterheadStyle()))
             return toPdf(modernHtml(org, title, bodyHtml, color));
         String html = """
@@ -108,6 +118,34 @@ public class LetterheadPdf {
                 bodyHtml);
 
         return toPdf(html);
+    }
+
+    public static boolean isSkyline(Organization org) {
+        return "SKYLINE".equalsIgnoreCase(org.getLetterheadStyle());
+    }
+
+    /** The SKYLINE letterhead around {@code bodyHtml}; see {@link SkylineLetterhead}. */
+    private static String skylineHtml(Organization org, String title, String bodyHtml) {
+        return """
+                <!DOCTYPE html>
+                <html><head><meta charset="UTF-8"/>
+                <title>%s</title>
+                <style>
+                  %s
+                  * { font-family: 'Plex'; }
+                  body { margin: 0; font-size: 9.5pt; color: #1b2233; line-height: 1.45; }
+                  table { width: 100%%; border-collapse: collapse; }
+                  .rtl { direction: rtl; text-align: right; }
+                  h1 { font-size: 15pt; color: %s; margin: 0 0 2px 0; }
+                  h2 { font-size: 10.5pt; color: %s; margin: 12px 0 3px 0; }
+                  p { margin: 0 0 6px 0; }
+                  .muted { color: #5a6275; }
+                  .brand { color: %s; }
+                </style></head>
+                <body>%s%s</body></html>
+                """.formatted(InvoicePdfService.esc(title), SkylineLetterhead.css(),
+                SkylineLetterhead.NAVY, SkylineLetterhead.BLUE, SkylineLetterhead.NAVY,
+                SkylineLetterhead.chrome(org), bodyHtml);
     }
 
     private byte[] toPdf(String html) {

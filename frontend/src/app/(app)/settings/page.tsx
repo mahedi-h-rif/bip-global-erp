@@ -142,12 +142,18 @@ function CompanyForm({ initial, provider, onSaved }: {
           <CardHeader title={t("Branding, numbering & contact")} />
           <div className="grid gap-4 p-5 md:grid-cols-4">
             <Field label={t("Brand colour")}><Input type="color" className="h-10 p-1" value={org.brandColor} onChange={set("brandColor")} /></Field>
-            <Field label={t("Letterhead design")} hint={t("For quotations and agreements")}>
+            <Field label={t("Letterhead design")} hint={t("Pads, quotations, agreements and reports")}>
               <Select value={org.letterheadStyle} onChange={set("letterheadStyle")}>
                 <option value="CLASSIC">{t("Classic")}</option>
                 <option value="MODERN">{t("Modern (themed backdrop)")}</option>
+                <option value="SKYLINE">{t("Skyline (line-art city, also on invoices)")}</option>
               </Select>
             </Field>
+            {org.letterheadStyle === "SKYLINE" && (
+              <Field label={t("Slogan")} optional hint={t("Printed under the company name on the Skyline letterhead")} className="md:col-span-2">
+                <Input maxLength={160} value={org.tagline ?? ""} onChange={set("tagline")} placeholder="Engineering Tomorrow, Building Trust Today" />
+              </Field>
+            )}
             <Field label={t("Invoice prefix")}><Input required value={org.invoicePrefix} onChange={set("invoicePrefix")} /></Field>
             <Field label={t("Credit note prefix")}><Input required value={org.creditNotePrefix} onChange={set("creditNotePrefix")} /></Field>
             <Field label={t("Debit note prefix")}><Input required value={org.debitNotePrefix} onChange={set("debitNotePrefix")} /></Field>

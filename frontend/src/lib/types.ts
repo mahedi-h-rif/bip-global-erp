@@ -264,7 +264,9 @@ export interface Organization {
   signatoryName: string | null;
   signatoryTitle: string | null;
   brandColor: string;
-  letterheadStyle: "CLASSIC" | "MODERN";
+  letterheadStyle: "CLASSIC" | "MODERN" | "SKYLINE";
+  /** Slogan under the company name on the Skyline letterhead. */
+  tagline: string | null;
   logoUrl: string | null;
   invoicePrefix: string;
   creditNotePrefix: string;

@@ -36,8 +36,13 @@ public class Organization {
     private String email;
     private String website;
     private String brandColor = "#0B2A6F";
-    /** Letterhead design for quotations and agreements: CLASSIC (the original) or MODERN (themed backdrop). */
+    /**
+     * Letterhead design: CLASSIC (the original), MODERN (themed backdrop) or SKYLINE (line-art skyline,
+     * also used on invoices).
+     */
     private String letterheadStyle = "CLASSIC";
+    /** A short slogan under the Arabic name on the SKYLINE letterhead, e.g. "Engineering Tomorrow, Building Trust Today". */
+    private String tagline;
     private String logoUrl;
     /** Base64-encoded PNG or JPEG. */
     private String logo;

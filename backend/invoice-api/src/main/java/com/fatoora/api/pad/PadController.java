@@ -61,7 +61,7 @@ public class PadController {
     @GetMapping("/blank/pdf")
     ResponseEntity<byte[]> blankPdf() {
         Organization org = org();
-        return file(letterhead.render(org, "Letterhead", ""), "letterhead-pad.pdf", MediaType.APPLICATION_PDF, true);
+        return file(letterhead.render(org, "Letterhead", "", true), "letterhead-pad.pdf", MediaType.APPLICATION_PDF, true);
     }
 
     @GetMapping("/blank/docx")
@@ -134,7 +134,7 @@ public class PadController {
         String heading = title == null || title.isBlank() ? ""
                 : "<h1 style=\"text-align:center\">" + LetterheadPdf.esc(title.strip()) + "</h1>";
         return letterhead.render(org(), title == null || title.isBlank() ? "Letter" : title.strip(),
-                heading + "<div style=\"font-size:11pt; line-height:1.5\">" + PadHtml.xhtml(body) + "</div>");
+                heading + "<div style=\"font-size:11pt; line-height:1.5\">" + PadHtml.xhtml(body) + "</div>", true);
     }
 
     private static void apply(PadDocument p, PadRequest req) {

@@ -302,6 +302,7 @@ function Sep() {
 
 /** The letterhead header as it prints: logo, English name and contacts, Arabic name. */
 export function PadHeader({ org }: { org?: Organization }) {
+  if (org?.letterheadStyle === "SKYLINE") return <SkylineHeader org={org} />;
   const color = org?.brandColor || "#0B2A6F";
   return (
     <div className="select-none px-6 pt-6 md:px-[60px]" contentEditable={false}>
@@ -324,6 +325,7 @@ export function PadHeader({ org }: { org?: Organization }) {
 }
 
 function PadFooter({ org }: { org?: Organization }) {
+  if (org?.letterheadStyle === "SKYLINE") return <SkylineFooter org={org} />;
   const color = org?.brandColor || "#0B2A6F";
   const ids = [
     org?.buildingNumber ? `Bldg ${org.buildingNumber}` : null,
@@ -336,6 +338,94 @@ function PadFooter({ org }: { org?: Organization }) {
       <div className="border-t-2 pt-1.5 text-[10px] leading-snug text-[#5a6275]" style={{ borderColor: color }}>
         <div dir="rtl" className="text-left">{[org?.street, org?.district, org?.city].filter(Boolean).join("، ")}</div>
         <div>{ids}</div>
+      </div>
+    </div>
+  );
+}
+
+// --- the SKYLINE letterhead (same artwork as the PDF and Word files) ---------------------------------
+
+const SKY = { navy: "#163A5C", blue: "#0071B5", red: "#ED1B24" };
+
+/** The blue, red and navy stripe along the top and above the footer band. */
+function SkyStripe() {
+  return (
+    <div className="flex h-[5px] gap-[5px]" aria-hidden>
+      <div className="h-full basis-[70.5%]" style={{ background: SKY.blue }} />
+      <div className="h-full basis-[6.7%]" style={{ background: SKY.red }} />
+      <div className="h-full flex-1" style={{ background: SKY.navy }} />
+    </div>
+  );
+}
+
+function SkylineHeader({ org }: { org: Organization }) {
+  const ar = org.legalNameAr?.trim();
+  const tagline = org.tagline?.trim() || (ar ? org.legalNameEn : null);
+  const contacts = [
+    { v: org.phone, icon: "icon-phone.png" },
+    { v: org.email, icon: "icon-mail.png" },
+    { v: org.website, icon: "icon-web.png" },
+  ].filter((c) => c.v);
+  return (
+    <div className="select-none" contentEditable={false}>
+      <SkyStripe />
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3 px-6 pt-5 md:px-[56px]">
+        <div className="min-w-0">
+          <div dir={ar ? "rtl" : undefined} className="text-left text-lg font-bold leading-tight sm:text-xl" style={{ color: SKY.navy }}>
+            {ar || org.legalNameEn}
+          </div>
+          {tagline && <div className="mt-1 whitespace-pre-line text-[11px] font-bold leading-snug sm:text-xs" style={{ color: SKY.blue }}>{tagline}</div>}
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/api/v1/organization/logo" alt="" className="h-16 w-auto max-w-[120px] object-contain sm:h-20 sm:max-w-[150px]" onError={(e) => (e.currentTarget.style.display = "none")} />
+        <div className="hidden min-w-0 space-y-1.5 pt-1 text-right text-[11px] font-bold sm:block" style={{ color: SKY.navy }}>
+          {contacts.map((c) => (
+            <div key={c.icon} className="flex items-center justify-end gap-1.5">
+              <span className="truncate">{c.v}</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/letterhead/${c.icon}`} alt="" className="h-3 w-auto" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="relative mx-6 mt-2 h-4 md:mx-[56px]" aria-hidden>
+        <div className="absolute inset-x-0 top-1/2 border-t border-slate-300" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/letterhead/ornament.png" alt="" className="absolute left-1/2 top-1/2 h-3 -translate-x-1/2 -translate-y-1/2 bg-white px-1" />
+      </div>
+      <div className="flex items-end gap-2 px-6 pt-3 text-[11px] text-[#4b5668] md:px-[60px]">
+        <span>Ref. No.</span><span className="flex-1 border-b border-dotted border-slate-400" /><span dir="rtl">الرقم</span>
+        <span className="w-6 sm:w-10" />
+        <span>Date</span><span className="flex-1 border-b border-dotted border-slate-400" /><span dir="rtl">التاريخ</span>
+      </div>
+    </div>
+  );
+}
+
+function SkylineFooter({ org }: { org: Organization }) {
+  const city = org.city ?? "";
+  const arabicCity = /[؀-ۿ]/.test(city);
+  const numbers = [
+    org.buildingNumber ? `Bldg ${org.buildingNumber}` : null,
+    org.postalCode ? `Postal Code ${org.postalCode}` : null,
+    !city || arabicCity ? "KSA" : `${city}, KSA`,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="select-none" contentEditable={false}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/letterhead/skyline.png" alt="" className="block w-full" aria-hidden />
+      <SkyStripe />
+      <div className="flex items-start gap-3 bg-[#e4eef7] px-6 py-4 text-[11px] leading-relaxed text-[#3c4a5e] md:px-[56px]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/letterhead/icon-pin.png" alt="" className="mt-0.5 h-4 w-auto" />
+        <div className="min-w-0 flex-1">
+          <div dir="rtl" className="text-left">{[org.street, org.district, org.city].filter(Boolean).join("، ")}</div>
+          <div>{numbers}</div>
+        </div>
+        <div className="shrink-0 border-l border-[#9fb6cc] pl-3 text-right">
+          <div><b style={{ color: SKY.navy }}>VAT</b> {org.vatNumber}</div>
+          <div><b style={{ color: SKY.navy }}>CR</b> {org.otherId}</div>
+        </div>
       </div>
     </div>
   );

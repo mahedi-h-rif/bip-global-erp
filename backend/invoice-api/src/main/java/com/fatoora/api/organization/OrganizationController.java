@@ -7,6 +7,7 @@ import com.fatoora.zatca.ZatcaEnvironment;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
@@ -42,7 +43,8 @@ public class OrganizationController {
             String signatoryName,
             String signatoryTitle,
             @Pattern(regexp = "#[0-9A-Fa-f]{6}") String brandColor,
-            @Pattern(regexp = "CLASSIC|MODERN") String letterheadStyle,
+            @Pattern(regexp = "CLASSIC|MODERN|SKYLINE") String letterheadStyle,
+            @Size(max = 160) String tagline,
             String logoUrl,
             @NotBlank String invoicePrefix,
             @NotBlank String creditNotePrefix,
@@ -53,7 +55,7 @@ public class OrganizationController {
             return new OrganizationDto(o.getId(), o.getLegalNameAr(), o.getLegalNameEn(), o.getVatNumber(),
                     o.getOtherId(), o.getOtherIdScheme(), o.getStreet(), o.getBuildingNumber(), o.getAdditionalNumber(),
                     o.getDistrict(), o.getCity(), o.getPostalCode(), o.getPhone(), o.getEmail(), o.getWebsite(),
-                    o.getSignatoryName(), o.getSignatoryTitle(), o.getBrandColor(), o.getLetterheadStyle(),
+                    o.getSignatoryName(), o.getSignatoryTitle(), o.getBrandColor(), o.getLetterheadStyle(), o.getTagline(),
                     o.getLogoUrl(), o.getInvoicePrefix(), o.getCreditNotePrefix(), o.getDebitNotePrefix(),
                     o.getZatcaEnvironment());
         }
@@ -107,6 +109,7 @@ public class OrganizationController {
         o.setSignatoryTitle(emptyToNull(dto.signatoryTitle()));
         if (dto.brandColor() != null) o.setBrandColor(dto.brandColor());
         if (dto.letterheadStyle() != null) o.setLetterheadStyle(dto.letterheadStyle());
+        o.setTagline(emptyToNull(dto.tagline()));
         o.setInvoicePrefix(dto.invoicePrefix());
         o.setCreditNotePrefix(dto.creditNotePrefix());
         o.setDebitNotePrefix(dto.debitNotePrefix());
@@ -183,7 +186,7 @@ public class OrganizationController {
     private static OrganizationDto keepProtected(Organization o, OrganizationDto d) {
         return new OrganizationDto(o.getId(), o.getLegalNameAr(), o.getLegalNameEn(), o.getVatNumber(), o.getOtherId(),
                 o.getOtherIdScheme(), o.getStreet(), o.getBuildingNumber(), o.getAdditionalNumber(), o.getDistrict(),
-                o.getCity(), o.getPostalCode(), d.phone(), d.email(), d.website(), d.signatoryName(), d.signatoryTitle(), d.brandColor(), d.letterheadStyle(), d.logoUrl(), d.invoicePrefix(),
+                o.getCity(), o.getPostalCode(), d.phone(), d.email(), d.website(), d.signatoryName(), d.signatoryTitle(), d.brandColor(), d.letterheadStyle(), d.tagline(), d.logoUrl(), d.invoicePrefix(),
                 d.creditNotePrefix(), d.debitNotePrefix(), o.getZatcaEnvironment());
     }
 

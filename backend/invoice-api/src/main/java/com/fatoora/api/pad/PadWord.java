@@ -1,6 +1,8 @@
 package com.fatoora.api.pad;
 
 import com.fatoora.api.organization.Organization;
+import com.fatoora.api.pdf.LetterheadPdf;
+import com.fatoora.api.pdf.SkylineLetterhead;
 import org.apache.poi.util.Units;
 import org.apache.poi.wp.usermodel.HeaderFooterType;
 import org.apache.poi.xwpf.usermodel.*;
@@ -44,10 +46,16 @@ public final class PadWord {
     /** A pad with {@code bodyHtml} (editor HTML, may be blank) under an optional title. */
     public static byte[] build(Organization org, String title, String bodyHtml) {
         try (XWPFDocument doc = new XWPFDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            page(doc);
-            String color = (org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor()).replace("#", "");
-            header(doc, org, color);
-            footer(doc, org, color);
+            boolean skyline = LetterheadPdf.isSkyline(org);
+            String color = skyline ? SkylineLetterhead.NAVY.substring(1)
+                    : (org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor()).replace("#", "");
+            if (skyline) {
+                SkylineWord.apply(doc, org);
+            } else {
+                page(doc);
+                header(doc, org, color);
+                footer(doc, org, color);
+            }
 
             if (title != null && !title.isBlank()) {
                 XWPFParagraph p = doc.createParagraph();
@@ -389,7 +397,7 @@ public final class PadWord {
         };
     }
 
-    private static XWPFRun run(XWPFParagraph p, double size, String color) {
+    static XWPFRun run(XWPFParagraph p, double size, String color) {
         XWPFRun r = p.createRun();
         r.setFontFamily(FONT);
         r.setFontSize(size);
@@ -404,19 +412,19 @@ public final class PadWord {
         run(p, 8, "5A6275").setText(text);
     }
 
-    private static void rtl(XWPFParagraph p) {
+    static void rtl(XWPFParagraph p) {
         CTPPr ppr = p.getCTP().isSetPPr() ? p.getCTP().getPPr() : p.getCTP().addNewPPr();
         ppr.addNewBidi();
     }
 
-    private static void width(XWPFTableCell cell, int twips) {
+    static void width(XWPFTableCell cell, int twips) {
         CTTcPr pr = cell.getCTTc().isSetTcPr() ? cell.getCTTc().getTcPr() : cell.getCTTc().addNewTcPr();
         CTTblWidth w = pr.addNewTcW();
         w.setType(STTblWidth.DXA);
         w.setW(BigInteger.valueOf(twips));
     }
 
-    private static void noBorders(XWPFTable t) {
+    static void noBorders(XWPFTable t) {
         t.setTopBorder(XWPFTable.XWPFBorderType.NONE, 0, 0, "FFFFFF");
         t.setBottomBorder(XWPFTable.XWPFBorderType.NONE, 0, 0, "FFFFFF");
         t.setLeftBorder(XWPFTable.XWPFBorderType.NONE, 0, 0, "FFFFFF");
@@ -425,11 +433,11 @@ public final class PadWord {
         t.setInsideVBorder(XWPFTable.XWPFBorderType.NONE, 0, 0, "FFFFFF");
     }
 
-    private static String joined(String sep, String... parts) {
+    static String joined(String sep, String... parts) {
         return Stream.of(parts).filter(p -> p != null && !p.isBlank()).collect(Collectors.joining(sep));
     }
 
-    private static String nz(String s) {
+    static String nz(String s) {
         return s == null ? "" : s;
     }
 }
