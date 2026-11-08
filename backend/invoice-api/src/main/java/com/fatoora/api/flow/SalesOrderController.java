@@ -117,6 +117,7 @@ public class SalesOrderController {
     Dto create(@Valid @RequestBody Request req) {
         Long orgId = CurrentUser.orgId();
         validate(orgId, req, null);
+        flow.checkCredit(req.customerId(), orderTotal(req));
         String number = stock.nextNumber(orgId, "SALES_ORDER", "SO");
         Long id = jdbc.queryForObject("""
                 INSERT INTO sales_order (organization_id, number, order_date, created_by) VALUES (?, ?, ?, ?) RETURNING id""",
@@ -223,6 +224,15 @@ public class SalesOrderController {
                   vat_total = ?, total_incl_vat = ?, updated_at = now() WHERE id = ?""",
                 req.quotationId(), req.customerId(), blank(req.clientName()), blank(req.customerRef()), blank(req.salesEmployee()),
                 req.warehouseId(), req.orderDate(), req.deliveryDate(), blank(req.remarks()), net, vat, net.add(vat), id);
+    }
+
+    private static BigDecimal orderTotal(Request req) {
+        BigDecimal t = BigDecimal.ZERO;
+        for (Line l : req.lines()) {
+            BigDecimal n = lineNet(l.quantity(), l.unitPrice(), l.discountPct() == null ? BigDecimal.ZERO : l.discountPct());
+            t = t.add(n.add(n.multiply(l.vatRate() == null ? new BigDecimal("15") : l.vatRate()).divide(HUNDRED, 2, RoundingMode.HALF_UP)));
+        }
+        return t;
     }
 
     static BigDecimal lineNet(BigDecimal qty, BigDecimal price, BigDecimal discountPct) {

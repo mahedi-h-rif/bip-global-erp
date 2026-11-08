@@ -13,7 +13,8 @@ import { useT } from "@/lib/i18n";
 interface Tile { key: string; label: string; value: number; unit: string | null; href: string }
 interface Dash { tiles: Tile[]; salesTrend: { date: string; total: number }[]; stockByWarehouse: { name: string; value: number }[];
   lowStock: { id: number; number: string; name: string; warehouse: string; quantity: number; low_stock_threshold: number }[];
-  expiringIds: { id: number; name: string; code: string; id_number: string | null; id_expiry: string | null; passport_expiry: string | null }[] }
+  expiringIds: { id: number; name: string; code: string; id_number: string | null; id_expiry: string | null; passport_expiry: string | null }[];
+  expiringVehicles: { id: number; plate: string; name: string; istimara_expiry: string | null; insurance_expiry: string | null; mvpi_expiry: string | null }[] }
 
 /** ERP overview (quotation "Dashboard"): sales, invoices, stock, ZATCA, employee and payroll tiles; 7-day trend; stock by warehouse. */
 export function ErpDashboard() {
@@ -59,11 +60,20 @@ export function ErpDashboard() {
           </div>
         </Card>
       </div>
+      {data.expiringVehicles.length > 0 && (
+        <Card>
+          <CardHeader title={<span className="inline-flex items-center gap-2"><AlertTriangle className="size-4 text-amber-600" aria-hidden />{t("Vehicle documents expiring within 30 days")}</span>} />
+          <table className="w-full text-sm"><tbody className="divide-y divide-line">
+            {data.expiringVehicles.map((v) => <tr key={v.id}><td className="tabular px-4 py-2 font-medium"><Link className="text-brand hover:underline" href="/fleet">{v.plate}</Link></td><td className="px-4 py-2">{v.name}</td>
+              <td className="tabular px-4 py-2 text-end text-bad">{[v.istimara_expiry && `${t("Istimara")} ${date(v.istimara_expiry)}`, v.insurance_expiry && `${t("Insurance")} ${date(v.insurance_expiry)}`, v.mvpi_expiry && `${t("Fahas")} ${date(v.mvpi_expiry)}`].filter(Boolean).join(" · ")}</td></tr>)}
+          </tbody></table>
+        </Card>
+      )}
       {(data.lowStock.length > 0 || data.expiringIds.length > 0) && (
         <div className="grid gap-4 lg:grid-cols-2">
           {data.lowStock.length > 0 && (
             <Card>
-              <CardHeader title={<span className="inline-flex items-center gap-2"><AlertTriangle className="size-4 text-amber-600" aria-hidden />{t("Low stock")}</span>} />
+              <CardHeader title={<span className="inline-flex items-center gap-2"><AlertTriangle className="size-4 text-amber-600" aria-hidden />{t("Low stock")}</span>} action={<Link className="text-sm text-brand hover:underline" href="/reorder">{t("Reorder")}</Link>} />
               <table className="w-full text-sm"><tbody className="divide-y divide-line">
                 {data.lowStock.map((l, i) => <tr key={i}><td className="px-4 py-2" dir="auto">{l.name}</td><td className="px-4 py-2 text-muted">{l.warehouse}</td>
                   <td className="tabular px-4 py-2 text-end font-semibold text-bad">{Number(l.quantity)} / {Number(l.low_stock_threshold)}</td></tr>)}

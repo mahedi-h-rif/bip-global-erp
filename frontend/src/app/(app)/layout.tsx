@@ -28,6 +28,9 @@ import {
   Users,
   Wallet,
   Boxes,
+  Handshake,
+  RefreshCcw,
+  Route,
   Store,
   BarChart3,
   CreditCard,
@@ -69,6 +72,7 @@ const nav: NavItem[] = [
 ];
 
 const salesFlowNav: NavItem[] = [
+  { href: "/crm", label: "Customers & CRM", icon: Handshake },
   { href: "/pos", label: "Point of sale", icon: Store },
   { href: "/sales-orders", label: "Sales orders", icon: ClipboardCheck },
   { href: "/delivery-notes", label: "Delivery notes", icon: Truck },
@@ -81,6 +85,11 @@ const purchasingNav: NavItem[] = [
   { href: "/goods-receipts", label: "Goods receipts", icon: PackageCheck },
   { href: "/supplier-invoices", label: "Supplier invoices", icon: ReceiptIcon },
   { href: "/supplier-payments", label: "Supplier payments", icon: Banknote },
+  { href: "/reorder", label: "Reorder suggestions", icon: RefreshCcw },
+];
+
+const logisticsNav: NavItem[] = [
+  { href: "/fleet", label: "Fleet & trips", icon: Route },
 ];
 
 const inventoryNav: NavItem[] = [
@@ -202,8 +211,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     item.href === "/" || item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
   const moduleOf = (href: string): string | null => {
     const p = href.split("/")[1];
-    if (["quotations", "sales-orders", "delivery-notes", "invoices", "receipts", "customers", "pos"].includes(p)) return "sales";
-    if (["suppliers", "purchase-orders", "goods-receipts", "supplier-invoices", "supplier-payments"].includes(p)) return "purchasing";
+    if (["quotations", "sales-orders", "delivery-notes", "invoices", "receipts", "customers", "pos", "crm", "fleet"].includes(p)) return "sales";
+    if (["suppliers", "purchase-orders", "goods-receipts", "supplier-invoices", "supplier-payments", "reorder"].includes(p)) return "purchasing";
     if (["products", "inventory"].includes(p)) return "inventory";
     if (["hr", "payroll", "workers", "documents"].includes(p)) return "hr";
     if (["accounts", "dues", "erp-reports", "audit"].includes(p)) return "finance";
@@ -316,6 +325,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {salesFlowNav.map(link)}
           {heading("Purchasing")}
           {purchasingNav.map(link)}
+          {heading("Logistics")}
+          {logisticsNav.map(link)}
           {heading("Inventory")}
           {inventoryNav.map(link)}
           {heading("Due")}

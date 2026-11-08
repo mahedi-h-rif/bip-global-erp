@@ -1,3 +1,16 @@
+# SoudaCore ERP — BIP Gulf Logistics Services Company
+
+ERP built on the Fatoora e-invoicing platform: sales flow (quotation → sales order → deliveries → invoice → receipts with a
+relationship map), purchasing (requisition → approval → goods receipt with landed costs → supplier invoice → payment),
+multi-warehouse inventory with moving-average cost, POS, HR & payroll, fleet & trips, CRM and contract billing, department
+permissions, reports (Excel/PDF) and ZATCA Phase 2. Status, acceptance tests and remaining client inputs: `docs/TASKS.md`.
+Requirements: `docs/ANALYSIS.md`. Odoo / Oracle comparison: `docs/ERP-BENCHMARK.md`.
+
+**Deploy:** `deploy/deploy.sh` (add `bootstrap` on a new server) ships the committed code to 2.24.60.124, builds, migrates,
+checks health and admin login. Secrets live in `deploy/clients/bip-gulf.env` (not in git).
+
+---
+
 # Fatoora Platform
 
 White-label, ZATCA Phase 2 compliant e-invoicing portal for Saudi businesses. First client: **Nazmul Global Company**.

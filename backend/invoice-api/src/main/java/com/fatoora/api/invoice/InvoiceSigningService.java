@@ -97,6 +97,7 @@ public class InvoiceSigningService {
 
         // Stock first: if a tracked product is short, nothing (number, ICV, hash) has been consumed yet.
         flow.checkDeliveryLines(inv);
+        flow.applyCustomerTerms(inv);
         stock.onIssue(inv, actor());
 
         LocalDateTime issueTime = LocalDateTime.now(InvoiceApiApplication.KSA).truncatedTo(ChronoUnit.SECONDS);

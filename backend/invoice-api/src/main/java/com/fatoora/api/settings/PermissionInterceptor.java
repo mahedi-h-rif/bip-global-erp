@@ -25,9 +25,9 @@ public class PermissionInterceptor implements HandlerInterceptor, WebMvcConfigur
     private static final Map<String, String> MODULE_BY_PREFIX = new LinkedHashMap<>();
 
     static {
-        for (String p : List.of("quotations", "sales-orders", "delivery-notes", "invoices", "receipts", "customers", "pos"))
+        for (String p : List.of("quotations", "sales-orders", "delivery-notes", "invoices", "receipts", "customers", "pos", "crm", "fleet"))
             MODULE_BY_PREFIX.put(p, "sales");
-        for (String p : List.of("suppliers", "purchase-orders", "goods-receipts", "supplier-invoices", "supplier-payments"))
+        for (String p : List.of("suppliers", "purchase-orders", "goods-receipts", "supplier-invoices", "supplier-payments", "reorder"))
             MODULE_BY_PREFIX.put(p, "purchasing");
         for (String p : List.of("products", "warehouses", "stock")) MODULE_BY_PREFIX.put(p, "inventory");
         for (String p : List.of("hr", "payroll", "workers", "documents")) MODULE_BY_PREFIX.put(p, "hr");

@@ -70,6 +70,42 @@ public class FlowService {
         }
     }
 
+    /** What a customer still owes: issued invoices ± their notes − payments, never below zero per invoice. */
+    public BigDecimal outstanding(Long customerId) {
+        return jdbc.queryForObject("""
+                SELECT COALESCE(sum(GREATEST(open, 0)), 0) FROM (
+                  SELECT i.total_incl_vat
+                         + COALESCE((SELECT sum(CASE n.doc_type WHEN 'DEBIT_NOTE' THEN n.total_incl_vat ELSE -n.total_incl_vat END) FROM invoice n
+                                     WHERE n.original_invoice_id = i.id AND n.status NOT IN ('DRAFT','REJECTED')), 0)
+                         - COALESCE((SELECT sum(p.amount) FROM invoice_payment p WHERE p.invoice_id = i.id), 0) AS open
+                  FROM invoice i WHERE i.customer_id = ? AND i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED')) x""",
+                BigDecimal.class, customerId);
+    }
+
+    /**
+     * Credit control (Odoo / Oracle): refuses new business that would take a customer above their credit limit.
+     * {@code extra} is the amount being added. No limit (null or 0) means no check.
+     */
+    public void checkCredit(Long customerId, BigDecimal extra) {
+        if (customerId == null) return;
+        Map<String, Object> c = jdbc.queryForMap("SELECT credit_limit, COALESCE(name_en, name_ar) AS name FROM customer WHERE id = ?", customerId);
+        BigDecimal limit = (BigDecimal) c.get("credit_limit");
+        if (limit == null || limit.signum() <= 0) return;
+        BigDecimal owed = outstanding(customerId);
+        if (owed.add(extra).compareTo(limit) > 0)
+            throw com.fatoora.api.common.ApiException.badRequest("credit_limit", "%s would go over the credit limit of %s SAR (owes %s, this adds %s). Collect a payment or raise the limit."
+                    .formatted(c.get("name"), limit.toPlainString(), owed.toPlainString(), extra.toPlainString()));
+    }
+
+    /** At issue: due date from the customer's payment terms (when not set), and the credit-limit check. */
+    public void applyCustomerTerms(com.fatoora.api.invoice.Invoice inv) {
+        if (inv.getCustomerId() == null || inv.getType() != com.fatoora.zatca.model.DocumentType.INVOICE) return;
+        Integer terms = jdbc.queryForObject("SELECT payment_terms_days FROM customer WHERE id = ?", Integer.class, inv.getCustomerId());
+        if (inv.getDueDate() == null && terms != null && terms > 0)
+            inv.setDueDate(java.time.LocalDate.now(com.fatoora.api.InvoiceApiApplication.KSA).plusDays(terms));
+        checkCredit(inv.getCustomerId(), inv.getTotalInclVat());
+    }
+
     /** OPEN → PARTIALLY_DELIVERED → CLOSED from delivered quantities; CANCELLED is left alone. */
     public void refreshSalesOrder(Long salesOrderId) {
         if (salesOrderId == null) return;

@@ -30,7 +30,8 @@ public class ErpReportsController {
     public record Tile(String key, String label, BigDecimal value, String unit, String href) {}
 
     public record Dashboard(List<Tile> tiles, List<Map<String, Object>> salesTrend, List<Map<String, Object>> stockByWarehouse,
-                            List<Map<String, Object>> lowStock, List<Map<String, Object>> expiringIds) {}
+                            List<Map<String, Object>> lowStock, List<Map<String, Object>> expiringIds,
+                            List<Map<String, Object>> expiringVehicles) {}
 
     public record Hit(String type, String label, String detail, String href) {}
 
@@ -302,7 +303,11 @@ public class ErpReportsController {
                 SELECT id, name, code, id_number, id_expiry, passport_expiry FROM employee WHERE organization_id = ? AND status = 'ACTIVE'
                   AND (id_expiry <= ? OR passport_expiry <= ?) ORDER BY LEAST(COALESCE(id_expiry, '9999-12-31'), COALESCE(passport_expiry, '9999-12-31')) LIMIT 15""",
                 orgId, today.plusDays(30), today.plusDays(30));
-        return new Dashboard(tiles, trend, byWh, low, ids);
+        List<Map<String, Object>> vehicles = jdbc.queryForList("""
+                SELECT id, plate, name, istimara_expiry, insurance_expiry, mvpi_expiry FROM vehicle WHERE organization_id = ? AND active
+                  AND (istimara_expiry <= ? OR insurance_expiry <= ? OR mvpi_expiry <= ?) ORDER BY plate LIMIT 15""",
+                orgId, today.plusDays(30), today.plusDays(30), today.plusDays(30));
+        return new Dashboard(tiles, trend, byWh, low, ids, vehicles);
     }
 
     // --- quick search ----------------------------------------------------------------------------
