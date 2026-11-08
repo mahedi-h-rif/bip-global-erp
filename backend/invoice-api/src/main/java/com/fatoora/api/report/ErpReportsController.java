@@ -334,9 +334,10 @@ public class ErpReportsController {
 
     // --- helpers ---------------------------------------------------------------------------------
 
+    /** A single number; no row (e.g. no payroll run yet on a fresh database) counts as zero. */
     private BigDecimal q(String sql, Object... args) {
-        Object v = jdbc.queryForObject(sql, Object.class, args);
-        return v == null ? BigDecimal.ZERO : new BigDecimal(v.toString());
+        List<Object> v = jdbc.queryForList(sql, Object.class, args);
+        return v.isEmpty() || v.getFirst() == null ? BigDecimal.ZERO : new BigDecimal(v.getFirst().toString());
     }
 
     private static BigDecimal total(Table t) {
