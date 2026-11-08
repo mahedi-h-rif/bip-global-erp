@@ -51,10 +51,13 @@ public class InvoiceSigningService {
     private final JsonMapper json;
     private final FatooraProperties props;
     private final com.fatoora.api.inventory.StockService stock;
+    private final com.fatoora.api.flow.FlowService flow;
 
     public InvoiceSigningService(InvoiceRepository invoices, OrganizationRepository orgs, CustomerRepository customers,
                                  EgsUnitRepository units, EgsService egs, JdbcTemplate jdbc, JsonMapper json,
-                                 FatooraProperties props, com.fatoora.api.inventory.StockService stock) {
+                                 FatooraProperties props, com.fatoora.api.inventory.StockService stock,
+                                 com.fatoora.api.flow.FlowService flow) {
+        this.flow = flow;
         this.stock = stock;
         this.invoices = invoices;
         this.orgs = orgs;
@@ -93,6 +96,7 @@ public class InvoiceSigningService {
         checkCertificateVat(material, seller, unit);
 
         // Stock first: if a tracked product is short, nothing (number, ICV, hash) has been consumed yet.
+        flow.checkDeliveryLines(inv);
         stock.onIssue(inv, actor());
 
         LocalDateTime issueTime = LocalDateTime.now(InvoiceApiApplication.KSA).truncatedTo(ChronoUnit.SECONDS);

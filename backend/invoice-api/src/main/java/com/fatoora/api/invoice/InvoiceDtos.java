@@ -30,7 +30,8 @@ public final class InvoiceDtos {
             BigDecimal vatRate,
             String exemptionCode,
             String exemptionReason,
-            Long productId) {}
+            Long productId,
+            Long deliveryLineId) {}
 
     /** Body for creating or editing a draft. */
     public record DraftRequest(
@@ -45,7 +46,9 @@ public final class InvoiceDtos {
             String internalNote,
             LocalDate dueDate,
             @NotEmpty List<@Valid LineDto> lines,
-            Long warehouseId) {}
+            Long warehouseId,
+            String customerRef,
+            String salesEmployee) {}
 
     public record IssueRequest(SendMode sendMode) {}
 
@@ -78,7 +81,9 @@ public final class InvoiceDtos {
             List<PaymentService.PaymentDto> payments,
             // Signed by a sandbox or simulation device: not a legal invoice, so it may be deleted.
             boolean test,
-            Long warehouseId) {}
+            Long warehouseId,
+            String customerRef,
+            String salesEmployee) {}
 
     public record Dashboard(
             long drafts, long awaitingSubmission, long rejected, BigDecimal issuedThisMonth,

@@ -50,6 +50,9 @@ public class Invoice {
     private Long originalInvoiceId;
     /** Warehouse the goods ship from; stock-tracked lines are deducted from it when the invoice is issued. */
     private Long warehouseId;
+    /** The customer's PO number, printed on the invoice. */
+    private String customerRef;
+    private String salesEmployee;
     private String billingReference;
     private String reason;
     private String internalNote;

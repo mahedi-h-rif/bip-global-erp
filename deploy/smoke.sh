@@ -4,6 +4,7 @@
 #   BASE=http://localhost:8080 EMAIL=... PASSWORD=... [ISSUE=1] deploy/smoke.sh
 # ISSUE=1 issues invoices; it needs an ACTIVE ZATCA device whose certificate VAT matches the company VAT.
 set -euo pipefail
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 BASE=${BASE:-http://localhost:8080}
 JAR=$(mktemp); trap 'rm -f "$JAR"' EXIT
 pass=0; fail=0

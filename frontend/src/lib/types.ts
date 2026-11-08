@@ -734,6 +734,10 @@ export interface DeliveryLine {
   quantity: number | string;
   unitCode?: string;
   remaining?: number | null;
+  salesOrderLineId?: number | null;
+  unitPrice?: number | null;
+  vatRate?: number | null;
+  invoiced?: number | null;
 }
 
 export interface DeliveryNoteRequest {
@@ -748,6 +752,9 @@ export interface DeliveryNoteRequest {
   vehicleNo?: string | null;
   note?: string | null;
   lines: DeliveryLine[];
+  salesOrderId?: number | null;
+  customerRef?: string | null;
+  salesEmployee?: string | null;
 }
 
 export interface DeliveryNote extends DeliveryNoteRequest {
@@ -761,4 +768,98 @@ export interface DeliveryNote extends DeliveryNoteRequest {
   receivedAt: string | null;
   createdBy: string;
   createdAt: string;
+  salesOrderNumber: string | null;
+  invoicing: "NONE" | "PARTIAL" | "FULL";
+}
+
+// --- document flow ------------------------------------------------------------------------------
+
+export interface SalesOrderLine {
+  id?: number | null;
+  quotationLineId?: number | null;
+  productId?: number | null;
+  name: string;
+  quantity: number | string;
+  unitCode?: string;
+  unitPrice: number | string;
+  discountPct?: number | string;
+  vatRate?: number | string;
+  delivered?: number | null;
+  remaining?: number | null;
+}
+
+export interface SalesOrderRequest {
+  quotationId?: number | null;
+  customerId?: number | null;
+  clientName?: string | null;
+  customerRef?: string | null;
+  salesEmployee?: string | null;
+  warehouseId?: number | null;
+  orderDate?: string | null;
+  deliveryDate?: string | null;
+  remarks?: string | null;
+  lines: SalesOrderLine[];
+}
+
+export interface SalesOrder extends SalesOrderRequest {
+  id: number;
+  number: string;
+  quotationNumber: string | null;
+  customerName: string | null;
+  status: "OPEN" | "PARTIALLY_DELIVERED" | "CLOSED" | "CANCELLED";
+  totalExclVat: number;
+  vatTotal: number;
+  totalInclVat: number;
+  createdBy: string;
+  createdAt: string;
+}
+
+export type DocType =
+  | "QUOTATION" | "SALES_ORDER" | "DELIVERY_NOTE" | "INVOICE" | "RECEIPT"
+  | "PURCHASE_ORDER" | "GOODS_RECEIPT" | "SUPPLIER_INVOICE" | "SUPPLIER_PAYMENT";
+
+export interface GraphNode {
+  type: DocType;
+  id: number;
+  number: string;
+  label: string;
+  date: string | null;
+  party: string | null;
+  ref: string | null;
+  total: number | null;
+  status: string;
+  open: boolean;
+}
+
+export interface DocGraph {
+  rootType: DocType;
+  rootId: number;
+  nodes: GraphNode[];
+  edges: { fromType: DocType; fromId: number; toType: DocType; toId: number }[];
+}
+
+export interface OpenInvoice {
+  invoiceId: number;
+  number: string;
+  issueDate: string | null;
+  dueDate: string | null;
+  customerRef: string | null;
+  total: number;
+  due: number;
+  overdueDays: number;
+}
+
+export interface Receipt {
+  id: number;
+  number: string;
+  customerId: number;
+  customerName: string;
+  receiptDate: string;
+  method: string;
+  reference: string | null;
+  amount: number;
+  note: string | null;
+  createdBy: string;
+  createdAt: string;
+  allocations: { invoiceId: number; amount: number; invoiceNumber: string }[];
 }

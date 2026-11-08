@@ -35,6 +35,9 @@ public class InvoiceLineEntity {
     private String exemptionCode;
     private String exemptionReason;
     private Long productId;
+    /** Set when the line was copied from a delivery: its stock already left on that delivery. */
+    @jakarta.persistence.Column(name = "delivery_note_line_id")
+    private Long deliveryLineId;
 
     public InvoiceLine toModel() {
         return new InvoiceLine(name, quantity, unitCode, unitPrice, vatCategory, vatRate, exemptionCode, exemptionReason);

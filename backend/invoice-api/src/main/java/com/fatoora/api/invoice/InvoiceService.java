@@ -150,7 +150,10 @@ public class InvoiceService {
         note.setReason(req.reason());
         note.setPaymentMeans(original.getPaymentMeans());
         note.setSupplyDate(LocalDate.now(InvoiceApiApplication.KSA));
-        note.replaceLines(original.getLines().stream().map(InvoiceService::copyLine).toList());
+        // A credit note returns goods to stock, even when the original took them out on a delivery.
+        note.replaceLines(original.getLines().stream().map(InvoiceService::copyLine)
+                .peek(l -> l.setDeliveryLineId(null)).toList());
+        note.setWarehouseId(original.getWarehouseId());
         recalc(note);
         invoices.save(note);
         audit.record(orgId, "NOTE_DRAFT_CREATED", "invoice", note.getId(), req.type() + " for " + original.getNumber());
@@ -229,7 +232,7 @@ public class InvoiceService {
                 .toList();
         List<LineDto> lines = i.getLines().stream().map(l -> new LineDto(l.getName(), l.getQuantity(), l.getUnitCode(),
                 l.getUnitPrice(), l.getVatCategory(), l.getVatRate(), l.getExemptionCode(), l.getExemptionReason(),
-                l.getProductId())).toList();
+                l.getProductId(), l.getDeliveryLineId())).toList();
         Balance b = payments.balance(id);
         List<PaymentService.PaymentDto> paid = b == null ? List.of() : payments.list(orgId, id);
         return new InvoiceDetail(i.getId(), i.getNumber(), i.getUuid(), i.getKind(), i.getType(), i.getStatus(),
@@ -242,7 +245,7 @@ public class InvoiceService {
                 i.getStatus() == InvoiceStatus.DRAFT, i.getDueDate(),
                 b == null ? null : b.notes(), b == null ? null : b.adjusted(), b == null ? null : b.paid(),
                 b == null ? null : b.due(), b == null ? null : b.overpaid(), b == null ? null : b.status(), paid,
-                isTestDocument(i), i.getWarehouseId());
+                isTestDocument(i), i.getWarehouseId(), i.getCustomerRef(), i.getSalesEmployee());
     }
 
     @Transactional(readOnly = true)
@@ -322,6 +325,8 @@ public class InvoiceService {
         inv.setInternalNote(emptyToNull(req.internalNote()));
         inv.setDueDate(type == DocumentType.INVOICE ? req.dueDate() : null);
         inv.setWarehouseId(req.warehouseId());
+        inv.setCustomerRef(emptyToNull(req.customerRef()));
+        inv.setSalesEmployee(emptyToNull(req.salesEmployee()));
         if (type != DocumentType.INVOICE && req.originalInvoiceId() != null) {
             Invoice original = load(inv.getOrganizationId(), req.originalInvoiceId());
             inv.setOriginalInvoiceId(original.getId());
@@ -349,6 +354,7 @@ public class InvoiceService {
         e.setExemptionCode(model.exemptionCode());
         e.setExemptionReason(model.exemptionReason());
         e.setProductId(d.productId());
+        e.setDeliveryLineId(d.deliveryLineId());
         return e;
     }
 
@@ -363,6 +369,7 @@ public class InvoiceService {
         e.setExemptionCode(l.getExemptionCode());
         e.setExemptionReason(l.getExemptionReason());
         e.setProductId(l.getProductId());
+        e.setDeliveryLineId(l.getDeliveryLineId());
         return e;
     }
 

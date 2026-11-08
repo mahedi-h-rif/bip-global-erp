@@ -17,10 +17,10 @@ export const deliveryStatusLabel: Record<DeliveryNote["status"], string> = {
 };
 
 /** New or draft delivery note. Lines from an invoice keep their invoice link and are capped at what is left to deliver. */
-export function DeliveryNoteEditor({ initial, invoiceNumber }: { initial: DeliveryNoteRequest & { id?: number }; invoiceNumber?: string | null }) {
+export function DeliveryNoteEditor({ initial, invoiceNumber, orderNumber }: { initial: DeliveryNoteRequest & { id?: number }; invoiceNumber?: string | null; orderNumber?: string | null }) {
   const t = useT();
   const router = useRouter();
-  const fromInvoice = initial.invoiceId != null;
+  const fromInvoice = initial.invoiceId != null || initial.salesOrderId != null;
   const { data: customers } = useSWR<Customer[]>(fromInvoice ? null : "/customers", fetcher);
   const { data: products } = useSWR<Product[]>(fromInvoice ? null : "/products", fetcher);
   const { data: warehouses } = useSWR<Warehouse[]>("/warehouses", fetcher);
@@ -56,7 +56,7 @@ export function DeliveryNoteEditor({ initial, invoiceNumber }: { initial: Delive
     <form onSubmit={submit} className="space-y-6">
       {error && <Alert tone="bad" title={t("Not saved")}>{error}</Alert>}
       <Card>
-        <CardHeader title={t("Delivery")} subtitle={fromInvoice ? t("From invoice {number}", { number: invoiceNumber ?? "" }) : t("Standalone delivery: stock items leave the warehouse when marked delivered.")} />
+        <CardHeader title={t("Delivery")} subtitle={initial.salesOrderId != null ? t("From sales order {number}", { number: orderNumber ?? "" }) : fromInvoice ? t("From invoice {number}", { number: invoiceNumber ?? "" }) : t("Standalone delivery: stock items leave the warehouse when marked delivered.")} />
         <div className="grid gap-4 p-5 md:grid-cols-2">
           {!fromInvoice && (
             <>

@@ -78,7 +78,8 @@ public class StockService {
         if (inv.getType() == DocumentType.DEBIT_NOTE) return;
         Map<Long, BigDecimal> byProduct = new LinkedHashMap<>();
         for (InvoiceLineEntity l : inv.getLines())
-            if (l.getProductId() != null && tracked(l.getProductId()))
+            // Lines copied from a delivery already left the warehouse on that delivery.
+            if (l.getProductId() != null && l.getDeliveryLineId() == null && tracked(l.getProductId()))
                 byProduct.merge(l.getProductId(), l.getQuantity(), BigDecimal::add);
         if (byProduct.isEmpty()) return;
 

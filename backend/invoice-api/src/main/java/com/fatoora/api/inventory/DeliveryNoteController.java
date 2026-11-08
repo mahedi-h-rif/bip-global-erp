@@ -43,21 +43,31 @@ public class DeliveryNoteController {
 
     public record Line(Long invoiceLineId, Long productId, @NotBlank @Size(max = 1000) String name,
                        @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity, String unitCode,
-                       /** Read-only on the prefill: invoice quantity still to deliver. */
-                       BigDecimal remaining) {}
+                       /** Read-only on the prefill: invoice / order quantity still to deliver. */
+                       BigDecimal remaining,
+                       Long salesOrderLineId, BigDecimal unitPrice, BigDecimal vatRate,
+                       /** Read-only: quantity of this line already invoiced. */
+                       BigDecimal invoiced) {}
 
     public record Request(Long invoiceId, Long customerId, @Size(max = 500) String clientName,
                           @Size(max = 1000) String deliveryAddress, Long warehouseId, LocalDate deliveryDate,
                           @Size(max = 200) String driverName, @Size(max = 40) String driverPhone,
                           @Size(max = 60) String vehicleNo, @Size(max = 2000) String note,
-                          @NotEmpty List<@Valid Line> lines) {}
+                          @NotEmpty List<@Valid Line> lines,
+                          Long salesOrderId, @Size(max = 100) String customerRef, @Size(max = 200) String salesEmployee) {}
+
+    /** Copy To Invoice: one or more delivered notes of the same customer. */
+    public record InvoiceFromDeliveries(@NotEmpty List<Long> deliveryNoteIds, com.fatoora.zatca.model.InvoiceKind kind) {}
 
     public record DeliverRequest(@NotBlank @Size(max = 200) String receivedBy) {}
 
     public record Dto(Long id, String number, Long invoiceId, String invoiceNumber, Long customerId, String customerName,
                       String clientName, String deliveryAddress, Long warehouseId, String warehouseName, LocalDate deliveryDate,
                       String status, String driverName, String driverPhone, String vehicleNo, String receivedBy,
-                      Instant receivedAt, String note, String createdBy, Instant createdAt, List<Line> lines) {}
+                      Instant receivedAt, String note, String createdBy, Instant createdAt, List<Line> lines,
+                      Long salesOrderId, String salesOrderNumber, String customerRef, String salesEmployee,
+                      /** NONE, PARTIAL or FULL: how much of a delivered note is on invoices. */
+                      String invoicing) {}
 
     private final JdbcTemplate jdbc;
     private final StockService stock;
@@ -65,9 +75,14 @@ public class DeliveryNoteController {
     private final OrganizationRepository orgs;
     private final LetterheadPdf letterhead;
     private final AuditService audit;
+    private final com.fatoora.api.flow.FlowService flow;
+    private final com.fatoora.api.invoice.InvoiceService invoices;
 
     public DeliveryNoteController(JdbcTemplate jdbc, StockService stock, CustomerRepository customers,
-                                  OrganizationRepository orgs, LetterheadPdf letterhead, AuditService audit) {
+                                  OrganizationRepository orgs, LetterheadPdf letterhead, AuditService audit,
+                                  com.fatoora.api.flow.FlowService flow, com.fatoora.api.invoice.InvoiceService invoices) {
+        this.flow = flow;
+        this.invoices = invoices;
         this.jdbc = jdbc;
         this.stock = stock;
         this.customers = customers;
@@ -77,13 +92,15 @@ public class DeliveryNoteController {
     }
 
     @GetMapping
-    List<Dto> list(@RequestParam(required = false) String status, @RequestParam(required = false) Long invoiceId) {
+    List<Dto> list(@RequestParam(required = false) String status, @RequestParam(required = false) Long invoiceId,
+              @RequestParam(required = false) Long salesOrderId) {
         Long orgId = CurrentUser.orgId();
         String owner = CurrentUser.owner();
         List<Long> ids = jdbc.queryForList("""
                 SELECT id FROM delivery_note WHERE organization_id = ? AND (?::text IS NULL OR status = ?::text)
-                  AND (?::bigint IS NULL OR invoice_id = ?::bigint) AND (?::text IS NULL OR lower(created_by) = lower(?::text))
-                ORDER BY id DESC LIMIT 500""", Long.class, orgId, status, status, invoiceId, invoiceId, owner, owner);
+                  AND (?::bigint IS NULL OR invoice_id = ?::bigint) AND (?::bigint IS NULL OR sales_order_id = ?::bigint)
+                  AND (?::text IS NULL OR lower(created_by) = lower(?::text))
+                ORDER BY id DESC LIMIT 500""", Long.class, orgId, status, status, invoiceId, invoiceId, salesOrderId, salesOrderId, owner, owner);
         List<Dto> out = new ArrayList<>();
         for (Long id : ids) out.add(dto(orgId, id));
         return out;
@@ -104,13 +121,104 @@ public class DeliveryNoteController {
                         (rs, i) -> {
                             BigDecimal remaining = rs.getBigDecimal("quantity").subtract(delivered.getOrDefault(rs.getLong("id"), BigDecimal.ZERO));
                             return new Line(rs.getLong("id"), (Long) rs.getObject("product_id"), rs.getString("name"),
-                                    remaining, rs.getString("unit_code"), remaining);
+                                    remaining, rs.getString("unit_code"), remaining, null, null, null, null);
                         }, invoiceId)
                 .stream().filter(l -> l.remaining().signum() > 0).toList();
         Long customerId = (Long) inv.get("customer_id");
         Customer c = customerId == null ? null : customers.findById(customerId).orElse(null);
         return new Request(invoiceId, customerId, null, c == null ? null : QuotationController.address(c),
-                (Long) inv.get("warehouse_id"), LocalDate.now(InvoiceApiApplication.KSA), null, null, null, null, lines);
+                (Long) inv.get("warehouse_id"), LocalDate.now(InvoiceApiApplication.KSA), null, null, null, null, lines,
+                null, null, null);
+    }
+
+    /** Copy To Delivery: a new note's lines from a sales order, each with the quantity not yet on a delivery. */
+    @GetMapping("/from-sales-order/{salesOrderId}")
+    Request prefillFromOrder(@PathVariable Long salesOrderId) {
+        Long orgId = CurrentUser.orgId();
+        Map<String, Object> so = salesOrder(orgId, salesOrderId);
+        Map<Long, BigDecimal> reserved = flow.deliveredBySalesOrderLine(salesOrderId, null, false);
+        List<Line> lines = jdbc.query("SELECT * FROM sales_order_line WHERE sales_order_id = ? ORDER BY position", (rs, i) -> {
+            BigDecimal left = rs.getBigDecimal("quantity").subtract(reserved.getOrDefault(rs.getLong("id"), BigDecimal.ZERO));
+            return new Line(null, (Long) rs.getObject("product_id"), rs.getString("name"), left, rs.getString("unit_code"), left,
+                    rs.getLong("id"), netUnitPrice(rs.getBigDecimal("unit_price"), rs.getBigDecimal("discount_pct")),
+                    rs.getBigDecimal("vat_rate"), null);
+        }, salesOrderId).stream().filter(l -> l.remaining().signum() > 0).toList();
+        Long customerId = (Long) so.get("customer_id");
+        Customer c = customerId == null ? null : customers.findById(customerId).orElse(null);
+        return new Request(null, customerId, (String) so.get("client_name"), c == null ? null : QuotationController.address(c),
+                (Long) so.get("warehouse_id"), LocalDate.now(InvoiceApiApplication.KSA), null, null, null,
+                "Based on Sales Order " + so.get("number") + ".", lines,
+                salesOrderId, (String) so.get("customer_ref"), (String) so.get("sales_employee"));
+    }
+
+    /** Delivered notes of a customer with quantities not yet invoiced (the Copy To Invoice picker). */
+    @GetMapping("/to-invoice")
+    List<Dto> toInvoice(@RequestParam Long customerId) {
+        Long orgId = CurrentUser.orgId();
+        List<Long> ids = jdbc.queryForList("""
+                SELECT id FROM delivery_note WHERE organization_id = ? AND customer_id = ? AND status = 'DELIVERED' AND invoice_id IS NULL
+                ORDER BY id""", Long.class, orgId, customerId);
+        List<Dto> out = new ArrayList<>();
+        for (Long id : ids) {
+            Dto d = dto(orgId, id);
+            if (!"FULL".equals(d.invoicing())) out.add(d);
+        }
+        return out;
+    }
+
+    /**
+     * Copy To Invoice: a draft invoice holding the not-yet-invoiced quantities of the chosen delivered notes.
+     * Its lines keep the delivery line, so issuing it does not take the stock out a second time.
+     */
+    @PostMapping("/invoice")
+    @PreAuthorize(WRITE)
+    @Transactional
+    Map<String, Object> invoiceFromDeliveries(@Valid @RequestBody InvoiceFromDeliveries req) {
+        Long orgId = CurrentUser.orgId();
+        List<Dto> notes = new ArrayList<>();
+        for (Long nid : new LinkedHashSet<>(req.deliveryNoteIds())) notes.add(load(nid));
+        Long customerId = notes.getFirst().customerId();
+        if (customerId == null)
+            throw ApiException.badRequest("no_customer", "Only deliveries to a customer from the customer list can be invoiced this way");
+        List<com.fatoora.api.invoice.InvoiceDtos.LineDto> lines = new ArrayList<>();
+        Set<String> orders = new LinkedHashSet<>(), deliveries = new LinkedHashSet<>(), refs = new LinkedHashSet<>();
+        String employee = null;
+        LocalDate supply = null;
+        for (Dto n : notes) {
+            if (!"DELIVERED".equals(n.status())) throw ApiException.badRequest("not_delivered", n.number() + " is not delivered yet");
+            if (n.invoiceId() != null) throw ApiException.badRequest("already_invoiced", n.number() + " was made from an invoice");
+            if (!customerId.equals(n.customerId())) throw ApiException.badRequest("mixed_customers", "All deliveries must be for the same customer");
+            Map<Long, BigDecimal> billed = flow.invoicedByDeliveryLine(n.id(), null);
+            List<Long> lineIds = jdbc.queryForList("SELECT id FROM delivery_note_line WHERE delivery_note_id = ? ORDER BY position", Long.class, n.id());
+            for (int i = 0; i < n.lines().size(); i++) {
+                Line l = n.lines().get(i);
+                Long lineId = lineIds.get(i);
+                BigDecimal left = l.quantity().subtract(billed.getOrDefault(lineId, BigDecimal.ZERO));
+                if (left.signum() <= 0) continue;
+                BigDecimal price = l.unitPrice() != null ? l.unitPrice() : l.productId() == null ? BigDecimal.ZERO
+                        : jdbc.queryForObject("SELECT unit_price FROM product WHERE id = ?", BigDecimal.class, l.productId());
+                lines.add(new com.fatoora.api.invoice.InvoiceDtos.LineDto(l.name(), left, l.unitCode(), price,
+                        com.fatoora.zatca.model.VatCategory.S, l.vatRate() == null ? new BigDecimal("15") : l.vatRate(),
+                        null, null, l.productId(), lineId));
+            }
+            deliveries.add(n.number());
+            if (n.salesOrderNumber() != null) orders.add(n.salesOrderNumber());
+            if (n.customerRef() != null) refs.add(n.customerRef());
+            if (employee == null) employee = n.salesEmployee();
+            if (supply == null || n.deliveryDate().isAfter(supply)) supply = n.deliveryDate();
+        }
+        if (lines.isEmpty()) throw ApiException.badRequest("nothing_to_invoice", "These deliveries are already fully invoiced");
+        Customer c = customers.findById(customerId).orElseThrow();
+        com.fatoora.zatca.model.InvoiceKind kind = req.kind() != null ? req.kind()
+                : c.getVatNumber() != null && !c.getVatNumber().isBlank() ? com.fatoora.zatca.model.InvoiceKind.STANDARD
+                : com.fatoora.zatca.model.InvoiceKind.SIMPLIFIED;
+        String basedOn = (orders.isEmpty() ? "" : "Based on Sales Orders " + String.join(", ", orders) + ". ")
+                + "Based on Deliveries " + String.join(", ", deliveries) + ".";
+        var draft = invoices.createDraft(orgId, CurrentUser.get().email(), new com.fatoora.api.invoice.InvoiceDtos.DraftRequest(
+                kind, com.fatoora.zatca.model.DocumentType.INVOICE, customerId, supply, null, com.fatoora.api.invoice.SendMode.NOW,
+                null, null, basedOn, null, lines, notes.getFirst().warehouseId(), refs.isEmpty() ? null : String.join(", ", refs), employee));
+        audit.record(orgId, "INVOICE_FROM_DELIVERIES", "invoice", draft.getId(), basedOn);
+        return Map.of("invoiceId", draft.getId(), "basedOn", basedOn);
     }
 
     @PostMapping
@@ -125,6 +233,7 @@ public class DeliveryNoteController {
                 INSERT INTO delivery_note (organization_id, number, created_by, delivery_date) VALUES (?, ?, ?, ?) RETURNING id""",
                 Long.class, orgId, number, CurrentUser.get().email(), LocalDate.now(InvoiceApiApplication.KSA));
         write(orgId, id, req);
+        flow.refreshSalesOrder(req.salesOrderId());
         audit.record(orgId, "DELIVERY_NOTE_CREATED", "delivery_note", id, number);
         return dto(orgId, id);
     }
@@ -138,6 +247,8 @@ public class DeliveryNoteController {
         Long orgId = CurrentUser.orgId();
         validate(orgId, req, id);
         write(orgId, id, req);
+        flow.refreshSalesOrder(d.salesOrderId());
+        flow.refreshSalesOrder(req.salesOrderId());
         audit.record(orgId, "DELIVERY_NOTE_UPDATED", "delivery_note", id, d.number());
         return dto(orgId, id);
     }
@@ -161,6 +272,7 @@ public class DeliveryNoteController {
         }
         jdbc.update("UPDATE delivery_note SET status = 'DELIVERED', received_by = ?, received_at = now(), updated_at = now() WHERE id = ?",
                 req.receivedBy().trim(), id);
+        flow.refreshSalesOrder(d.salesOrderId());
         audit.record(orgId, "DELIVERY_NOTE_DELIVERED", "delivery_note", id, d.number() + " received by " + req.receivedBy());
         return dto(orgId, id);
     }
@@ -172,6 +284,8 @@ public class DeliveryNoteController {
     Dto cancel(@PathVariable Long id) {
         Dto d = load(id);
         if ("CANCELLED".equals(d.status())) return d;
+        if (!"NONE".equals(d.invoicing()))
+            throw ApiException.conflict("delivery_invoiced", "This delivery is on an invoice. Raise a credit note on the invoice instead.");
         Long orgId = CurrentUser.orgId();
         if ("DELIVERED".equals(d.status()) && d.invoiceId() == null) {
             List<StockService.Move> back = jdbc.query("SELECT product_id, warehouse_id, quantity FROM stock_movement WHERE ref_type = 'delivery_note' AND ref_id = ?",
@@ -180,6 +294,7 @@ public class DeliveryNoteController {
             stock.apply(orgId, back, true, CurrentUser.get().email());
         }
         jdbc.update("UPDATE delivery_note SET status = 'CANCELLED', updated_at = now() WHERE id = ?", id);
+        flow.refreshSalesOrder(d.salesOrderId());
         audit.record(orgId, "DELIVERY_NOTE_CANCELLED", "delivery_note", id, d.number());
         return dto(orgId, id);
     }
@@ -191,6 +306,7 @@ public class DeliveryNoteController {
         Dto d = load(id);
         requireDraft(d);
         jdbc.update("DELETE FROM delivery_note WHERE id = ?", id);
+        flow.refreshSalesOrder(d.salesOrderId());
         audit.record(CurrentUser.orgId(), "DELIVERY_NOTE_DELETED", "delivery_note", id, d.number());
     }
 
@@ -211,6 +327,13 @@ public class DeliveryNoteController {
         if (req.warehouseId() != null) stock.requireWarehouse(orgId, req.warehouseId());
         if (req.customerId() != null && customers.findByIdAndOrganizationId(req.customerId(), orgId).isEmpty())
             throw ApiException.notFound("Customer");
+        if (req.salesOrderId() != null) {
+            if (req.invoiceId() != null) throw ApiException.badRequest("two_bases", "A delivery comes from an order or an invoice, not both");
+            validateAgainstOrder(orgId, req, exceptNoteId);
+            return;
+        }
+        for (Line l : req.lines()) if (l.salesOrderLineId() != null)
+            throw ApiException.badRequest("order_line_without_order", "Order lines need the sales order");
         if (req.invoiceId() == null) {
             if (req.customerId() == null && (req.clientName() == null || req.clientName().isBlank()))
                 throw new ApiException.Validation(Map.of("clientName", "Choose a customer or enter the client's name"));
@@ -237,9 +360,52 @@ public class DeliveryNoteController {
         }
     }
 
+    private void validateAgainstOrder(Long orgId, Request req, Long exceptNoteId) {
+        Map<String, Object> so = salesOrder(orgId, req.salesOrderId());
+        String status = (String) so.get("status");
+        if ("CANCELLED".equals(status) || "CLOSED".equals(status))
+            throw ApiException.badRequest("order_closed", "Sales order " + so.get("number") + " is " + status.toLowerCase());
+        Map<Long, BigDecimal> ordered = new HashMap<>();
+        jdbc.query("SELECT id, quantity FROM sales_order_line WHERE sales_order_id = ?",
+                rs -> { ordered.put(rs.getLong(1), rs.getBigDecimal(2)); }, req.salesOrderId());
+        Map<Long, BigDecimal> reserved = flow.deliveredBySalesOrderLine(req.salesOrderId(), exceptNoteId, false);
+        Map<Long, BigDecimal> asked = new HashMap<>();
+        for (Line l : req.lines()) {
+            if (l.salesOrderLineId() == null || !ordered.containsKey(l.salesOrderLineId()))
+                throw ApiException.badRequest("unknown_order_line", "Every line must come from the sales order");
+            asked.merge(l.salesOrderLineId(), l.quantity(), BigDecimal::add);
+        }
+        for (var e : asked.entrySet()) {
+            BigDecimal remaining = ordered.get(e.getKey()).subtract(reserved.getOrDefault(e.getKey(), BigDecimal.ZERO));
+            if (e.getValue().compareTo(remaining) > 0)
+                throw ApiException.badRequest("over_delivery", "A line exceeds the ordered quantity still to deliver ("
+                        + StockService.plain(remaining) + ")");
+        }
+    }
+
+    private Map<String, Object> salesOrder(Long orgId, Long salesOrderId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT * FROM sales_order WHERE id = ? AND organization_id = ?", salesOrderId, orgId);
+        if (rows.isEmpty()) throw ApiException.notFound("Sales order");
+        return rows.getFirst();
+    }
+
+    private static BigDecimal netUnitPrice(BigDecimal price, BigDecimal discountPct) {
+        if (discountPct == null || discountPct.signum() == 0) return price;
+        return price.subtract(price.multiply(discountPct).divide(new BigDecimal("100"), 6, java.math.RoundingMode.HALF_UP));
+    }
+
     private void write(Long orgId, Long id, Request req) {
         Long customerId = req.customerId();
         Long warehouseId = req.warehouseId();
+        String customerRef = req.customerRef(), salesEmployee = req.salesEmployee();
+        if (req.salesOrderId() != null) {
+            Map<String, Object> so = salesOrder(orgId, req.salesOrderId());
+            if (customerId == null) customerId = (Long) so.get("customer_id");
+            if (warehouseId == null) warehouseId = (Long) so.get("warehouse_id");
+            if (customerRef == null) customerRef = (String) so.get("customer_ref");
+            if (salesEmployee == null) salesEmployee = (String) so.get("sales_employee");
+        }
         if (req.invoiceId() != null) {
             Map<String, Object> inv = invoice(orgId, req.invoiceId());
             if (customerId == null) customerId = (Long) inv.get("customer_id");
@@ -247,23 +413,33 @@ public class DeliveryNoteController {
         }
         jdbc.update("""
                 UPDATE delivery_note SET invoice_id = ?, customer_id = ?, client_name = ?, delivery_address = ?, warehouse_id = ?,
-                  delivery_date = ?, driver_name = ?, driver_phone = ?, vehicle_no = ?, note = ?, updated_at = now() WHERE id = ?""",
+                  delivery_date = ?, driver_name = ?, driver_phone = ?, vehicle_no = ?, note = ?, sales_order_id = ?, customer_ref = ?,
+                  sales_employee = ?, updated_at = now() WHERE id = ?""",
                 req.invoiceId(), customerId, blank(req.clientName()), blank(req.deliveryAddress()), warehouseId,
                 req.deliveryDate() == null ? LocalDate.now(InvoiceApiApplication.KSA) : req.deliveryDate(),
-                blank(req.driverName()), blank(req.driverPhone()), blank(req.vehicleNo()), blank(req.note()), id);
+                blank(req.driverName()), blank(req.driverPhone()), blank(req.vehicleNo()), blank(req.note()),
+                req.salesOrderId(), blank(customerRef), blank(salesEmployee), id);
         jdbc.update("DELETE FROM delivery_note_line WHERE delivery_note_id = ?", id);
         int pos = 1;
         for (Line l : req.lines()) {
             Long productId = l.productId();
-            if (l.invoiceLineId() != null)
+            BigDecimal unitPrice = l.unitPrice(), vatRate = l.vatRate();
+            if (l.salesOrderLineId() != null) {
+                Map<String, Object> sl = jdbc.queryForMap("SELECT product_id, unit_price, discount_pct, vat_rate FROM sales_order_line WHERE id = ?",
+                        l.salesOrderLineId());
+                productId = (Long) sl.get("product_id");
+                unitPrice = netUnitPrice((BigDecimal) sl.get("unit_price"), (BigDecimal) sl.get("discount_pct"));
+                vatRate = (BigDecimal) sl.get("vat_rate");
+            } else if (l.invoiceLineId() != null)
                 productId = jdbc.queryForObject("SELECT product_id FROM invoice_line WHERE id = ?", Long.class, l.invoiceLineId());
             else if (productId != null && jdbc.queryForObject("SELECT count(*) FROM product WHERE id = ? AND organization_id = ?",
                     Integer.class, productId, orgId) == 0)
                 throw ApiException.notFound("Product");
             jdbc.update("""
-                    INSERT INTO delivery_note_line (delivery_note_id, position, invoice_line_id, product_id, name, quantity, unit_code)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.invoiceLineId(), productId, l.name().strip(), l.quantity(),
-                    l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode());
+                    INSERT INTO delivery_note_line (delivery_note_id, position, invoice_line_id, product_id, name, quantity, unit_code,
+                                                    sales_order_line_id, unit_price, vat_rate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.invoiceLineId(), productId, l.name().strip(), l.quantity(),
+                    l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode(), l.salesOrderLineId(), unitPrice, vatRate);
         }
     }
 
@@ -299,12 +475,18 @@ public class DeliveryNoteController {
     }
 
     private Dto dto(Long orgId, Long id) {
+        Map<Long, BigDecimal> billed = flow.invoicedByDeliveryLine(id, null);
         List<Line> lines = jdbc.query("SELECT * FROM delivery_note_line WHERE delivery_note_id = ? ORDER BY position",
                 (rs, i) -> new Line((Long) rs.getObject("invoice_line_id"), (Long) rs.getObject("product_id"), rs.getString("name"),
-                        rs.getBigDecimal("quantity"), rs.getString("unit_code"), null), id);
+                        rs.getBigDecimal("quantity"), rs.getString("unit_code"), null, (Long) rs.getObject("sales_order_line_id"),
+                        rs.getBigDecimal("unit_price"), rs.getBigDecimal("vat_rate"), billed.getOrDefault(rs.getLong("id"), BigDecimal.ZERO)), id);
+        boolean anyBilled = lines.stream().anyMatch(l -> l.invoiced().signum() > 0);
+        boolean allBilled = !lines.isEmpty() && lines.stream().allMatch(l -> l.invoiced().compareTo(l.quantity()) >= 0);
+        String invoicing = allBilled ? "FULL" : anyBilled ? "PARTIAL" : "NONE";
         return jdbc.query("""
-                SELECT n.*, i.number AS inumber, w.name AS wname, COALESCE(c.name_en, c.name_ar) AS cname
+                SELECT n.*, i.number AS inumber, w.name AS wname, COALESCE(c.name_en, c.name_ar) AS cname, so.number AS sonumber
                 FROM delivery_note n LEFT JOIN invoice i ON i.id = n.invoice_id LEFT JOIN warehouse w ON w.id = n.warehouse_id
+                LEFT JOIN sales_order so ON so.id = n.sales_order_id
                 LEFT JOIN customer c ON c.id = n.customer_id WHERE n.id = ? AND n.organization_id = ?""",
                 (rs, i) -> new Dto(rs.getLong("id"), rs.getString("number"), (Long) rs.getObject("invoice_id"), rs.getString("inumber"),
                         (Long) rs.getObject("customer_id"), rs.getString("cname"), rs.getString("client_name"),
@@ -312,7 +494,9 @@ public class DeliveryNoteController {
                         rs.getObject("delivery_date", LocalDate.class), rs.getString("status"), rs.getString("driver_name"),
                         rs.getString("driver_phone"), rs.getString("vehicle_no"), rs.getString("received_by"),
                         rs.getTimestamp("received_at") == null ? null : rs.getTimestamp("received_at").toInstant(),
-                        rs.getString("note"), rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines), id, orgId)
+                        rs.getString("note"), rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines,
+                        (Long) rs.getObject("sales_order_id"), rs.getString("sonumber"), rs.getString("customer_ref"),
+                        rs.getString("sales_employee"), invoicing), id, orgId)
                 .stream().findFirst().orElseThrow(() -> ApiException.notFound("Delivery note"));
     }
 
@@ -330,6 +514,8 @@ public class DeliveryNoteController {
                 {"Delivery note no.", d.number()},
                 {"Date", DATE.format(d.deliveryDate())},
                 {"Invoice no.", d.invoiceNumber()},
+                {"Sales order", d.salesOrderNumber()},
+                {"Customer PO", d.customerRef()},
                 {"Warehouse", d.warehouseName()},
                 {"Driver", d.driverName() == null ? null : d.driverName() + (d.driverPhone() == null ? "" : " · " + d.driverPhone())},
                 {"Vehicle", d.vehicleNo()},

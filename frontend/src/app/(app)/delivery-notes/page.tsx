@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { Plus } from "lucide-react";
-import { fetcher } from "@/lib/api";
-import type { DeliveryNote } from "@/lib/types";
+import { FileText, Plus } from "lucide-react";
+import { api, ApiError, fetcher } from "@/lib/api";
+import type { Customer, DeliveryNote } from "@/lib/types";
 import { date } from "@/lib/format";
-import { Alert, ButtonLink, Card, Empty, PageHeader, Select, Spinner } from "@/components/ui";
+import { Alert, Button, ButtonLink, Card, CardHeader, Empty, PageHeader, Select, Spinner } from "@/components/ui";
 import { deliveryStatusLabel } from "@/components/delivery-note-editor";
 import { useT } from "@/lib/i18n";
 
@@ -16,6 +17,63 @@ const tone: Record<DeliveryNote["status"], string> = {
   DELIVERED: "bg-emerald-50 text-emerald-700",
   CANCELLED: "bg-slate-100 text-slate-500",
 };
+
+/** Copy To Invoice from several delivered notes of one customer. */
+function InvoiceDeliveries() {
+  const t = useT();
+  const router = useRouter();
+  const { data: customers } = useSWR<Customer[]>("/customers", fetcher);
+  const [customerId, setCustomerId] = useState("");
+  const { data: notes } = useSWR<DeliveryNote[]>(customerId ? `/delivery-notes/to-invoice?customerId=${customerId}` : null, fetcher);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ invoiceId: number }>("POST", "/delivery-notes/invoice", { deliveryNoteIds: picked });
+      router.push(`/invoices/${r.invoiceId}`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t("Could not reach the server"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardHeader title={t("Invoice deliveries")} subtitle={t("Pick delivered notes of one customer; one draft invoice is made from all of them.")} />
+      <div className="space-y-3 p-5">
+        {error && <Alert tone="bad">{error}</Alert>}
+        <Select className="w-80" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setPicked([]); }} aria-label={t("Customer")}>
+          <option value="">{t("Select a customer…")}</option>
+          {customers?.map((c) => <option key={c.id} value={c.id}>{c.nameEn || c.nameAr}</option>)}
+        </Select>
+        {customerId && notes?.length === 0 && <p className="text-sm text-muted">{t("No delivered notes waiting for an invoice.")}</p>}
+        {notes && notes.length > 0 && (
+          <>
+            <ul className="divide-y divide-line rounded-lg border border-line">
+              {notes.map((n) => (
+                <li key={n.id}>
+                  <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
+                    <input type="checkbox" className="size-4 accent-[var(--color-brand)]" checked={picked.includes(n.id)}
+                           onChange={(e) => setPicked(e.target.checked ? [...picked, n.id] : picked.filter((x) => x !== n.id))} />
+                    <span className="tabular font-medium">{n.number}</span>
+                    <span className="tabular text-muted">{date(n.deliveryDate)}</span>
+                    {n.salesOrderNumber && <span className="tabular text-muted">{n.salesOrderNumber}</span>}
+                    <span className="truncate text-muted">{n.lines.map((l) => `${l.name} × ${Number(l.quantity) - Number(l.invoiced ?? 0)}`).join(", ")}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <Button disabled={picked.length === 0} loading={busy} onClick={create}><FileText className="size-4" aria-hidden /> {t("Create invoice from {n} deliveries", { n: String(picked.length) })}</Button>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export default function DeliveryNotesPage() {
   const t = useT();
@@ -28,6 +86,7 @@ export default function DeliveryNotesPage() {
         subtitle={t("Create them from an issued invoice (open the invoice) or on their own.")}
         actions={<ButtonLink href="/delivery-notes/new"><Plus className="size-4" aria-hidden /> {t("New delivery note")}</ButtonLink>}
       />
+      <InvoiceDeliveries />
       <Card>
         <div className="border-b border-line p-4">
           <Select className="w-48" value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t("Status")}>

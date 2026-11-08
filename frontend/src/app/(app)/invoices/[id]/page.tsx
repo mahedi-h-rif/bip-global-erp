@@ -12,6 +12,7 @@ import { InvoiceEditor } from "@/components/invoice-editor";
 import { PaymentsCard } from "@/components/payments-card";
 import { EditDeleteActions } from "@/components/invoice-actions";
 import { WhatsAppInvoiceButton } from "@/components/whatsapp";
+import { RelationshipMapButton } from "@/components/relationship-map";
 import { useT } from "@/lib/i18n";
 
 type ZatcaMessage = { code?: string; message?: string; category?: string };
@@ -92,6 +93,10 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         subtitle={<span className="inline-flex flex-wrap items-center gap-2"><StatusBadge status={inv.status} /> {t(typeLabel[inv.type])} · {t(kindLabel[inv.kind])}</span>}
         actions={
           <>
+            <RelationshipMapButton type="INVOICE" id={inv.id} />
+            {inv.type === "INVOICE" && inv.customerId != null && Number(inv.dueAmount ?? 0) > 0 && (
+              <ButtonLink variant="secondary" href={`/receipts/new?customerId=${inv.customerId}`}>{t("Receive payment")}</ButtonLink>
+            )}
             <Button
               variant="secondary"
               disabled={!inv.downloadable}

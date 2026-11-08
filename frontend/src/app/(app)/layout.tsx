@@ -29,6 +29,7 @@ import {
   Wallet,
   Boxes,
   Truck,
+  HandCoins,
   X,
 } from "lucide-react";
 import { api, fetcher } from "@/lib/api";
@@ -56,9 +57,14 @@ const nav: NavItem[] = [
   { href: "/products", label: "Products", icon: Package },
 ];
 
+const salesFlowNav: NavItem[] = [
+  { href: "/sales-orders", label: "Sales orders", icon: ClipboardCheck },
+  { href: "/delivery-notes", label: "Delivery notes", icon: Truck },
+  { href: "/receipts", label: "Incoming payments", icon: HandCoins },
+];
+
 const inventoryNav: NavItem[] = [
   { href: "/inventory", label: "Stock & warehouses", icon: Boxes },
-  { href: "/delivery-notes", label: "Delivery notes", icon: Truck },
 ];
 
 const dueNav: NavItem[] = [
@@ -265,6 +271,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {!isBranch && <>
           {isAdmin && link(dashboardNav)}
           {nav.map(link)}
+          {heading("Sales flow")}
+          {salesFlowNav.map(link)}
           {heading("Inventory")}
           {inventoryNav.map(link)}
           {heading("Due")}

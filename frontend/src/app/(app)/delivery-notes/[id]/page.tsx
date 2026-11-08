@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { use, useState } from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { CheckCircle2, FileDown, Pencil, Printer, XCircle } from "lucide-react";
+import { CheckCircle2, FileDown, FileText, Pencil, Printer, XCircle } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { DeliveryNote } from "@/lib/types";
 import { date, dateTime } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner } from "@/components/ui";
 import { DeliveryNoteEditor, deliveryStatusLabel } from "@/components/delivery-note-editor";
+import { RelationshipMapButton } from "@/components/relationship-map";
 import { useT } from "@/lib/i18n";
 
 export default function DeliveryNotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const t = useT();
+  const router = useRouter();
   const { data: n, error, mutate } = useSWR<DeliveryNote>(`/delivery-notes/${id}`, fetcher);
   const [editing, setEditing] = useState(false);
   const [receivedBy, setReceivedBy] = useState("");
@@ -50,6 +53,16 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
         subtitle={`${t(deliveryStatusLabel[n.status])} · ${n.customerName ?? n.clientName ?? ""}`}
         actions={
           <span className="flex flex-wrap gap-2">
+            {n.status === "DELIVERED" && n.invoiceId == null && n.customerId != null && n.invoicing !== "FULL" && (
+              <Button loading={busy === "invoice"} onClick={() => {
+                setBusy("invoice");
+                setProblem(null);
+                api<{ invoiceId: number }>("POST", "/delivery-notes/invoice", { deliveryNoteIds: [n.id] })
+                  .then((r) => router.push(`/invoices/${r.invoiceId}`))
+                  .catch((e) => { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); setBusy(null); });
+              }}><FileText className="size-4" aria-hidden /> {t("Copy to invoice")}</Button>
+            )}
+            <RelationshipMapButton type="DELIVERY_NOTE" id={n.id} />
             <Button variant="secondary" onClick={() => printFile(`/delivery-notes/${n.id}/pdf`)}><Printer className="size-4" aria-hidden /> {t("Print")}</Button>
             <Button variant="secondary" onClick={() => openFile(`/delivery-notes/${n.id}/pdf`)}><FileDown className="size-4" aria-hidden /> PDF</Button>
             {n.status === "DRAFT" && <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden /> {t("Edit")}</Button>}
@@ -78,6 +91,9 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
           <div><dt className="text-xs text-muted">{t("Date")}</dt><dd>{date(n.deliveryDate)}</dd></div>
           <div><dt className="text-xs text-muted">{t("Invoice")}</dt><dd>{n.invoiceId ? <Link className="text-brand hover:underline" href={`/invoices/${n.invoiceId}`}>{n.invoiceNumber}</Link> : "—"}</dd></div>
           <div><dt className="text-xs text-muted">{t("Warehouse")}</dt><dd>{n.warehouseName ?? "—"}</dd></div>
+          {n.salesOrderId && <div><dt className="text-xs text-muted">{t("Sales order")}</dt><dd><Link className="text-brand hover:underline" href={`/sales-orders/${n.salesOrderId}`}>{n.salesOrderNumber}</Link></dd></div>}
+          {n.customerRef && <div><dt className="text-xs text-muted">{t("Customer PO")}</dt><dd className="tabular">{n.customerRef}</dd></div>}
+          {n.status === "DELIVERED" && n.invoiceId == null && <div><dt className="text-xs text-muted">{t("Invoiced")}</dt><dd>{t(n.invoicing === "FULL" ? "Fully invoiced" : n.invoicing === "PARTIAL" ? "Partly invoiced" : "Not invoiced yet")}</dd></div>}
           <div><dt className="text-xs text-muted">{t("Delivery address")}</dt><dd dir="auto">{n.deliveryAddress ?? "—"}</dd></div>
           <div><dt className="text-xs text-muted">{t("Driver")}</dt><dd dir="auto">{[n.driverName, n.driverPhone].filter(Boolean).join(" · ") || "—"}</dd></div>
           <div><dt className="text-xs text-muted">{t("Vehicle")}</dt><dd dir="auto">{n.vehicleNo ?? "—"}</dd></div>
