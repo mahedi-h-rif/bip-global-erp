@@ -275,8 +275,10 @@ public class PurchaseController {
         List<GrnDto> out = new ArrayList<>();
         for (Long id : jdbc.queryForList("""
                 SELECT id FROM goods_receipt WHERE organization_id = ? AND (?::bigint IS NULL OR supplier_id = ?::bigint)
-                  AND (?::bigint IS NULL OR purchase_order_id = ?::bigint) ORDER BY id DESC LIMIT 500""",
-                Long.class, orgId, supplierId, supplierId, purchaseOrderId, purchaseOrderId)) out.add(grn(orgId, id));
+                  AND (?::bigint IS NULL OR purchase_order_id = ?::bigint OR EXISTS (SELECT 1 FROM goods_receipt_line gl
+                       JOIN purchase_order_line pl ON pl.id = gl.purchase_order_line_id
+                       WHERE gl.goods_receipt_id = goods_receipt.id AND pl.purchase_order_id = ?::bigint)) ORDER BY id DESC LIMIT 500""",
+                Long.class, orgId, supplierId, supplierId, purchaseOrderId, purchaseOrderId, purchaseOrderId)) out.add(grn(orgId, id));
         return out;
     }
 
