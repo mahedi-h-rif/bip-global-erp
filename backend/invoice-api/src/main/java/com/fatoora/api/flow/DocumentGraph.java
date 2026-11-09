@@ -75,10 +75,17 @@ public class DocumentGraph {
             }
             case SALES_ORDER -> {
                 ids("SELECT quotation_id FROM sales_order WHERE id = ? AND quotation_id IS NOT NULL", id).forEach(x -> out.add(e(Type.QUOTATION, x, Type.SALES_ORDER, id)));
-                ids("SELECT id FROM delivery_note WHERE sales_order_id = ?", id).forEach(x -> out.add(e(Type.SALES_ORDER, id, Type.DELIVERY_NOTE, x)));
+                ids("""
+                        SELECT DISTINCT dl.delivery_note_id FROM delivery_note_line dl JOIN sales_order_line sl ON sl.id = dl.sales_order_line_id
+                        WHERE sl.sales_order_id = ?""", id).forEach(x -> out.add(e(Type.SALES_ORDER, id, Type.DELIVERY_NOTE, x)));
+                ids("""
+                        SELECT DISTINCT il.invoice_id FROM invoice_line il JOIN sales_order_line sl ON sl.id = il.sales_order_line_id
+                        WHERE sl.sales_order_id = ?""", id).forEach(x -> out.add(e(Type.SALES_ORDER, id, Type.INVOICE, x)));
             }
             case DELIVERY_NOTE -> {
-                ids("SELECT sales_order_id FROM delivery_note WHERE id = ? AND sales_order_id IS NOT NULL", id).forEach(x -> out.add(e(Type.SALES_ORDER, x, Type.DELIVERY_NOTE, id)));
+                ids("""
+                        SELECT DISTINCT sl.sales_order_id FROM delivery_note_line dl JOIN sales_order_line sl ON sl.id = dl.sales_order_line_id
+                        WHERE dl.delivery_note_id = ?""", id).forEach(x -> out.add(e(Type.SALES_ORDER, x, Type.DELIVERY_NOTE, id)));
                 // Older flow: the invoice came first and the delivery note was made from it.
                 ids("SELECT invoice_id FROM delivery_note WHERE id = ? AND invoice_id IS NOT NULL", id).forEach(x -> out.add(e(Type.INVOICE, x, Type.DELIVERY_NOTE, id)));
                 ids("""
@@ -91,6 +98,9 @@ public class DocumentGraph {
                 ids("""
                         SELECT DISTINCT dl.delivery_note_id FROM invoice_line il JOIN delivery_note_line dl ON dl.id = il.delivery_note_line_id
                         WHERE il.invoice_id = ?""", id).forEach(x -> out.add(e(Type.DELIVERY_NOTE, x, Type.INVOICE, id)));
+                ids("""
+                        SELECT DISTINCT sl.sales_order_id FROM invoice_line il JOIN sales_order_line sl ON sl.id = il.sales_order_line_id
+                        WHERE il.invoice_id = ?""", id).forEach(x -> out.add(e(Type.SALES_ORDER, x, Type.INVOICE, id)));
                 ids("SELECT id FROM invoice WHERE original_invoice_id = ?", id).forEach(x -> out.add(e(Type.INVOICE, id, Type.INVOICE, x)));
                 ids("SELECT original_invoice_id FROM invoice WHERE id = ? AND original_invoice_id IS NOT NULL", id).forEach(x -> out.add(e(Type.INVOICE, x, Type.INVOICE, id)));
                 ids("SELECT DISTINCT receipt_id FROM invoice_payment WHERE invoice_id = ? AND receipt_id IS NOT NULL", id).forEach(x -> out.add(e(Type.INVOICE, id, Type.RECEIPT, x)));
@@ -148,7 +158,10 @@ public class DocumentGraph {
         switch (t) {
             case PURCHASE_REQUEST -> ids("SELECT id FROM purchase_order WHERE purchase_request_id = ?", id).forEach(x -> out.add(e(Type.PURCHASE_REQUEST, id, Type.PURCHASE_ORDER, x)));
             case PURCHASE_ORDER -> {
-                ids("SELECT id FROM goods_receipt WHERE purchase_order_id = ?", id).forEach(x -> out.add(e(Type.PURCHASE_ORDER, id, Type.GOODS_RECEIPT, x)));
+                ids("""
+                        SELECT DISTINCT gl.goods_receipt_id FROM goods_receipt_line gl JOIN purchase_order_line pl ON pl.id = gl.purchase_order_line_id
+                        WHERE pl.purchase_order_id = ? UNION SELECT id FROM goods_receipt WHERE purchase_order_id = ?""", id, id)
+                        .forEach(x -> out.add(e(Type.PURCHASE_ORDER, id, Type.GOODS_RECEIPT, x)));
                 ids("SELECT purchase_request_id FROM purchase_order WHERE id = ? AND purchase_request_id IS NOT NULL", id).forEach(x -> out.add(e(Type.PURCHASE_REQUEST, x, Type.PURCHASE_ORDER, id)));
             }
             case GOODS_RETURN -> {
@@ -161,7 +174,10 @@ public class DocumentGraph {
             }
             case GOODS_RECEIPT -> {
                 ids("SELECT id FROM goods_return WHERE goods_receipt_id = ?", id).forEach(x -> out.add(e(Type.GOODS_RECEIPT, id, Type.GOODS_RETURN, x)));
-                ids("SELECT purchase_order_id FROM goods_receipt WHERE id = ? AND purchase_order_id IS NOT NULL", id).forEach(x -> out.add(e(Type.PURCHASE_ORDER, x, Type.GOODS_RECEIPT, id)));
+                ids("""
+                        SELECT DISTINCT pl.purchase_order_id FROM goods_receipt_line gl JOIN purchase_order_line pl ON pl.id = gl.purchase_order_line_id
+                        WHERE gl.goods_receipt_id = ? UNION SELECT purchase_order_id FROM goods_receipt WHERE id = ? AND purchase_order_id IS NOT NULL""", id, id)
+                        .forEach(x -> out.add(e(Type.PURCHASE_ORDER, x, Type.GOODS_RECEIPT, id)));
                 ids("""
                         SELECT DISTINCT sl.supplier_invoice_id FROM supplier_invoice_line sl JOIN goods_receipt_line gl ON gl.id = sl.goods_receipt_line_id
                         WHERE gl.goods_receipt_id = ?""", id).forEach(x -> out.add(e(Type.GOODS_RECEIPT, id, Type.SUPPLIER_INVOICE, x)));
@@ -281,8 +297,8 @@ public class DocumentGraph {
         };
     }
 
-    private List<Long> ids(String sql, Long id) {
-        return jdbc.queryForList(sql, Long.class, id);
+    private List<Long> ids(String sql, Object... args) {
+        return jdbc.queryForList(sql, Long.class, args);
     }
 
     private static Edge e(Type ft, Long fid, Type tt, Long tid) {

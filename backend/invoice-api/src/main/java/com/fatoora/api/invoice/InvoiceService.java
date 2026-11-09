@@ -49,6 +49,8 @@ public class InvoiceService {
     private final ProductRepository products;
     private final PaymentService payments;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.product.UomService uom;
 
     public InvoiceService(InvoiceRepository invoices, CustomerRepository customers, ZatcaSubmissionRepository submissions,
                           EgsUnitRepository units, EgsService egs, InvoiceSigningService signing,
@@ -152,7 +154,7 @@ public class InvoiceService {
         note.setSupplyDate(LocalDate.now(InvoiceApiApplication.KSA));
         // A credit note returns goods to stock, even when the original took them out on a delivery.
         note.replaceLines(original.getLines().stream().map(InvoiceService::copyLine)
-                .peek(l -> l.setDeliveryLineId(null)).toList());
+                .peek(l -> { l.setDeliveryLineId(null); l.setSalesOrderLineId(null); }).toList());
         note.setWarehouseId(original.getWarehouseId());
         recalc(note);
         invoices.save(note);
@@ -232,7 +234,7 @@ public class InvoiceService {
                 .toList();
         List<LineDto> lines = i.getLines().stream().map(l -> new LineDto(l.getName(), l.getQuantity(), l.getUnitCode(),
                 l.getUnitPrice(), l.getVatCategory(), l.getVatRate(), l.getExemptionCode(), l.getExemptionReason(),
-                l.getProductId(), l.getDeliveryLineId())).toList();
+                l.getProductId(), l.getDeliveryLineId(), l.getSalesOrderLineId(), l.getUomFactor())).toList();
         Balance b = payments.balance(id);
         List<PaymentService.PaymentDto> paid = b == null ? List.of() : payments.list(orgId, id);
         return new InvoiceDetail(i.getId(), i.getNumber(), i.getUuid(), i.getKind(), i.getType(), i.getStatus(),
@@ -335,11 +337,11 @@ public class InvoiceService {
         for (LineDto l : req.lines())
             if (l.productId() != null && products.findByIdAndOrganizationId(l.productId(), inv.getOrganizationId()).isEmpty())
                 throw ApiException.notFound("Product");
-        inv.replaceLines(req.lines().stream().map(InvoiceService::toEntity).toList());
+        inv.replaceLines(req.lines().stream().map(this::toEntity).toList());
         recalc(inv);
     }
 
-    private static InvoiceLineEntity toEntity(LineDto d) {
+    private InvoiceLineEntity toEntity(LineDto d) {
         VatCategory cat = d.vatCategory() == null ? VatCategory.S : d.vatCategory();
         // Validates the line with the same rules the signer will apply.
         InvoiceLine model = new InvoiceLine(d.name(), d.quantity(), d.unitCode(), d.unitPrice(), cat, d.vatRate(),
@@ -355,6 +357,8 @@ public class InvoiceService {
         e.setExemptionReason(model.exemptionReason());
         e.setProductId(d.productId());
         e.setDeliveryLineId(d.deliveryLineId());
+        e.setSalesOrderLineId(d.salesOrderLineId());
+        e.setUomFactor(uom == null ? java.math.BigDecimal.ONE : uom.factor(d.productId(), model.unitCode()));
         return e;
     }
 
@@ -370,6 +374,8 @@ public class InvoiceService {
         e.setExemptionReason(l.getExemptionReason());
         e.setProductId(l.getProductId());
         e.setDeliveryLineId(l.getDeliveryLineId());
+        e.setSalesOrderLineId(l.getSalesOrderLineId());
+        e.setUomFactor(l.getUomFactor());
         return e;
     }
 

@@ -31,7 +31,16 @@ public final class InvoiceDtos {
             String exemptionCode,
             String exemptionReason,
             Long productId,
-            Long deliveryLineId) {}
+            Long deliveryLineId,
+            Long salesOrderLineId,
+            /** Read-only: base units per unit, resolved by the server from the item's units. */
+            BigDecimal uomFactor) {
+
+        public LineDto(String name, BigDecimal quantity, String unitCode, BigDecimal unitPrice, VatCategory vatCategory,
+                       BigDecimal vatRate, String exemptionCode, String exemptionReason, Long productId, Long deliveryLineId) {
+            this(name, quantity, unitCode, unitPrice, vatCategory, vatRate, exemptionCode, exemptionReason, productId, deliveryLineId, null, null);
+        }
+    }
 
     /** Body for creating or editing a draft. */
     public record DraftRequest(

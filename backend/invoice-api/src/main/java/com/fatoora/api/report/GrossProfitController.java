@@ -33,7 +33,7 @@ public class GrossProfitController {
             SELECT i.id AS invoice_id, i.number, i.issued_at, COALESCE(c.name_en, c.name_ar, 'Walk-in customer') AS customer, l.name AS product,
                    s.sign * l.quantity AS quantity, s.sign * round(l.quantity * l.unit_price, 2) AS revenue,
                    CASE WHEN i.doc_type = 'DEBIT_NOTE' OR l.product_id IS NULL THEN 0
-                        ELSE s.sign * round(l.quantity * COALESCE(
+                        ELSE s.sign * round(l.quantity * l.uom_factor * COALESCE(
                             (SELECT sum(m.value) / NULLIF(sum(m.quantity), 0) FROM stock_movement m WHERE m.product_id = l.product_id
                                AND ((m.ref_type = 'invoice' AND m.ref_id = i.id) OR (m.ref_type = 'delivery_note' AND m.ref_id = dl.delivery_note_id))),
                             p.avg_cost, p.cost_price, 0), 2) END AS cost
@@ -67,7 +67,7 @@ public class GrossProfitController {
         if (n == null || n == 0) throw ApiException.notFound("Sales order");
         List<Line> lines = jdbc.query("""
                 SELECT l.name, l.quantity, round(l.quantity * l.unit_price * (1 - l.discount_pct / 100), 2) AS revenue,
-                       CASE WHEN l.product_id IS NULL THEN 0 ELSE round(l.quantity * COALESCE(p.avg_cost, p.cost_price, 0), 2) END AS cost
+                       CASE WHEN l.product_id IS NULL THEN 0 ELSE round(l.quantity * l.uom_factor * COALESCE(p.avg_cost, p.cost_price, 0), 2) END AS cost
                 FROM sales_order_line l LEFT JOIN product p ON p.id = l.product_id WHERE l.sales_order_id = ? ORDER BY l.position""",
                 (rs, i) -> line(rs.getString("name"), rs.getBigDecimal("quantity"), rs.getBigDecimal("revenue"), rs.getBigDecimal("cost")), id);
         return result("Estimate at today's average cost", lines);

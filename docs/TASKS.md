@@ -36,6 +36,22 @@ Backend unit tests: 130 run, 10 skipped (live-only), 0 failures. Empty-database 
 - [x] **UAT** http://2.24.60.124:8088 on `bip_uat`; **Production** http://2.24.60.124:8089 on `bip_prod`; both ZATCA PRODUCTION
       (devices BIP-UAT-2 / BIP-PROD-2, Industry "Trading", certificates to 08 Nov 2031); nightly backups, firewall, fail2ban
 
+## Phase J — document lifecycle to market standard + units of measure (in progress)
+
+Rules (SAP Business One / Odoo): a document is OPEN until fully copied to its target, then CLOSED; it can be closed by hand
+(remaining quantity dropped) or CANCELLED only while nothing was copied from it. Closed/cancelled documents can't be edited or
+copied. Targets may combine several base documents of the same business partner; every line keeps its base line, so remaining
+quantities, statuses and the relationship map follow the data. One quotation → one sales order (BIP rule).
+
+- [ ] J1 Units of measure: item base unit + alternative units (dozen, carton…) with factor, own price and barcode, default sales /
+      purchase unit; every document line keeps unit + factor; stock always posts in the base unit (qty × factor)
+- [ ] J2 Sales: close order by hand, one delivery from several orders of the same customer, invoice straight from an order
+      (services / no delivery), delivery- and invoice-status on orders, "Based on" text, map edges per line
+- [ ] J3 Purchasing: close PO by hand, one goods receipt from several POs of the same supplier, receiving-/billing-status on POs
+- [ ] J4 Full web test on UAT (CRUD of every module, edge cases, security), fix + retest until clean
+      (ZATCA: only 2 real invoices + 2 full credit notes on customer "TEST – SoudaCore QA")
+- [ ] J5 Report (web page): screenshots, module connectivity, database relations, data effects, business flow
+
 ## Waiting on the client
 
 - [ ] Revoke the retired "Logistics" devices BIP-PROD-1 / BIP-UAT-1 in the Fatoora portal (client to confirm)

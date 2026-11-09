@@ -38,6 +38,11 @@ public class InvoiceLineEntity {
     /** Set when the line was copied from a delivery: its stock already left on that delivery. */
     @jakarta.persistence.Column(name = "delivery_note_line_id")
     private Long deliveryLineId;
+    /** Set when the line was copied straight from a sales order line (no delivery). */
+    @jakarta.persistence.Column(name = "sales_order_line_id")
+    private Long salesOrderLineId;
+    /** Base units in one unit of this line (dozen = 12); stock moves quantity × factor. */
+    private BigDecimal uomFactor = BigDecimal.ONE;
 
     public InvoiceLine toModel() {
         return new InvoiceLine(name, quantity, unitCode, unitPrice, vatCategory, vatRate, exemptionCode, exemptionReason);

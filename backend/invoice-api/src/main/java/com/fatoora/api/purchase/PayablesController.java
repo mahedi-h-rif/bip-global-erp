@@ -158,8 +158,12 @@ public class PayablesController {
             net = net.add(ln);
             vat = vat.add(ln.multiply(r).divide(HUNDRED, 2, RoundingMode.HALF_UP));
             jdbc.update("""
-                    INSERT INTO supplier_invoice_line (supplier_invoice_id, position, goods_receipt_line_id, product_id, name, quantity, unit_cost, vat_rate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.goodsReceiptLineId(), l.productId(), l.name().strip(), l.quantity(), l.unitCost(), r);
+                    INSERT INTO supplier_invoice_line (supplier_invoice_id, position, goods_receipt_line_id, product_id, name, quantity, unit_cost, vat_rate,
+                                                       unit_code, uom_factor)
+                    SELECT ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT unit_code FROM goods_receipt_line WHERE id = ?), 'PCE'),
+                           COALESCE((SELECT uom_factor FROM goods_receipt_line WHERE id = ?), 1)""",
+                    id, pos++, l.goodsReceiptLineId(), l.productId(), l.name().strip(), l.quantity(), l.unitCost(), r,
+                    l.goodsReceiptLineId(), l.goodsReceiptLineId());
         }
         BigDecimal total = net.add(vat);
         jdbc.update("UPDATE supplier_invoice SET total_excl_vat = ?, vat_total = ?, total_incl_vat = ?, total_sar = ?, vat_sar = ? WHERE id = ?",

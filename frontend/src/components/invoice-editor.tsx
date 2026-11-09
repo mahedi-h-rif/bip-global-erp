@@ -1,5 +1,6 @@
 "use client";
 
+import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -115,6 +116,7 @@ function AddProductButton({ line, onCreated }: { line: Line; onCreated: (p: Prod
 export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
   const router = useRouter();
   const t = useT();
+  const itemUnits = useItemUnits();
   const { lang } = useLanguage();
   const { data: customers } = useSWR<Customer[]>("/customers", fetcher);
   const { data: products, mutate: mutateProducts } = useSWR<Product[]>("/products", fetcher);
@@ -147,7 +149,10 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
   function setDescription(i: number, name: string) {
     const key = name.trim().toLowerCase();
     const p = products?.find((x) => x.name.toLowerCase() === key || (x.number != null && (x.number.toLowerCase() === key || `${x.number} · ${x.name}`.toLowerCase() === key)));
-    if (p && p.id !== lines[i].productId) setLine(i, { name: p.name, unitPrice: p.unitPrice, productId: p.id });
+    if (p && p.id !== lines[i].productId) {
+      const du = defaultUnit(itemUnits, p.id);
+      setLine(i, { name: p.name, unitPrice: du?.price ?? p.unitPrice, productId: p.id, unitCode: du?.unitCode ?? p.unitCode ?? "PCE" });
+    }
     else setLine(i, { name, productId: p ? p.id : null });
   }
 
@@ -421,9 +426,7 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
                     <Input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={t("Quantity")} />
                   </td>
                   <td className="px-2 py-2">
-                    <Select value={l.unitCode} onChange={(e) => setLine(i, { unitCode: e.target.value })} aria-label={t("Unit")}>
-                      {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
-                    </Select>
+                    <UnitSelect productId={l.productId} value={l.unitCode} disabled={!!l.deliveryLineId || !!l.salesOrderLineId} onPick={(u, price) => setLine(i, price == null ? { unitCode: u } : { unitCode: u, unitPrice: price })} />
                   </td>
                   <td className="px-2 py-2">
                     <Input type="number" min="0" step="any" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} aria-label={t("Unit price")} />

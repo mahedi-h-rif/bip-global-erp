@@ -73,6 +73,9 @@ public class QuotationController {
     private final LetterheadPdf letterhead;
     private final AuditService audit;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.product.UomService uom;
+
     public QuotationController(QuotationRepository repo, CustomerRepository customers, OrganizationRepository orgs,
                                LetterheadPdf letterhead, AuditService audit) {
         this.repo = repo;
@@ -177,7 +180,8 @@ public class QuotationController {
             QuotationLine line = new QuotationLine();
             line.setName(l.name().strip());
             line.setQuantity(l.quantity());
-            line.setUnitCode(l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode());
+            line.setUnitCode(l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode().trim().toUpperCase());
+            line.setUomFactor(uom == null ? BigDecimal.ONE : uom.factor(l.productId(), line.getUnitCode()));
             line.setUnitPrice(l.unitPrice());
             line.setVatRate(l.vatRate() == null ? new BigDecimal("15") : l.vatRate());
             line.setProductId(l.productId());

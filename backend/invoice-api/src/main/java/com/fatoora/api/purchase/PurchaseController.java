@@ -41,7 +41,15 @@ public class PurchaseController {
     public record PoLine(Long id, Long productId, @NotBlank @Size(max = 1000) String name,
                          @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity, String unitCode,
                          @NotNull @DecimalMin("0") BigDecimal unitCost, @DecimalMin("0") BigDecimal vatRate,
-                         /** Read-only. */ BigDecimal received, BigDecimal remaining) {}
+                         /** Read-only. */ BigDecimal received, BigDecimal remaining, BigDecimal uomFactor, BigDecimal billed) {
+
+        public PoLine(Long id, Long productId, String name, BigDecimal quantity, String unitCode, BigDecimal unitCost, BigDecimal vatRate,
+                      BigDecimal received, BigDecimal remaining) {
+            this(id, productId, name, quantity, unitCode, unitCost, vatRate, received, remaining, null, null);
+        }
+    }
+
+    public record CloseRequest(@NotBlank @Size(max = 500) String reason) {}
 
     public record PoRequest(@NotNull Long supplierId, @Size(max = 100) String supplierRef, LocalDate orderDate, LocalDate deliveryDate,
                             Long warehouseId, @Pattern(regexp = "[A-Z]{3}") String currency,
@@ -54,13 +62,21 @@ public class PurchaseController {
                         LocalDate deliveryDate, Long warehouseId, String warehouseName, String currency, BigDecimal exchangeRate,
                         String status, String remarks, BigDecimal totalExclVat, BigDecimal vatTotal, BigDecimal totalInclVat,
                         BigDecimal totalSar, String approvedBy, Instant approvedAt, String createdBy, Instant createdAt,
-                        List<PoLine> lines, List<Attachment> attachments) {}
+                        List<PoLine> lines, List<Attachment> attachments,
+                        /** NONE / PARTIAL / FULL from the lines (Odoo "receipt status" / "billing status"). */
+                        String receivingStatus, String billingStatus, String closedReason, String closedBy, Instant closedAt) {}
 
     public record GrnLine(Long id, Long purchaseOrderLineId, Long productId, @NotBlank String name,
                           @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity, String unitCode,
                           @NotNull @DecimalMin("0") BigDecimal unitCost, @DecimalMin("0") BigDecimal vatRate,
                           /** Read-only: SAR cost per unit that entered stock; quantity already on supplier invoices. */
-                          BigDecimal landedUnitCost, BigDecimal invoiced, BigDecimal remaining) {}
+                          BigDecimal landedUnitCost, BigDecimal invoiced, BigDecimal remaining, BigDecimal uomFactor) {
+
+        public GrnLine(Long id, Long purchaseOrderLineId, Long productId, String name, BigDecimal quantity, String unitCode, BigDecimal unitCost,
+                       BigDecimal vatRate, BigDecimal landedUnitCost, BigDecimal invoiced, BigDecimal remaining) {
+            this(id, purchaseOrderLineId, productId, name, quantity, unitCode, unitCost, vatRate, landedUnitCost, invoiced, remaining, null);
+        }
+    }
 
     public record Cost(@NotBlank @Size(max = 300) String description, @NotNull @DecimalMin("0") BigDecimal amount) {}
 
@@ -80,6 +96,8 @@ public class PurchaseController {
     private final OrganizationRepository orgs;
     private final LetterheadPdf letterhead;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.product.UomService uom;
 
     public PurchaseController(JdbcTemplate jdbc, StockService stock, OrganizationRepository orgs, LetterheadPdf letterhead, AuditService audit) {
         this.jdbc = jdbc;
@@ -157,10 +175,26 @@ public class PurchaseController {
     PoDto cancelPo(@PathVariable Long id) {
         Long orgId = CurrentUser.orgId();
         PoDto d = po(orgId, id);
-        if (jdbc.queryForObject("SELECT count(*) FROM goods_receipt WHERE purchase_order_id = ? AND status = 'POSTED'", Integer.class, id) > 0)
-            throw ApiException.conflict("po_received", "Goods were received on this order; cancel those receipts first");
+        if ("CANCELLED".equals(d.status())) return d;
+        if (!received(id).isEmpty())
+            throw ApiException.conflict("po_received", "Goods were received on this order; cancel those receipts first, or close the order to drop what is left");
         jdbc.update("UPDATE purchase_order SET status = 'CANCELLED', updated_at = now() WHERE id = ?", id);
         audit.record(orgId, "PURCHASE_ORDER_CANCELLED", "purchase_order", id, d.number());
+        return po(orgId, id);
+    }
+
+    /** Close by hand (SAP B1): what was received stays, the rest will not come. A closed order can't be received against. */
+    @PostMapping("/purchase-orders/{id}/close")
+    @PreAuthorize(WRITE)
+    @Transactional
+    PoDto closePo(@PathVariable Long id, @Valid @RequestBody CloseRequest req) {
+        Long orgId = CurrentUser.orgId();
+        PoDto d = po(orgId, id);
+        if (!"APPROVED".equals(d.status()) && !"PARTIALLY_RECEIVED".equals(d.status()))
+            throw ApiException.conflict("po_not_open", "Only an approved, not fully received order can be closed (this one is " + d.status().toLowerCase() + ")");
+        jdbc.update("UPDATE purchase_order SET status = 'CLOSED', closed_reason = ?, closed_by = ?, closed_at = now(), updated_at = now() WHERE id = ?",
+                req.reason().strip(), CurrentUser.get().email(), id);
+        audit.record(orgId, "PURCHASE_ORDER_CLOSED", "purchase_order", id, d.number() + ": " + req.reason().strip());
         return po(orgId, id);
     }
 
@@ -208,14 +242,31 @@ public class PurchaseController {
     /** Copy To Goods Receipt: the approved order's quantities not yet received. */
     @GetMapping("/goods-receipts/from-purchase-order/{poId}")
     GrnRequest grnPrefill(@PathVariable Long poId) {
+        return grnPrefillMany(List.of(poId));
+    }
+
+    /** Copy To Goods Receipt from one or more approved orders of one supplier in one currency (SAP B1 "Copy From"). */
+    @GetMapping("/goods-receipts/from-purchase-orders")
+    GrnRequest grnPrefillMany(@RequestParam List<Long> ids) {
         Long orgId = CurrentUser.orgId();
-        PoDto p = po(orgId, poId);
-        List<GrnLine> lines = p.lines().stream().filter(l -> l.remaining().signum() > 0)
-                .map(l -> new GrnLine(null, l.id(), l.productId(), l.name(), l.remaining(), l.unitCode(), l.unitCost(), l.vatRate(), null, null, null))
-                .toList();
-        Long wh = p.warehouseId() != null ? p.warehouseId() : stock.defaultWarehouse(orgId);
-        return new GrnRequest(poId, p.supplierId(), null, LocalDate.now(InvoiceApiApplication.KSA), wh, p.currency(), p.exchangeRate(),
-                "Based on Purchase Order " + p.number() + ".", lines, List.of());
+        List<GrnLine> lines = new ArrayList<>();
+        List<String> numbers = new ArrayList<>();
+        PoDto first = null;
+        for (Long poId : new LinkedHashSet<>(ids)) {
+            PoDto p = po(orgId, poId);
+            if (first == null) first = p;
+            else {
+                if (!first.supplierId().equals(p.supplierId())) throw ApiException.badRequest("mixed_suppliers", "All orders must be from the same supplier");
+                if (!first.currency().equals(p.currency())) throw ApiException.badRequest("mixed_currencies", "All orders must be in the same currency");
+            }
+            p.lines().stream().filter(l -> l.remaining().signum() > 0)
+                    .map(l -> new GrnLine(null, l.id(), l.productId(), l.name(), l.remaining(), l.unitCode(), l.unitCost(), l.vatRate(), null, null, null))
+                    .forEach(lines::add);
+            numbers.add(p.number());
+        }
+        Long wh = first.warehouseId() != null ? first.warehouseId() : stock.defaultWarehouse(orgId);
+        return new GrnRequest(ids.getFirst(), first.supplierId(), null, LocalDate.now(InvoiceApiApplication.KSA), wh, first.currency(), first.exchangeRate(),
+                (numbers.size() == 1 ? "Based on Purchase Order " : "Based on Purchase Orders ") + String.join(", ", numbers) + ".", lines, List.of());
     }
 
     @GetMapping("/goods-receipts")
@@ -244,15 +295,27 @@ public class PurchaseController {
         Long supplierId = req.supplierId();
         String currency = req.currency() == null ? "SAR" : req.currency();
         BigDecimal rate = req.exchangeRate() == null ? BigDecimal.ONE : req.exchangeRate();
-        if (req.purchaseOrderId() != null) {
-            PoDto p = po(orgId, req.purchaseOrderId());
-            if (!"APPROVED".equals(p.status()) && !"PARTIALLY_RECEIVED".equals(p.status()))
-                throw ApiException.badRequest("po_not_approved", "Goods can only be received on an approved purchase order");
-            supplierId = p.supplierId();
-            currency = p.currency();
-            if (req.exchangeRate() == null) rate = p.exchangeRate();
+        Set<Long> orders = new LinkedHashSet<>();
+        if (req.purchaseOrderId() != null) orders.add(req.purchaseOrderId());
+        for (GrnLine l : req.lines())
+            if (l.purchaseOrderLineId() != null)
+                orders.addAll(jdbc.queryForList("SELECT purchase_order_id FROM purchase_order_line WHERE id = ?", Long.class, l.purchaseOrderLineId()));
+        if (!orders.isEmpty()) {
+            // One receipt may combine several approved orders of one supplier and currency; every line comes from one of them.
             Map<Long, PoLine> byId = new HashMap<>();
-            p.lines().forEach(l -> byId.put(l.id(), l));
+            PoDto first = null;
+            for (Long poId : orders) {
+                PoDto p = po(orgId, poId);
+                if (!"APPROVED".equals(p.status()) && !"PARTIALLY_RECEIVED".equals(p.status()))
+                    throw ApiException.badRequest("po_not_approved", "Goods can only be received on an approved, open purchase order (" + p.number() + " is " + p.status().toLowerCase() + ")");
+                if (first == null) first = p;
+                else if (!first.supplierId().equals(p.supplierId()) || !first.currency().equals(p.currency()))
+                    throw ApiException.badRequest("mixed_suppliers", "All orders on one receipt must be from the same supplier and currency");
+                p.lines().forEach(l -> byId.put(l.id(), l));
+            }
+            supplierId = first.supplierId();
+            currency = first.currency();
+            if (req.exchangeRate() == null) rate = first.exchangeRate();
             Map<Long, BigDecimal> asked = new HashMap<>();
             for (GrnLine l : req.lines()) {
                 if (l.purchaseOrderLineId() == null || !byId.containsKey(l.purchaseOrderLineId()))
@@ -277,7 +340,7 @@ public class PurchaseController {
         Long id = jdbc.queryForObject("""
                 INSERT INTO goods_receipt (organization_id, number, purchase_order_id, supplier_id, supplier_ref, receipt_date, warehouse_id,
                                            currency, exchange_rate, landed_cost_total, remarks, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""", Long.class, orgId, number, req.purchaseOrderId(), supplierId,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""", Long.class, orgId, number, orders.isEmpty() ? null : orders.iterator().next(), supplierId,
                 SupplierController.b(req.supplierRef()), date, req.warehouseId(), currency, rate, costs, SupplierController.b(req.remarks()),
                 CurrentUser.get().email());
         BigDecimal net = BigDecimal.ZERO, vat = BigDecimal.ZERO;
@@ -285,31 +348,35 @@ public class PurchaseController {
         int pos = 1;
         for (GrnLine l : req.lines()) {
             Long productId = l.productId();
-            if (l.purchaseOrderLineId() != null)
-                productId = jdbc.queryForList("SELECT product_id FROM purchase_order_line WHERE id = ?", Long.class, l.purchaseOrderLineId())
-                        .stream().filter(Objects::nonNull).findFirst().orElse(null);
+            String unit = l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode().trim().toUpperCase();
+            if (l.purchaseOrderLineId() != null) {
+                Map<String, Object> pl = jdbc.queryForMap("SELECT product_id, unit_code FROM purchase_order_line WHERE id = ?", l.purchaseOrderLineId());
+                productId = (Long) pl.get("product_id");
+                unit = (String) pl.get("unit_code");
+            }
+            BigDecimal factor = uom == null ? BigDecimal.ONE : uom.factor(productId, unit);
             BigDecimal lineSar = l.quantity().multiply(l.unitCost()).multiply(rate);
             BigDecimal share = goodsSar.signum() == 0 ? BigDecimal.ZERO : costs.multiply(lineSar).divide(goodsSar, 6, RoundingMode.HALF_UP);
             BigDecimal landed = lineSar.add(share).divide(l.quantity(), 6, RoundingMode.HALF_UP);
             BigDecimal rateVat = l.vatRate() == null ? new BigDecimal("15") : l.vatRate();
             jdbc.update("""
                     INSERT INTO goods_receipt_line (goods_receipt_id, position, purchase_order_line_id, product_id, name, quantity, unit_code,
-                                                    unit_cost, vat_rate, landed_unit_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    id, pos++, l.purchaseOrderLineId(), productId, l.name().strip(), l.quantity(),
-                    l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode(), l.unitCost(), rateVat, landed);
+                                                    unit_cost, vat_rate, landed_unit_cost, uom_factor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    id, pos++, l.purchaseOrderLineId(), productId, l.name().strip(), l.quantity(), unit, l.unitCost(), rateVat, landed, factor);
             BigDecimal ln = l.quantity().multiply(l.unitCost()).setScale(2, RoundingMode.HALF_UP);
             net = net.add(ln);
             vat = vat.add(ln.multiply(rateVat).divide(HUNDRED, 2, RoundingMode.HALF_UP));
             if (productId != null && stock.tracked(productId))
-                moves.add(new StockService.Move(productId, req.warehouseId(), l.quantity(), StockService.Kind.RECEIPT,
-                        "goods_receipt", id, number, null, landed));
+                // Stock is counted in base units: 2 cartons of 24 enter as 48 pieces at landed cost ÷ 24 each.
+                moves.add(new StockService.Move(productId, req.warehouseId(), com.fatoora.api.product.UomService.base(l.quantity(), factor),
+                        StockService.Kind.RECEIPT, "goods_receipt", id, number, null, landed.divide(factor, 6, RoundingMode.HALF_UP)));
         }
         if (req.costs() != null)
             for (Cost c : req.costs())
                 jdbc.update("INSERT INTO goods_receipt_cost (goods_receipt_id, description, amount) VALUES (?, ?, ?)", id, c.description().strip(), c.amount());
         jdbc.update("UPDATE goods_receipt SET total_excl_vat = ?, vat_total = ?, total_incl_vat = ? WHERE id = ?", net, vat, net.add(vat), id);
         stock.apply(orgId, moves, false, CurrentUser.get().email());
-        refreshPo(req.purchaseOrderId());
+        orders.forEach(this::refreshPo);
         audit.record(orgId, "GOODS_RECEIVED", "goods_receipt", id, number + (costs.signum() > 0 ? ", landed costs " + costs + " SAR" : ""));
         return grn(orgId, id);
     }
@@ -332,7 +399,7 @@ public class PurchaseController {
                         "goods_receipt", id, g.number(), "Goods receipt cancelled"), id);
         stock.apply(orgId, back, false, CurrentUser.get().email());
         jdbc.update("UPDATE goods_receipt SET status = 'CANCELLED' WHERE id = ?", id);
-        refreshPo(g.purchaseOrderId());
+        ordersOfReceipt(id).forEach(this::refreshPo);
         audit.record(orgId, "GOODS_RECEIPT_CANCELLED", "goods_receipt", id, g.number());
         return grn(orgId, id);
     }
@@ -363,10 +430,11 @@ public class PurchaseController {
             BigDecimal ln = l.quantity().multiply(l.unitCost()).setScale(2, RoundingMode.HALF_UP);
             net = net.add(ln);
             vat = vat.add(ln.multiply(r).divide(HUNDRED, 2, RoundingMode.HALF_UP));
+            String unit = l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode().trim().toUpperCase();
             jdbc.update("""
-                    INSERT INTO purchase_order_line (purchase_order_id, position, product_id, name, quantity, unit_code, unit_cost, vat_rate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.productId(), l.name().strip(), l.quantity(),
-                    l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode(), l.unitCost(), r);
+                    INSERT INTO purchase_order_line (purchase_order_id, position, product_id, name, quantity, unit_code, unit_cost, vat_rate, uom_factor)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.productId(), l.name().strip(), l.quantity(),
+                    unit, l.unitCost(), r, uom == null ? BigDecimal.ONE : uom.factor(l.productId(), unit));
         }
         jdbc.update("""
                 UPDATE purchase_order SET supplier_id = ?, supplier_ref = ?, order_date = COALESCE(?, order_date), delivery_date = ?,
@@ -377,8 +445,9 @@ public class PurchaseController {
 
     private void refreshPo(Long poId) {
         if (poId == null) return;
-        String status = jdbc.queryForObject("SELECT status FROM purchase_order WHERE id = ?", String.class, poId);
-        if ("CANCELLED".equals(status) || "PENDING".equals(status)) return;
+        Map<String, Object> o = jdbc.queryForMap("SELECT status, closed_reason FROM purchase_order WHERE id = ?", poId);
+        String status = (String) o.get("status");
+        if ("CANCELLED".equals(status) || "PENDING".equals(status) || o.get("closed_reason") != null) return;
         Map<Long, BigDecimal> got = received(poId);
         boolean any = false, all = true;
         for (var row : jdbc.queryForList("SELECT id, quantity FROM purchase_order_line WHERE purchase_order_id = ?", poId)) {
@@ -394,18 +463,40 @@ public class PurchaseController {
         Map<Long, BigDecimal> m = new HashMap<>();
         jdbc.query("""
                 SELECT l.purchase_order_line_id, sum(l.quantity) FROM goods_receipt_line l JOIN goods_receipt g ON g.id = l.goods_receipt_id
-                WHERE g.purchase_order_id = ? AND g.status = 'POSTED' AND l.purchase_order_line_id IS NOT NULL GROUP BY l.purchase_order_line_id""",
+                JOIN purchase_order_line pl ON pl.id = l.purchase_order_line_id
+                WHERE pl.purchase_order_id = ? AND g.status = 'POSTED' GROUP BY l.purchase_order_line_id""",
                 rs -> { m.put(rs.getLong(1), rs.getBigDecimal(2)); }, poId);
         return m;
     }
 
+    /** Per PO line: quantity on open supplier invoices, through the receipt lines that came from it. */
+    private Map<Long, BigDecimal> billed(Long poId) {
+        Map<Long, BigDecimal> m = new HashMap<>();
+        jdbc.query("""
+                SELECT gl.purchase_order_line_id, sum(sl.quantity) FROM supplier_invoice_line sl JOIN supplier_invoice v ON v.id = sl.supplier_invoice_id
+                JOIN goods_receipt_line gl ON gl.id = sl.goods_receipt_line_id JOIN purchase_order_line pl ON pl.id = gl.purchase_order_line_id
+                WHERE pl.purchase_order_id = ? AND v.status = 'OPEN' GROUP BY gl.purchase_order_line_id""",
+                rs -> { m.put(rs.getLong(1), rs.getBigDecimal(2)); }, poId);
+        return m;
+    }
+
+    List<Long> ordersOfReceipt(Long grnId) {
+        return jdbc.queryForList("""
+                SELECT DISTINCT pl.purchase_order_id FROM goods_receipt_line gl JOIN purchase_order_line pl ON pl.id = gl.purchase_order_line_id
+                WHERE gl.goods_receipt_id = ?""", Long.class, grnId);
+    }
+
     PoDto po(Long orgId, Long id) {
         Map<Long, BigDecimal> got = received(id);
+        Map<Long, BigDecimal> bill = billed(id);
+        List<Map<String, Object>> raw = jdbc.queryForList("SELECT id, quantity FROM purchase_order_line WHERE purchase_order_id = ?", id);
+        String receiving = com.fatoora.api.flow.FlowService.level(got, raw), billing = com.fatoora.api.flow.FlowService.level(bill, raw);
         List<PoLine> lines = jdbc.query("SELECT * FROM purchase_order_line WHERE purchase_order_id = ? ORDER BY position", (rs, i) -> {
             BigDecimal q = rs.getBigDecimal("quantity");
             BigDecimal r = got.getOrDefault(rs.getLong("id"), BigDecimal.ZERO);
             return new PoLine(rs.getLong("id"), (Long) rs.getObject("product_id"), rs.getString("name"), q, rs.getString("unit_code"),
-                    rs.getBigDecimal("unit_cost"), rs.getBigDecimal("vat_rate"), r, q.subtract(r).max(BigDecimal.ZERO));
+                    rs.getBigDecimal("unit_cost"), rs.getBigDecimal("vat_rate"), r, q.subtract(r).max(BigDecimal.ZERO),
+                    rs.getBigDecimal("uom_factor"), bill.getOrDefault(rs.getLong("id"), BigDecimal.ZERO));
         }, id);
         List<Attachment> att = jdbc.query("SELECT id, file_name, content_type, created_by, created_at FROM purchase_attachment WHERE purchase_order_id = ? ORDER BY id",
                 (rs, i) -> new Attachment(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getTimestamp(5).toInstant()), id);
@@ -418,7 +509,9 @@ public class PurchaseController {
                         rs.getString("status"), rs.getString("remarks"), rs.getBigDecimal("total_excl_vat"), rs.getBigDecimal("vat_total"),
                         rs.getBigDecimal("total_incl_vat"), rs.getBigDecimal("total_incl_vat").multiply(rs.getBigDecimal("exchange_rate")).setScale(2, RoundingMode.HALF_UP),
                         rs.getString("approved_by"), rs.getTimestamp("approved_at") == null ? null : rs.getTimestamp("approved_at").toInstant(),
-                        rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines, att), id, orgId)
+                        rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines, att, receiving, billing,
+                        rs.getString("closed_reason"), rs.getString("closed_by"),
+                        rs.getTimestamp("closed_at") == null ? null : rs.getTimestamp("closed_at").toInstant()), id, orgId)
                 .stream().findFirst().orElseThrow(() -> ApiException.notFound("Purchase order"));
     }
 
@@ -439,7 +532,8 @@ public class PurchaseController {
             BigDecimal b = billed.getOrDefault(rs.getLong("id"), BigDecimal.ZERO);
             return new GrnLine(rs.getLong("id"), (Long) rs.getObject("purchase_order_line_id"), (Long) rs.getObject("product_id"),
                     rs.getString("name"), q, rs.getString("unit_code"), rs.getBigDecimal("unit_cost"), rs.getBigDecimal("vat_rate"),
-                    rs.getBigDecimal("landed_unit_cost"), b, q.subtract(b).subtract(returned.getOrDefault(rs.getLong("id"), BigDecimal.ZERO)).max(BigDecimal.ZERO));
+                    rs.getBigDecimal("landed_unit_cost"), b, q.subtract(b).subtract(returned.getOrDefault(rs.getLong("id"), BigDecimal.ZERO)).max(BigDecimal.ZERO),
+                    rs.getBigDecimal("uom_factor"));
         }, id);
         List<Cost> costs = jdbc.query("SELECT description, amount FROM goods_receipt_cost WHERE goods_receipt_id = ? ORDER BY id",
                 (rs, i) -> new Cost(rs.getString(1), rs.getBigDecimal(2)), id);

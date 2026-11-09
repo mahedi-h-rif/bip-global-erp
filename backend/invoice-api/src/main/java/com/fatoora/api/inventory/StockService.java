@@ -107,7 +107,7 @@ public class StockService {
         for (InvoiceLineEntity l : inv.getLines())
             // Lines copied from a delivery already left the warehouse on that delivery.
             if (l.getProductId() != null && l.getDeliveryLineId() == null && tracked(l.getProductId()))
-                byProduct.merge(l.getProductId(), l.getQuantity(), BigDecimal::add);
+                byProduct.merge(l.getProductId(), com.fatoora.api.product.UomService.base(l.getQuantity(), l.getUomFactor()), BigDecimal::add);
         if (byProduct.isEmpty()) return;
 
         Long warehouseId = inv.getWarehouseId();

@@ -44,7 +44,20 @@ public class SalesOrderController {
                        @NotNull @DecimalMin("0") BigDecimal unitPrice, @DecimalMin("0") @DecimalMax("100") BigDecimal discountPct,
                        @DecimalMin("0") BigDecimal vatRate,
                        /** Read-only: delivered (DELIVERED notes) and still open to deliver. */
-                       BigDecimal delivered, BigDecimal remaining) {}
+                       BigDecimal delivered, BigDecimal remaining,
+                       /** Read-only: base units per unit; quantity invoiced (directly or through deliveries). */
+                       BigDecimal uomFactor, BigDecimal invoiced) {
+
+        public Line(Long id, Long quotationLineId, Long productId, String name, BigDecimal quantity, String unitCode, BigDecimal unitPrice,
+                    BigDecimal discountPct, BigDecimal vatRate, BigDecimal delivered, BigDecimal remaining) {
+            this(id, quotationLineId, productId, name, quantity, unitCode, unitPrice, discountPct, vatRate, delivered, remaining, null, null);
+        }
+    }
+
+    public record CloseRequest(@NotBlank @Size(max = 500) String reason) {}
+
+    /** Copy To Invoice straight from one or more open orders of one customer (services, counter sales). */
+    public record InvoiceFromOrders(@NotEmpty List<Long> salesOrderIds, com.fatoora.zatca.model.InvoiceKind kind) {}
 
     public record Request(Long quotationId, Long customerId, @Size(max = 500) String clientName,
                           @Size(max = 100) String customerRef, @Size(max = 200) String salesEmployee, Long warehouseId,
@@ -54,7 +67,9 @@ public class SalesOrderController {
     public record Dto(Long id, String number, Long quotationId, String quotationNumber, Long customerId, String customerName,
                       String clientName, String customerRef, String salesEmployee, Long warehouseId, LocalDate orderDate,
                       LocalDate deliveryDate, String status, String remarks, BigDecimal totalExclVat, BigDecimal vatTotal,
-                      BigDecimal totalInclVat, String createdBy, Instant createdAt, List<Line> lines) {}
+                      BigDecimal totalInclVat, String createdBy, Instant createdAt, List<Line> lines,
+                      /** NONE / PARTIAL / FULL, computed from the lines (Odoo "delivery status" / "invoice status"). */
+                      String deliveryStatus, String invoiceStatus, String closedReason, String closedBy, Instant closedAt) {}
 
     private final JdbcTemplate jdbc;
     private final FlowService flow;
@@ -63,6 +78,10 @@ public class SalesOrderController {
     private final OrganizationRepository orgs;
     private final LetterheadPdf letterhead;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.product.UomService uom;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.invoice.InvoiceService invoices;
 
     public SalesOrderController(JdbcTemplate jdbc, FlowService flow, StockService stock, CustomerRepository customers,
                                 OrganizationRepository orgs, LetterheadPdf letterhead, AuditService audit) {
@@ -135,7 +154,7 @@ public class SalesOrderController {
     Dto update(@PathVariable Long id, @Valid @RequestBody Request req) {
         Dto d = load(id);
         if (!"OPEN".equals(d.status()) || hasDeliveries(id))
-            throw ApiException.conflict("order_in_progress", "An order with deliveries can't be edited; cancel the deliveries first");
+            throw ApiException.conflict("order_in_progress", "An order with deliveries or invoices can't be edited; cancel them first");
         Long orgId = CurrentUser.orgId();
         validate(orgId, req, id);
         write(id, req);
@@ -148,11 +167,86 @@ public class SalesOrderController {
     @Transactional
     Dto cancel(@PathVariable Long id) {
         Dto d = load(id);
+        if ("CANCELLED".equals(d.status())) return d;
         if (hasDeliveries(id))
-            throw ApiException.conflict("order_delivered", "This order has deliveries. Cancel them first, or leave the order to close.");
+            throw ApiException.conflict("order_delivered", "This order has deliveries or invoices. Cancel them first, or close the order to drop what is left.");
         jdbc.update("UPDATE sales_order SET status = 'CANCELLED', updated_at = now() WHERE id = ?", id);
         audit.record(CurrentUser.orgId(), "SALES_ORDER_CANCELLED", "sales_order", id, d.number());
         return dto(CurrentUser.orgId(), id);
+    }
+
+    /**
+     * Close by hand (SAP B1 "Close"): what is delivered/invoiced stays, the rest will not be delivered. Allowed once
+     * work started (an untouched order is cancelled instead); refused while a draft delivery or draft invoice still holds
+     * quantities from it. A closed order can't be edited, delivered or invoiced again.
+     */
+    @PostMapping("/{id}/close")
+    @PreAuthorize(WRITE)
+    @Transactional
+    Dto close(@PathVariable Long id, @Valid @RequestBody CloseRequest req) {
+        Dto d = load(id);
+        if ("CANCELLED".equals(d.status()) || "CLOSED".equals(d.status()))
+            throw ApiException.conflict("order_closed", "Sales order " + d.number() + " is already " + d.status().toLowerCase());
+        Integer drafts = jdbc.queryForObject("""
+                SELECT (SELECT count(DISTINCT n.id) FROM delivery_note n JOIN delivery_note_line l ON l.delivery_note_id = n.id
+                        JOIN sales_order_line sl ON sl.id = l.sales_order_line_id WHERE sl.sales_order_id = ? AND n.status = 'DRAFT')
+                     + (SELECT count(DISTINCT i.id) FROM invoice i JOIN invoice_line il ON il.invoice_id = i.id
+                        JOIN sales_order_line sl ON sl.id = il.sales_order_line_id WHERE sl.sales_order_id = ? AND i.status = 'DRAFT')""",
+                Integer.class, id, id);
+        if (drafts != null && drafts > 0)
+            throw ApiException.conflict("order_has_drafts", "Draft deliveries or invoices still hold quantities of this order. Deliver/issue or cancel them first.");
+        jdbc.update("""
+                UPDATE sales_order SET status = 'CLOSED', closed_reason = ?, closed_by = ?, closed_at = now(), updated_at = now() WHERE id = ?""",
+                req.reason().strip(), CurrentUser.get().email(), id);
+        audit.record(CurrentUser.orgId(), "SALES_ORDER_CLOSED", "sales_order", id, d.number() + ": " + req.reason().strip());
+        return dto(CurrentUser.orgId(), id);
+    }
+
+    /**
+     * Copy To A/R Invoice from orders (SAP B1 allows Sales Order → Invoice without a delivery): a draft invoice with the
+     * open quantities. Issuing it takes the stock out, since no delivery did.
+     */
+    @PostMapping("/invoice")
+    @PreAuthorize(WRITE)
+    @Transactional
+    Map<String, Object> invoiceFromOrders(@Valid @RequestBody InvoiceFromOrders req) {
+        Long orgId = CurrentUser.orgId();
+        List<Dto> orders = new ArrayList<>();
+        for (Long oid : new LinkedHashSet<>(req.salesOrderIds())) orders.add(load(oid));
+        Long customerId = orders.getFirst().customerId();
+        if (customerId == null)
+            throw ApiException.badRequest("no_customer", "Only orders of a customer from the customer list can be invoiced this way");
+        List<com.fatoora.api.invoice.InvoiceDtos.LineDto> lines = new ArrayList<>();
+        Set<String> numbers = new LinkedHashSet<>(), refs = new LinkedHashSet<>();
+        String employee = null;
+        Long warehouseId = null;
+        for (Dto o : orders) {
+            if ("CANCELLED".equals(o.status()) || "CLOSED".equals(o.status()))
+                throw ApiException.badRequest("order_closed", "Sales order " + o.number() + " is " + o.status().toLowerCase());
+            if (!customerId.equals(o.customerId())) throw ApiException.badRequest("mixed_customers", "All orders must be for the same customer");
+            for (Line l : o.lines()) {
+                if (l.remaining().signum() <= 0) continue;
+                BigDecimal price = l.discountPct() == null || l.discountPct().signum() == 0 ? l.unitPrice()
+                        : l.unitPrice().subtract(l.unitPrice().multiply(l.discountPct()).divide(HUNDRED, 6, RoundingMode.HALF_UP));
+                lines.add(new com.fatoora.api.invoice.InvoiceDtos.LineDto(l.name(), l.remaining(), l.unitCode(), price,
+                        com.fatoora.zatca.model.VatCategory.S, l.vatRate(), null, null, l.productId(), null, l.id(), null));
+            }
+            numbers.add(o.number());
+            if (o.customerRef() != null) refs.add(o.customerRef());
+            if (employee == null) employee = o.salesEmployee();
+            if (warehouseId == null) warehouseId = o.warehouseId();
+        }
+        if (lines.isEmpty()) throw ApiException.badRequest("nothing_to_invoice", "Nothing is left open on these orders");
+        Customer c = customers.findById(customerId).orElseThrow();
+        com.fatoora.zatca.model.InvoiceKind kind = req.kind() != null ? req.kind()
+                : c.getVatNumber() != null && !c.getVatNumber().isBlank() ? com.fatoora.zatca.model.InvoiceKind.STANDARD
+                : com.fatoora.zatca.model.InvoiceKind.SIMPLIFIED;
+        String basedOn = "Based on Sales Orders " + String.join(", ", numbers) + ".";
+        var draft = invoices.createDraft(orgId, CurrentUser.get().email(), new com.fatoora.api.invoice.InvoiceDtos.DraftRequest(
+                kind, com.fatoora.zatca.model.DocumentType.INVOICE, customerId, null, null, com.fatoora.api.invoice.SendMode.NOW,
+                null, null, basedOn, null, lines, warehouseId, refs.isEmpty() ? null : String.join(", ", refs), employee));
+        audit.record(orgId, "INVOICE_FROM_ORDERS", "invoice", draft.getId(), basedOn);
+        return Map.of("invoiceId", draft.getId(), "basedOn", basedOn);
     }
 
     @GetMapping("/{id}/pdf")
@@ -207,6 +301,11 @@ public class SalesOrderController {
         jdbc.update("DELETE FROM sales_order_line WHERE sales_order_id = ?", id);
         int pos = 1;
         for (Line l : req.lines()) {
+            String unit = l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode().trim().toUpperCase();
+            // A line copied from a quotation keeps the quotation line's unit, so remaining quantities compare like with like.
+            if (l.quotationLineId() != null)
+                unit = jdbc.queryForObject("SELECT unit_code FROM quotation_line WHERE id = ?", String.class, l.quotationLineId());
+            BigDecimal factor = uom == null ? BigDecimal.ONE : uom.factor(l.productId(), unit);
             BigDecimal disc = l.discountPct() == null ? BigDecimal.ZERO : l.discountPct();
             BigDecimal rate = l.vatRate() == null ? new BigDecimal("15") : l.vatRate();
             BigDecimal lineNet = lineNet(l.quantity(), l.unitPrice(), disc);
@@ -214,9 +313,8 @@ public class SalesOrderController {
             vat = vat.add(lineNet.multiply(rate).divide(HUNDRED, 2, RoundingMode.HALF_UP));
             jdbc.update("""
                     INSERT INTO sales_order_line (sales_order_id, position, quotation_line_id, product_id, name, quantity, unit_code,
-                                                  unit_price, discount_pct, vat_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    id, pos++, l.quotationLineId(), l.productId(), l.name().strip(), l.quantity(),
-                    l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode(), l.unitPrice(), disc, rate);
+                                                  unit_price, discount_pct, vat_rate, uom_factor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    id, pos++, l.quotationLineId(), l.productId(), l.name().strip(), l.quantity(), unit, l.unitPrice(), disc, rate, factor);
         }
         jdbc.update("""
                 UPDATE sales_order SET quotation_id = ?, customer_id = ?, client_name = ?, customer_ref = ?, sales_employee = ?,
@@ -254,7 +352,12 @@ public class SalesOrderController {
     }
 
     private boolean hasDeliveries(Long id) {
-        return jdbc.queryForObject("SELECT count(*) FROM delivery_note WHERE sales_order_id = ? AND status <> 'CANCELLED'", Integer.class, id) > 0;
+        return jdbc.queryForObject("""
+                SELECT (SELECT count(*) FROM delivery_note_line l JOIN delivery_note n ON n.id = l.delivery_note_id
+                        JOIN sales_order_line sl ON sl.id = l.sales_order_line_id WHERE sl.sales_order_id = ? AND n.status <> 'CANCELLED')
+                     + (SELECT count(*) FROM invoice_line il JOIN invoice i ON i.id = il.invoice_id
+                        JOIN sales_order_line sl ON sl.id = il.sales_order_line_id
+                        WHERE sl.sales_order_id = ? AND i.doc_type = 'INVOICE' AND i.status <> 'REJECTED')""", Integer.class, id, id) > 0;
     }
 
     private Map<String, Object> quotation(Long orgId, Long quotationId) {
@@ -275,13 +378,19 @@ public class SalesOrderController {
 
     Dto dto(Long orgId, Long id) {
         Map<Long, BigDecimal> delivered = flow.deliveredBySalesOrderLine(id, null, true);
-        Map<Long, BigDecimal> reserved = flow.deliveredBySalesOrderLine(id, null, false);
+        Map<Long, BigDecimal> open = flow.openBySalesOrderLine(id, null, null);
+        Map<Long, BigDecimal> invoiced = flow.invoicedBySalesOrderLine(id);
+        Map<Long, BigDecimal> fulfilled = new HashMap<>(delivered);
+        flow.invoicedDirectBySalesOrderLine(id, null, true, null).forEach((k, v) -> fulfilled.merge(k, v, BigDecimal::add));
+        List<Map<String, Object>> raw = jdbc.queryForList("SELECT id, quantity FROM sales_order_line WHERE sales_order_id = ?", id);
+        String deliveryStatus = FlowService.level(fulfilled, raw), invoiceStatus = FlowService.level(invoiced, raw);
         List<Line> lines = jdbc.query("SELECT * FROM sales_order_line WHERE sales_order_id = ? ORDER BY position", (rs, i) -> {
             long lid = rs.getLong("id");
             BigDecimal qty = rs.getBigDecimal("quantity");
             return new Line(lid, (Long) rs.getObject("quotation_line_id"), (Long) rs.getObject("product_id"), rs.getString("name"), qty,
                     rs.getString("unit_code"), rs.getBigDecimal("unit_price"), rs.getBigDecimal("discount_pct"), rs.getBigDecimal("vat_rate"),
-                    delivered.getOrDefault(lid, BigDecimal.ZERO), qty.subtract(reserved.getOrDefault(lid, BigDecimal.ZERO)));
+                    delivered.getOrDefault(lid, BigDecimal.ZERO), open.getOrDefault(lid, qty).max(BigDecimal.ZERO),
+                    rs.getBigDecimal("uom_factor"), invoiced.getOrDefault(lid, BigDecimal.ZERO));
         }, id);
         return jdbc.query("""
                 SELECT s.*, q.number AS qnumber, COALESCE(c.name_en, c.name_ar) AS cname FROM sales_order s
@@ -292,7 +401,9 @@ public class SalesOrderController {
                         rs.getString("sales_employee"), (Long) rs.getObject("warehouse_id"), rs.getObject("order_date", LocalDate.class),
                         rs.getObject("delivery_date", LocalDate.class), rs.getString("status"), rs.getString("remarks"),
                         rs.getBigDecimal("total_excl_vat"), rs.getBigDecimal("vat_total"), rs.getBigDecimal("total_incl_vat"),
-                        rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines), id, orgId)
+                        rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines, deliveryStatus, invoiceStatus,
+                        rs.getString("closed_reason"), rs.getString("closed_by"),
+                        rs.getTimestamp("closed_at") == null ? null : rs.getTimestamp("closed_at").toInstant()), id, orgId)
                 .stream().findFirst().orElseThrow(() -> ApiException.notFound("Sales order"));
     }
 

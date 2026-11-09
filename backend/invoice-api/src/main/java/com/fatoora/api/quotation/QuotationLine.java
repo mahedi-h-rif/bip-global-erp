@@ -27,4 +27,6 @@ public class QuotationLine {
     private BigDecimal unitPrice;
     private BigDecimal vatRate = new BigDecimal("15");
     private Long productId;
+    /** Base units per unit of this line (dozen = 12). */
+    private BigDecimal uomFactor = BigDecimal.ONE;
 }

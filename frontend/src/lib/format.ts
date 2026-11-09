@@ -115,6 +115,14 @@ export const unitCodes = [
   { code: "HUR", label: "Hour" },
   { code: "DAY", label: "Day" },
   { code: "BX", label: "Box" },
+  { code: "DZN", label: "Dozen" },
+  { code: "CT", label: "Carton" },
+  { code: "PK", label: "Pack" },
+  { code: "RO", label: "Roll" },
+  { code: "BG", label: "Bag" },
+  { code: "BE", label: "Bundle" },
+  { code: "PR", label: "Pair" },
+  { code: "TNE", label: "Tonne" },
   { code: "SET", label: "Set" },
 ];
 

@@ -84,6 +84,8 @@ public class PurchaseFlowController {
     private final StockService stock;
     private final PurchaseController purchases;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fatoora.api.product.UomService uom;
 
     public PurchaseFlowController(JdbcTemplate jdbc, StockService stock, PurchaseController purchases, AuditService audit) {
         this.jdbc = jdbc;
@@ -125,8 +127,8 @@ public class PurchaseFlowController {
         int pos = 1;
         for (PrLine l : req.lines()) {
             if (l.productId() != null) requireProduct(orgId, l.productId());
-            jdbc.update("INSERT INTO purchase_request_line (purchase_request_id, position, product_id, name, quantity, unit_code) VALUES (?, ?, ?, ?, ?, ?)",
-                    id, pos++, l.productId(), l.name().strip(), l.quantity(), unit(l.unitCode()));
+            jdbc.update("INSERT INTO purchase_request_line (purchase_request_id, position, product_id, name, quantity, unit_code, uom_factor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    id, pos++, l.productId(), l.name().strip(), l.quantity(), unit(l.unitCode()), uom.factor(l.productId(), unit(l.unitCode())));
         }
         audit.record(orgId, "PURCHASE_REQUEST_CREATED", "purchase_request", id, number + " by " + req.requester().strip());
         return pr(orgId, id);
@@ -169,11 +171,13 @@ public class PurchaseFlowController {
         for (PrLine l : p.lines()) {
             // Only a SAR order can reuse the SAR cost as its price; foreign-currency orders are priced by the buyer.
             BigDecimal cost = BigDecimal.ZERO;
+            BigDecimal factor = uom.factor(l.productId(), l.unitCode());
             if (l.productId() != null && "SAR".equals(currency))
-                cost = jdbc.queryForObject("SELECT COALESCE(avg_cost, cost_price, 0) FROM product WHERE id = ?", BigDecimal.class, l.productId());
+                cost = jdbc.queryForObject("SELECT COALESCE(avg_cost, cost_price, 0) FROM product WHERE id = ?", BigDecimal.class, l.productId())
+                        .multiply(factor).setScale(6, RoundingMode.HALF_UP);
             jdbc.update("""
-                    INSERT INTO purchase_order_line (purchase_order_id, position, product_id, name, quantity, unit_code, unit_cost, vat_rate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", poId, pos++, l.productId(), l.name(), l.quantity(), l.unitCode(), cost, fifteen);
+                    INSERT INTO purchase_order_line (purchase_order_id, position, product_id, name, quantity, unit_code, unit_cost, vat_rate, uom_factor)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", poId, pos++, l.productId(), l.name(), l.quantity(), l.unitCode(), cost, fifteen, factor);
             BigDecimal ln = l.quantity().multiply(cost).setScale(2, RoundingMode.HALF_UP);
             net = net.add(ln);
             vat = vat.add(ln.multiply(fifteen).divide(HUNDRED, 2, RoundingMode.HALF_UP));
@@ -270,13 +274,16 @@ public class PurchaseFlowController {
         for (var e : asked.entrySet()) {
             var l = byId.get(e.getKey());
             jdbc.update("""
-                    INSERT INTO goods_return_line (goods_return_id, position, goods_receipt_line_id, product_id, name, quantity, unit_cost, vat_rate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.id(), l.productId(), l.name(), e.getValue(), l.unitCost(), l.vatRate());
+                    INSERT INTO goods_return_line (goods_return_id, position, goods_receipt_line_id, product_id, name, quantity, unit_cost, vat_rate,
+                                                   unit_code, uom_factor)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.id(), l.productId(), l.name(), e.getValue(), l.unitCost(), l.vatRate(),
+                    l.unitCode(), l.uomFactor() == null ? BigDecimal.ONE : l.uomFactor());
             BigDecimal ln = e.getValue().multiply(l.unitCost()).setScale(2, RoundingMode.HALF_UP);
             net = net.add(ln);
             vat = vat.add(ln.multiply(l.vatRate()).divide(HUNDRED, 2, RoundingMode.HALF_UP));
             if (l.productId() != null && stock.tracked(l.productId()))
-                moves.add(new StockService.Move(l.productId(), g.warehouseId(), e.getValue().negate(), StockService.Kind.ADJUST,
+                moves.add(new StockService.Move(l.productId(), g.warehouseId(),
+                        com.fatoora.api.product.UomService.base(e.getValue(), l.uomFactor()).negate(), StockService.Kind.ADJUST,
                         "goods_return", id, number, "Returned to supplier (" + g.number() + ")"));
         }
         jdbc.update("UPDATE goods_return SET total_excl_vat = ?, vat_total = ?, total_incl_vat = ? WHERE id = ?", net, vat, net.add(vat), id);

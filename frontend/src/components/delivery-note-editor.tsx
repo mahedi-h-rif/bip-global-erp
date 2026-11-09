@@ -1,5 +1,6 @@
 "use client";
 
+import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -19,6 +20,7 @@ export const deliveryStatusLabel: Record<DeliveryNote["status"], string> = {
 /** New or draft delivery note. Lines from an invoice keep their invoice link and are capped at what is left to deliver. */
 export function DeliveryNoteEditor({ initial, invoiceNumber, orderNumber }: { initial: DeliveryNoteRequest & { id?: number }; invoiceNumber?: string | null; orderNumber?: string | null }) {
   const t = useT();
+  const itemUnits = useItemUnits();
   const router = useRouter();
   const fromInvoice = initial.invoiceId != null || initial.salesOrderId != null;
   const { data: customers } = useSWR<Customer[]>(fromInvoice ? null : "/customers", fetcher);
@@ -111,7 +113,8 @@ export function DeliveryNoteEditor({ initial, invoiceNumber, orderNumber }: { in
                   <div className="flex gap-2">
                     <Select className="w-44 shrink-0" value={l.productId ?? ""} onChange={(e) => {
                       const p = products?.find((x) => String(x.id) === e.target.value);
-                      setLine(i, { productId: p?.id ?? null, name: p ? p.name : l.name, unitCode: p?.unitCode ?? l.unitCode });
+                      const du = p ? defaultUnit(itemUnits, p.id) : undefined;
+                      setLine(i, { productId: p?.id ?? null, name: p ? p.name : l.name, unitCode: du?.unitCode ?? p?.unitCode ?? l.unitCode });
                     }} aria-label={t("Product")}>
                       <option value="">{t("Free text")}</option>
                       {products?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -124,9 +127,7 @@ export function DeliveryNoteEditor({ initial, invoiceNumber, orderNumber }: { in
                 <Input required type="number" min="0" step="any" max={l.remaining ?? undefined} value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} />
               </Field>
               <Field label={i === 0 ? t("Unit") : ""}>
-                <Select disabled={fromInvoice} value={l.unitCode ?? "PCE"} onChange={(e) => setLine(i, { unitCode: e.target.value })}>
-                  {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
-                </Select>
+                <UnitSelect productId={l.productId} value={l.unitCode ?? "PCE"} disabled={fromInvoice || !!l.salesOrderLineId} onPick={(u) => setLine(i, { unitCode: u })} />
               </Field>
               <Button type="button" variant="ghost" disabled={d.lines.length === 1} onClick={() => setD({ ...d, lines: d.lines.filter((_, j) => j !== i) })} aria-label={t("Remove line")}>
                 <Trash2 className="size-4" aria-hidden />

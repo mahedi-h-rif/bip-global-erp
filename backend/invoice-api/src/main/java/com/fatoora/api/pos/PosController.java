@@ -37,10 +37,14 @@ import java.util.*;
 public class PosController {
 
     public record GridItem(Long id, String number, String name, String nameAr, String barcode, String category, BigDecimal unitPrice,
-                           String unitCode, boolean trackStock, BigDecimal onHand) {}
+                           String unitCode, boolean trackStock, BigDecimal onHand,
+                           /** The alternative unit whose barcode was scanned (e.g. CT for a carton), else null. */
+                           String scannedUnit) {}
 
+    /** {@code unitCode}: the unit sold (piece, dozen, carton …); empty = the item's base unit. */
     public record CartLine(@NotNull Long productId, @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal quantity,
-                           @DecimalMin("0") BigDecimal unitPrice, @DecimalMin("0") @DecimalMax("100") BigDecimal discountPct) {}
+                           @DecimalMin("0") BigDecimal unitPrice, @DecimalMin("0") @DecimalMax("100") BigDecimal discountPct,
+                           String unitCode) {}
 
     public record Tender(@NotNull InvoicePayment.Method method, @NotNull @DecimalMin("0") BigDecimal amount) {}
 
@@ -57,6 +61,8 @@ public class PosController {
     private final ReceiptPdf receipts;
     private final OrganizationRepository orgs;
     private final AuditService audit;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fatoora.api.product.UomService uom;
 
     public PosController(JdbcTemplate jdbc, InvoiceService invoices, PaymentService payments, StockService stock, ReceiptPdf receipts,
                          OrganizationRepository orgs, AuditService audit) {
@@ -75,16 +81,19 @@ public class PosController {
         stock.requireWarehouse(orgId, warehouseId);
         String like = q == null || q.isBlank() ? null : "%" + q.trim().toLowerCase() + "%";
         return jdbc.query("""
-                SELECT p.*, COALESCE(s.quantity, 0) AS on_hand FROM product p
+                SELECT p.*, COALESCE(s.quantity, 0) AS on_hand,
+                       (SELECT u.unit_code FROM product_uom u WHERE u.product_id = p.id AND u.barcode = ?::text LIMIT 1) AS scanned_unit
+                FROM product p
                 LEFT JOIN stock_level s ON s.product_id = p.id AND s.warehouse_id = ?
                 WHERE p.organization_id = ? AND p.active AND p.is_sales_item
                   AND (?::text IS NULL OR lower(p.name) LIKE ?::text OR lower(p.number) LIKE ?::text OR p.barcode = ?::text
-                       OR lower(COALESCE(p.name_ar, '')) LIKE ?::text)
+                       OR lower(COALESCE(p.name_ar, '')) LIKE ?::text
+                       OR EXISTS (SELECT 1 FROM product_uom u WHERE u.product_id = p.id AND u.barcode = ?::text))
                 ORDER BY lower(COALESCE(p.category, '')), lower(p.name) LIMIT 300""",
                 (rs, i) -> new GridItem(rs.getLong("id"), rs.getString("number"), rs.getString("name"), rs.getString("name_ar"),
                         rs.getString("barcode"), rs.getString("category"), rs.getBigDecimal("unit_price"), rs.getString("unit_code"),
-                        rs.getBoolean("track_stock"), rs.getBigDecimal("on_hand")),
-                warehouseId, orgId, like, like, like, q == null ? null : q.trim(), like);
+                        rs.getBoolean("track_stock"), rs.getBigDecimal("on_hand"), rs.getString("scanned_unit")),
+                q == null ? null : q.trim(), warehouseId, orgId, like, like, like, q == null ? null : q.trim(), like, q == null ? null : q.trim());
     }
 
     @PostMapping("/sale")
@@ -98,10 +107,16 @@ public class PosController {
         for (CartLine c : req.lines()) {
             Map<String, Object> p = jdbc.queryForList("SELECT name, unit_price, unit_code FROM product WHERE id = ? AND organization_id = ? AND active",
                     c.productId(), orgId).stream().findFirst().orElseThrow(() -> ApiException.notFound("Product"));
-            BigDecimal price = c.unitPrice() != null ? c.unitPrice() : (BigDecimal) p.get("unit_price");
+            String unit = c.unitCode() == null || c.unitCode().isBlank() ? (String) p.get("unit_code") : c.unitCode().trim().toUpperCase();
+            BigDecimal factor = uom.factor(c.productId(), unit);
+            // Default price of an alternative unit: its own price, else base price × factor.
+            BigDecimal unitDefault = factor.compareTo(BigDecimal.ONE) == 0 ? (BigDecimal) p.get("unit_price")
+                    : jdbc.queryForObject("SELECT COALESCE(price, ? * factor) FROM product_uom WHERE product_id = ? AND unit_code = ?",
+                    BigDecimal.class, p.get("unit_price"), c.productId(), unit);
+            BigDecimal price = c.unitPrice() != null ? c.unitPrice() : unitDefault;
             if (c.discountPct() != null && c.discountPct().signum() > 0)
                 price = price.subtract(price.multiply(c.discountPct()).divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP));
-            lines.add(new InvoiceDtos.LineDto((String) p.get("name"), c.quantity(), (String) p.get("unit_code"),
+            lines.add(new InvoiceDtos.LineDto((String) p.get("name"), c.quantity(), unit,
                     price.setScale(2, RoundingMode.HALF_UP), VatCategory.S, new BigDecimal("15"), null, null, c.productId(), null));
         }
         List<Tender> tenders = req.payments() == null ? List.of() : req.payments().stream().filter(t -> t.amount().signum() > 0).toList();

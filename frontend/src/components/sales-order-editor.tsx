@@ -8,6 +8,7 @@ import { api, ApiError, fetcher } from "@/lib/api";
 import type { Customer, Product, SalesOrder, SalesOrderLine, SalesOrderRequest, Warehouse } from "@/lib/types";
 import { money, todayKsa, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from "@/components/ui";
+import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import { useT } from "@/lib/i18n";
 
 export const salesOrderStatusLabel: Record<SalesOrder["status"], string> = {
@@ -34,6 +35,7 @@ function lineNet(l: SalesOrderLine) {
 /** New order (blank or copied from a quotation) or edit of an order with no deliveries yet. */
 export function SalesOrderEditor({ initial, quotationNumber }: { initial: SalesOrderRequest & { id?: number }; quotationNumber?: string | null }) {
   const t = useT();
+  const itemUnits = useItemUnits();
   const router = useRouter();
   const { data: customers } = useSWR<Customer[]>("/customers", fetcher);
   const { data: products } = useSWR<Product[]>("/products", fetcher);
@@ -142,7 +144,8 @@ export function SalesOrderEditor({ initial, quotationNumber }: { initial: SalesO
                       <div className="flex gap-2">
                         <Select className="w-40 shrink-0" value={l.productId ?? ""} aria-label={t("Product")} onChange={(e) => {
                           const p = products?.find((x) => String(x.id) === e.target.value);
-                          setLine(i, p ? { productId: p.id, name: p.name, unitPrice: p.unitPrice, unitCode: p.unitCode ?? "PCE" } : { productId: null });
+                          const du = p ? defaultUnit(itemUnits, p.id) : undefined;
+                          setLine(i, p ? { productId: p.id, name: p.name, unitPrice: du?.price ?? p.unitPrice, unitCode: du?.unitCode ?? p.unitCode ?? "PCE" } : { productId: null });
                         }}>
                           <option value="">{t("Free text")}</option>
                           {products?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -154,9 +157,7 @@ export function SalesOrderEditor({ initial, quotationNumber }: { initial: SalesO
                   </td>
                   <td className="py-1.5 pe-2"><Input required type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></td>
                   <td className="py-1.5 pe-2">
-                    <Select value={l.unitCode ?? "PCE"} onChange={(e) => setLine(i, { unitCode: e.target.value })}>
-                      {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
-                    </Select>
+                    <UnitSelect productId={l.productId} value={l.unitCode ?? "PCE"} disabled={!!l.quotationLineId} onPick={(u, price) => setLine(i, price == null ? { unitCode: u } : { unitCode: u, unitPrice: price })} />
                   </td>
                   <td className="py-1.5 pe-2"><Input required type="number" min="0" step="any" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} /></td>
                   <td className="py-1.5 pe-2"><Input type="number" min="0" max="100" step="any" value={l.discountPct ?? 0} onChange={(e) => setLine(i, { discountPct: e.target.value })} /></td>

@@ -35,6 +35,11 @@ export interface Line {
   exemptionReason?: string | null;
   /** The product the line was picked from; name and price stay editable. */
   productId?: number | null;
+  /** Copied from a delivery line / a sales-order line (unit then fixed by that line). */
+  deliveryLineId?: number | null;
+  salesOrderLineId?: number | null;
+  /** Read-only: base units in one unit of this line. */
+  uomFactor?: number | null;
 }
 
 export interface InvoiceSummary {

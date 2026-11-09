@@ -47,7 +47,15 @@ public class DeliveryNoteController {
                        BigDecimal remaining,
                        Long salesOrderLineId, BigDecimal unitPrice, BigDecimal vatRate,
                        /** Read-only: quantity of this line already invoiced. */
-                       BigDecimal invoiced) {}
+                       BigDecimal invoiced,
+                       /** Read-only: base units per unit. */
+                       BigDecimal uomFactor) {
+
+        public Line(Long invoiceLineId, Long productId, String name, BigDecimal quantity, String unitCode, BigDecimal remaining,
+                    Long salesOrderLineId, BigDecimal unitPrice, BigDecimal vatRate, BigDecimal invoiced) {
+            this(invoiceLineId, productId, name, quantity, unitCode, remaining, salesOrderLineId, unitPrice, vatRate, invoiced, null);
+        }
+    }
 
     public record Request(Long invoiceId, Long customerId, @Size(max = 500) String clientName,
                           @Size(max = 1000) String deliveryAddress, Long warehouseId, LocalDate deliveryDate,
@@ -67,7 +75,9 @@ public class DeliveryNoteController {
                       Instant receivedAt, String note, String createdBy, Instant createdAt, List<Line> lines,
                       Long salesOrderId, String salesOrderNumber, String customerRef, String salesEmployee,
                       /** NONE, PARTIAL or FULL: how much of a delivered note is on invoices. */
-                      String invoicing) {}
+                      String invoicing,
+                      /** Every sales order the lines come from (one delivery may combine several). */
+                      List<String> salesOrderNumbers) {}
 
     private final JdbcTemplate jdbc;
     private final StockService stock;
@@ -77,6 +87,8 @@ public class DeliveryNoteController {
     private final AuditService audit;
     private final com.fatoora.api.flow.FlowService flow;
     private final com.fatoora.api.invoice.InvoiceService invoices;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.product.UomService uom;
 
     public DeliveryNoteController(JdbcTemplate jdbc, StockService stock, CustomerRepository customers,
                                   OrganizationRepository orgs, LetterheadPdf letterhead, AuditService audit,
@@ -134,21 +146,42 @@ public class DeliveryNoteController {
     /** Copy To Delivery: a new note's lines from a sales order, each with the quantity not yet on a delivery. */
     @GetMapping("/from-sales-order/{salesOrderId}")
     Request prefillFromOrder(@PathVariable Long salesOrderId) {
+        return prefillFromOrders(List.of(salesOrderId));
+    }
+
+    /**
+     * Copy To Delivery from one or more open orders of the same customer (SAP B1 "Copy From" several base documents):
+     * every line with the quantity still open on its order.
+     */
+    @GetMapping("/from-sales-orders")
+    Request prefillFromOrders(@RequestParam List<Long> ids) {
         Long orgId = CurrentUser.orgId();
-        Map<String, Object> so = salesOrder(orgId, salesOrderId);
-        Map<Long, BigDecimal> reserved = flow.deliveredBySalesOrderLine(salesOrderId, null, false);
-        List<Line> lines = jdbc.query("SELECT * FROM sales_order_line WHERE sales_order_id = ? ORDER BY position", (rs, i) -> {
-            BigDecimal left = rs.getBigDecimal("quantity").subtract(reserved.getOrDefault(rs.getLong("id"), BigDecimal.ZERO));
-            return new Line(null, (Long) rs.getObject("product_id"), rs.getString("name"), left, rs.getString("unit_code"), left,
-                    rs.getLong("id"), netUnitPrice(rs.getBigDecimal("unit_price"), rs.getBigDecimal("discount_pct")),
-                    rs.getBigDecimal("vat_rate"), null);
-        }, salesOrderId).stream().filter(l -> l.remaining().signum() > 0).toList();
-        Long customerId = (Long) so.get("customer_id");
+        List<Line> lines = new ArrayList<>();
+        List<String> numbers = new ArrayList<>();
+        Map<String, Object> first = null;
+        for (Long soId : new LinkedHashSet<>(ids)) {
+            Map<String, Object> so = salesOrder(orgId, soId);
+            String status = (String) so.get("status");
+            if ("CANCELLED".equals(status) || "CLOSED".equals(status))
+                throw ApiException.badRequest("order_closed", "Sales order " + so.get("number") + " is " + status.toLowerCase());
+            if (first == null) first = so;
+            else if (!Objects.equals(first.get("customer_id"), so.get("customer_id")) || first.get("customer_id") == null)
+                throw ApiException.badRequest("mixed_customers", "All sales orders must be for the same customer");
+            Map<Long, BigDecimal> open = flow.openBySalesOrderLine(soId, null, null);
+            lines.addAll(jdbc.query("SELECT * FROM sales_order_line WHERE sales_order_id = ? ORDER BY position", (rs, i) -> {
+                BigDecimal left = open.getOrDefault(rs.getLong("id"), BigDecimal.ZERO);
+                return new Line(null, (Long) rs.getObject("product_id"), rs.getString("name"), left, rs.getString("unit_code"), left,
+                        rs.getLong("id"), netUnitPrice(rs.getBigDecimal("unit_price"), rs.getBigDecimal("discount_pct")),
+                        rs.getBigDecimal("vat_rate"), null, rs.getBigDecimal("uom_factor"));
+            }, soId).stream().filter(l -> l.remaining().signum() > 0).toList());
+            numbers.add((String) so.get("number"));
+        }
+        Long customerId = (Long) first.get("customer_id");
         Customer c = customerId == null ? null : customers.findById(customerId).orElse(null);
-        return new Request(null, customerId, (String) so.get("client_name"), c == null ? null : QuotationController.address(c),
-                (Long) so.get("warehouse_id"), LocalDate.now(InvoiceApiApplication.KSA), null, null, null,
-                "Based on Sales Order " + so.get("number") + ".", lines,
-                salesOrderId, (String) so.get("customer_ref"), (String) so.get("sales_employee"));
+        return new Request(null, customerId, (String) first.get("client_name"), c == null ? null : QuotationController.address(c),
+                (Long) first.get("warehouse_id"), LocalDate.now(InvoiceApiApplication.KSA), null, null, null,
+                (numbers.size() == 1 ? "Based on Sales Order " : "Based on Sales Orders ") + String.join(", ", numbers) + ".", lines,
+                ids.getFirst(), (String) first.get("customer_ref"), (String) first.get("sales_employee"));
     }
 
     /** Delivered notes of a customer with quantities not yet invoiced (the Copy To Invoice picker). */
@@ -202,7 +235,7 @@ public class DeliveryNoteController {
                         null, null, l.productId(), lineId));
             }
             deliveries.add(n.number());
-            if (n.salesOrderNumber() != null) orders.add(n.salesOrderNumber());
+            orders.addAll(n.salesOrderNumbers());
             if (n.customerRef() != null) refs.add(n.customerRef());
             if (employee == null) employee = n.salesEmployee();
             if (supply == null || n.deliveryDate().isAfter(supply)) supply = n.deliveryDate();
@@ -233,7 +266,7 @@ public class DeliveryNoteController {
                 INSERT INTO delivery_note (organization_id, number, created_by, delivery_date) VALUES (?, ?, ?, ?) RETURNING id""",
                 Long.class, orgId, number, CurrentUser.get().email(), LocalDate.now(InvoiceApiApplication.KSA));
         write(orgId, id, req);
-        flow.refreshSalesOrder(req.salesOrderId());
+        flow.ordersOfDelivery(id).forEach(flow::refreshSalesOrder);
         audit.record(orgId, "DELIVERY_NOTE_CREATED", "delivery_note", id, number);
         return dto(orgId, id);
     }
@@ -246,9 +279,10 @@ public class DeliveryNoteController {
         requireDraft(d);
         Long orgId = CurrentUser.orgId();
         validate(orgId, req, id);
+        List<Long> before = flow.ordersOfDelivery(id);
         write(orgId, id, req);
-        flow.refreshSalesOrder(d.salesOrderId());
-        flow.refreshSalesOrder(req.salesOrderId());
+        before.forEach(flow::refreshSalesOrder);
+        flow.ordersOfDelivery(id).forEach(flow::refreshSalesOrder);
         audit.record(orgId, "DELIVERY_NOTE_UPDATED", "delivery_note", id, d.number());
         return dto(orgId, id);
     }
@@ -266,13 +300,14 @@ public class DeliveryNoteController {
             jdbc.update("UPDATE delivery_note SET warehouse_id = ? WHERE id = ?", wh, id);
             Map<Long, BigDecimal> qty = new LinkedHashMap<>();
             for (Line l : d.lines())
-                if (l.productId() != null && stock.tracked(l.productId())) qty.merge(l.productId(), l.quantity(), BigDecimal::add);
+                if (l.productId() != null && stock.tracked(l.productId()))
+                    qty.merge(l.productId(), com.fatoora.api.product.UomService.base(l.quantity(), l.uomFactor()), BigDecimal::add);
             stock.apply(orgId, qty.entrySet().stream().map(e -> new StockService.Move(e.getKey(), wh, e.getValue().negate(),
                     StockService.Kind.DELIVERY, "delivery_note", id, d.number(), null)).toList(), false, CurrentUser.get().email());
         }
         jdbc.update("UPDATE delivery_note SET status = 'DELIVERED', received_by = ?, received_at = now(), updated_at = now() WHERE id = ?",
                 req.receivedBy().trim(), id);
-        flow.refreshSalesOrder(d.salesOrderId());
+        flow.ordersOfDelivery(id).forEach(flow::refreshSalesOrder);
         audit.record(orgId, "DELIVERY_NOTE_DELIVERED", "delivery_note", id, d.number() + " received by " + req.receivedBy());
         return dto(orgId, id);
     }
@@ -294,7 +329,7 @@ public class DeliveryNoteController {
             stock.apply(orgId, back, true, CurrentUser.get().email());
         }
         jdbc.update("UPDATE delivery_note SET status = 'CANCELLED', updated_at = now() WHERE id = ?", id);
-        flow.refreshSalesOrder(d.salesOrderId());
+        flow.ordersOfDelivery(id).forEach(flow::refreshSalesOrder);
         audit.record(orgId, "DELIVERY_NOTE_CANCELLED", "delivery_note", id, d.number());
         return dto(orgId, id);
     }
@@ -327,9 +362,10 @@ public class DeliveryNoteController {
         if (req.warehouseId() != null) stock.requireWarehouse(orgId, req.warehouseId());
         if (req.customerId() != null && customers.findByIdAndOrganizationId(req.customerId(), orgId).isEmpty())
             throw ApiException.notFound("Customer");
-        if (req.salesOrderId() != null) {
-            if (req.invoiceId() != null) throw ApiException.badRequest("two_bases", "A delivery comes from an order or an invoice, not both");
-            validateAgainstOrder(orgId, req, exceptNoteId);
+        boolean fromOrders = req.salesOrderId() != null || req.lines().stream().anyMatch(l -> l.salesOrderLineId() != null);
+        if (fromOrders) {
+            if (req.invoiceId() != null) throw ApiException.badRequest("two_bases", "A delivery comes from orders or an invoice, not both");
+            validateAgainstOrders(orgId, req, exceptNoteId);
             return;
         }
         for (Line l : req.lines()) if (l.salesOrderLineId() != null)
@@ -360,27 +396,16 @@ public class DeliveryNoteController {
         }
     }
 
-    private void validateAgainstOrder(Long orgId, Request req, Long exceptNoteId) {
-        Map<String, Object> so = salesOrder(orgId, req.salesOrderId());
-        String status = (String) so.get("status");
-        if ("CANCELLED".equals(status) || "CLOSED".equals(status))
-            throw ApiException.badRequest("order_closed", "Sales order " + so.get("number") + " is " + status.toLowerCase());
-        Map<Long, BigDecimal> ordered = new HashMap<>();
-        jdbc.query("SELECT id, quantity FROM sales_order_line WHERE sales_order_id = ?",
-                rs -> { ordered.put(rs.getLong(1), rs.getBigDecimal(2)); }, req.salesOrderId());
-        Map<Long, BigDecimal> reserved = flow.deliveredBySalesOrderLine(req.salesOrderId(), exceptNoteId, false);
-        Map<Long, BigDecimal> asked = new HashMap<>();
+    /** Lines from one or more open orders of one customer, none taking more than is still open on its order line. */
+    private void validateAgainstOrders(Long orgId, Request req, Long exceptNoteId) {
+        if (req.salesOrderId() != null) salesOrder(orgId, req.salesOrderId());
+        Map<Long, BigDecimal> asked = new LinkedHashMap<>();
         for (Line l : req.lines()) {
-            if (l.salesOrderLineId() == null || !ordered.containsKey(l.salesOrderLineId()))
-                throw ApiException.badRequest("unknown_order_line", "Every line must come from the sales order");
+            if (l.salesOrderLineId() == null)
+                throw ApiException.badRequest("unknown_order_line", "Every line must come from a sales order");
             asked.merge(l.salesOrderLineId(), l.quantity(), BigDecimal::add);
         }
-        for (var e : asked.entrySet()) {
-            BigDecimal remaining = ordered.get(e.getKey()).subtract(reserved.getOrDefault(e.getKey(), BigDecimal.ZERO));
-            if (e.getValue().compareTo(remaining) > 0)
-                throw ApiException.badRequest("over_delivery", "A line exceeds the ordered quantity still to deliver ("
-                        + StockService.plain(remaining) + ")");
-        }
+        flow.checkOrderLines(orgId, asked, req.customerId(), exceptNoteId, null);
     }
 
     private Map<String, Object> salesOrder(Long orgId, Long salesOrderId) {
@@ -399,8 +424,12 @@ public class DeliveryNoteController {
         Long customerId = req.customerId();
         Long warehouseId = req.warehouseId();
         String customerRef = req.customerRef(), salesEmployee = req.salesEmployee();
-        if (req.salesOrderId() != null) {
-            Map<String, Object> so = salesOrder(orgId, req.salesOrderId());
+        Long headerOrder = req.salesOrderId();
+        if (headerOrder == null)
+            headerOrder = req.lines().stream().map(Line::salesOrderLineId).filter(Objects::nonNull).findFirst()
+                    .map(x -> jdbc.queryForObject("SELECT sales_order_id FROM sales_order_line WHERE id = ?", Long.class, x)).orElse(null);
+        if (headerOrder != null) {
+            Map<String, Object> so = salesOrder(orgId, headerOrder);
             if (customerId == null) customerId = (Long) so.get("customer_id");
             if (warehouseId == null) warehouseId = (Long) so.get("warehouse_id");
             if (customerRef == null) customerRef = (String) so.get("customer_ref");
@@ -418,28 +447,32 @@ public class DeliveryNoteController {
                 req.invoiceId(), customerId, blank(req.clientName()), blank(req.deliveryAddress()), warehouseId,
                 req.deliveryDate() == null ? LocalDate.now(InvoiceApiApplication.KSA) : req.deliveryDate(),
                 blank(req.driverName()), blank(req.driverPhone()), blank(req.vehicleNo()), blank(req.note()),
-                req.salesOrderId(), blank(customerRef), blank(salesEmployee), id);
+                headerOrder, blank(customerRef), blank(salesEmployee), id);
         jdbc.update("DELETE FROM delivery_note_line WHERE delivery_note_id = ?", id);
         int pos = 1;
         for (Line l : req.lines()) {
             Long productId = l.productId();
             BigDecimal unitPrice = l.unitPrice(), vatRate = l.vatRate();
+            String unit = l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode().trim().toUpperCase();
             if (l.salesOrderLineId() != null) {
-                Map<String, Object> sl = jdbc.queryForMap("SELECT product_id, unit_price, discount_pct, vat_rate FROM sales_order_line WHERE id = ?",
+                Map<String, Object> sl = jdbc.queryForMap("SELECT product_id, unit_price, discount_pct, vat_rate, unit_code FROM sales_order_line WHERE id = ?",
                         l.salesOrderLineId());
                 productId = (Long) sl.get("product_id");
                 unitPrice = netUnitPrice((BigDecimal) sl.get("unit_price"), (BigDecimal) sl.get("discount_pct"));
                 vatRate = (BigDecimal) sl.get("vat_rate");
-            } else if (l.invoiceLineId() != null)
-                productId = jdbc.queryForObject("SELECT product_id FROM invoice_line WHERE id = ?", Long.class, l.invoiceLineId());
-            else if (productId != null && jdbc.queryForObject("SELECT count(*) FROM product WHERE id = ? AND organization_id = ?",
+                unit = (String) sl.get("unit_code");
+            } else if (l.invoiceLineId() != null) {
+                Map<String, Object> il = jdbc.queryForMap("SELECT product_id, unit_code FROM invoice_line WHERE id = ?", l.invoiceLineId());
+                productId = (Long) il.get("product_id");
+                unit = (String) il.get("unit_code");
+            } else if (productId != null && jdbc.queryForObject("SELECT count(*) FROM product WHERE id = ? AND organization_id = ?",
                     Integer.class, productId, orgId) == 0)
                 throw ApiException.notFound("Product");
             jdbc.update("""
                     INSERT INTO delivery_note_line (delivery_note_id, position, invoice_line_id, product_id, name, quantity, unit_code,
-                                                    sales_order_line_id, unit_price, vat_rate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.invoiceLineId(), productId, l.name().strip(), l.quantity(),
-                    l.unitCode() == null || l.unitCode().isBlank() ? "PCE" : l.unitCode(), l.salesOrderLineId(), unitPrice, vatRate);
+                                                    sales_order_line_id, unit_price, vat_rate, uom_factor)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, pos++, l.invoiceLineId(), productId, l.name().strip(), l.quantity(),
+                    unit, l.salesOrderLineId(), unitPrice, vatRate, uom == null ? BigDecimal.ONE : uom.factor(productId, unit));
         }
     }
 
@@ -479,7 +512,11 @@ public class DeliveryNoteController {
         List<Line> lines = jdbc.query("SELECT * FROM delivery_note_line WHERE delivery_note_id = ? ORDER BY position",
                 (rs, i) -> new Line((Long) rs.getObject("invoice_line_id"), (Long) rs.getObject("product_id"), rs.getString("name"),
                         rs.getBigDecimal("quantity"), rs.getString("unit_code"), null, (Long) rs.getObject("sales_order_line_id"),
-                        rs.getBigDecimal("unit_price"), rs.getBigDecimal("vat_rate"), billed.getOrDefault(rs.getLong("id"), BigDecimal.ZERO)), id);
+                        rs.getBigDecimal("unit_price"), rs.getBigDecimal("vat_rate"), billed.getOrDefault(rs.getLong("id"), BigDecimal.ZERO),
+                        rs.getBigDecimal("uom_factor")), id);
+        List<String> orderNumbers = jdbc.queryForList("""
+                SELECT DISTINCT o.number FROM delivery_note_line dl JOIN sales_order_line sl ON sl.id = dl.sales_order_line_id
+                JOIN sales_order o ON o.id = sl.sales_order_id WHERE dl.delivery_note_id = ? ORDER BY o.number""", String.class, id);
         boolean anyBilled = lines.stream().anyMatch(l -> l.invoiced().signum() > 0);
         boolean allBilled = !lines.isEmpty() && lines.stream().allMatch(l -> l.invoiced().compareTo(l.quantity()) >= 0);
         String invoicing = allBilled ? "FULL" : anyBilled ? "PARTIAL" : "NONE";
@@ -496,7 +533,7 @@ public class DeliveryNoteController {
                         rs.getTimestamp("received_at") == null ? null : rs.getTimestamp("received_at").toInstant(),
                         rs.getString("note"), rs.getString("created_by"), rs.getTimestamp("created_at").toInstant(), lines,
                         (Long) rs.getObject("sales_order_id"), rs.getString("sonumber"), rs.getString("customer_ref"),
-                        rs.getString("sales_employee"), invoicing), id, orgId)
+                        rs.getString("sales_employee"), invoicing, orderNumbers), id, orgId)
                 .stream().findFirst().orElseThrow(() -> ApiException.notFound("Delivery note"));
     }
 

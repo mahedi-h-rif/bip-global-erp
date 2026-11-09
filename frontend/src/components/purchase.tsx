@@ -1,5 +1,6 @@
 "use client";
 
+import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import useSWR from "swr";
 import { Plus, Trash2 } from "lucide-react";
 import { fetcher } from "@/lib/api";
@@ -47,6 +48,7 @@ export function CostLines<L extends EditLine>({ lines, onChange, currency, blank
   blank: () => L;
 }) {
   const t = useT();
+  const itemUnits = useItemUnits();
   const { data: products } = useSWR<Product[]>("/products", fetcher);
   const set = (i: number, patch: Partial<L>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   let net = 0, vat = 0;
@@ -77,7 +79,9 @@ export function CostLines<L extends EditLine>({ lines, onChange, currency, blank
                   <div className="flex gap-2">
                     <Select className="w-40 shrink-0" value={l.productId ?? ""} aria-label={t("Product")} onChange={(e) => {
                       const p = products?.find((x) => String(x.id) === e.target.value);
-                      set(i, (p ? { productId: p.id, name: p.name, unitCode: p.unitCode ?? "PCE", unitCost: p.avgCost ?? p.costPrice ?? l.unitCost } : { productId: null }) as Partial<L>);
+                      const du = p ? defaultUnit(itemUnits, p.id, true) : undefined;
+                      const cost = p ? Number(p.avgCost ?? p.costPrice ?? l.unitCost ?? 0) * Number(du?.factor ?? 1) : 0;
+                      set(i, (p ? { productId: p.id, name: p.name, unitCode: du?.unitCode ?? p.unitCode ?? "PCE", unitCost: +cost.toFixed(4) } : { productId: null }) as Partial<L>);
                     }}>
                       <option value="">{t("Free text")}</option>
                       {products?.filter((p) => p.purchaseItem !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -89,9 +93,11 @@ export function CostLines<L extends EditLine>({ lines, onChange, currency, blank
               </td>
               <td className="py-1.5 pe-2"><Input required type="number" min="0" step="any" value={l.quantity} onChange={(e) => set(i, { quantity: e.target.value } as Partial<L>)} /></td>
               <td className="py-1.5 pe-2">
-                <Select disabled={l.locked} value={l.unitCode ?? "PCE"} onChange={(e) => set(i, { unitCode: e.target.value } as Partial<L>)}>
-                  {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
-                </Select>
+                <UnitSelect productId={l.productId} value={l.unitCode ?? "PCE"} disabled={l.locked} onPick={(u, _p, factor) => {
+                  const p = products?.find((x) => x.id === l.productId);
+                  const base = p ? Number(p.avgCost ?? p.costPrice ?? 0) : 0;
+                  set(i, (p && base > 0 ? { unitCode: u, unitCost: +(base * factor).toFixed(4) } : { unitCode: u }) as Partial<L>);
+                }} />
               </td>
               <td className="py-1.5 pe-2"><Input required type="number" min="0" step="any" value={l.unitCost} onChange={(e) => set(i, { unitCost: e.target.value } as Partial<L>)} /></td>
               <td className="py-1.5 pe-2"><Input type="number" min="0" step="any" value={l.vatRate ?? 15} onChange={(e) => set(i, { vatRate: e.target.value } as Partial<L>)} /></td>
