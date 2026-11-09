@@ -5,7 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
  * cookie on every request; this only avoids flashing protected pages.
  */
 export function proxy(req: NextRequest) {
-  const hasSession = req.cookies.has("fatoora_session");
+  // Any instance's session cookie (UAT and production on one host use different names).
+  const hasSession = req.cookies.getAll().some((c) => c.name.startsWith("fatoora_session"));
   const isLogin = req.nextUrl.pathname === "/login";
   if (!hasSession && !isLogin) {
     const url = req.nextUrl.clone();

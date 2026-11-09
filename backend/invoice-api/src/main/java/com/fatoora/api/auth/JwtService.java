@@ -18,7 +18,12 @@ import java.util.Optional;
 @Service
 public class JwtService {
 
-    public static final String COOKIE = "fatoora_session";
+    /**
+     * Session cookie name. Browsers share cookies between ports of one host, so two instances on the same server
+     * (UAT :8088, production :8089) need different names (FATOORA_COOKIE_NAME) or each login logs the other out.
+     */
+    public static final String COOKIE = java.util.Optional.ofNullable(System.getenv("FATOORA_COOKIE_NAME"))
+            .filter(s -> s.matches("[A-Za-z0-9_]+")).orElse("fatoora_session");
 
     private final SecretKey key;
     private final Duration ttl;

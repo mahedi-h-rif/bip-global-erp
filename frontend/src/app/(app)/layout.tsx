@@ -45,7 +45,7 @@ import {
   HandCoins,
   X,
 } from "lucide-react";
-import { api, fetcher } from "@/lib/api";
+import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Organization } from "@/lib/types";
 import { Alert, Button, Spinner } from "@/components/ui";
 import { LanguagePrompt, LanguageSwitcher } from "@/components/language";
@@ -154,6 +154,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const t = useT();
   const { data: me, error: meError, mutate: retryMe } = useSWR<Me>("/auth/me", fetcher);
+  // A session that is no longer valid here (expired, or another instance's cookie): sign in again.
+  useEffect(() => {
+    if (meError instanceof ApiError && meError.status === 401)
+      window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+  }, [meError]);
   const { data: org } = useSWR<Organization>(me ? "/organization" : null, fetcher);
   // Department roles: hide the modules the user's role does not grant (the API enforces the same rules).
   const { data: perms } = useSWR<{ restricted: boolean; permissions: Record<string, string[]> }>(me ? "/settings/my-permissions" : null, fetcher);
@@ -197,6 +202,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!me) {
     if (!meError) return <Spinner />;
+    if (meError instanceof ApiError && meError.status === 401) return <Spinner />;
     return (
       <main className="mx-auto max-w-md px-4 py-16">
         <Alert tone="bad">{t("Could not reach the server")}</Alert>
