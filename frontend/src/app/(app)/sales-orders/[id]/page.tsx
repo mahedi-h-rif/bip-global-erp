@@ -132,7 +132,7 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
                   <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/delivery-notes/${n.id}`}>{n.number}</Link></td>
                   <td className="tabular px-4 py-3">{date(n.deliveryDate)}</td>
                   <td className="px-4 py-3">{t(deliveryStatusLabel[n.status])}</td>
-                  <td className="px-4 py-3 text-muted">{n.lines.map((l) => `${l.name} × ${Number(l.quantity)}`).join(", ")}</td>
+                  <td className="px-4 py-3 text-muted">{n.lines.filter((l) => !l.salesOrderLineId || o.lines.some((x) => x.id === l.salesOrderLineId)).map((l) => `${l.name} × ${Number(l.quantity)} ${l.unitCode ?? ""}`.trim()).join(", ")}</td>
                 </tr>
               ))}
             </tbody>

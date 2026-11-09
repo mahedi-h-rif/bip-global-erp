@@ -491,11 +491,13 @@ public class PurchaseController {
         Map<Long, BigDecimal> bill = billed(id);
         List<Map<String, Object>> raw = jdbc.queryForList("SELECT id, quantity FROM purchase_order_line WHERE purchase_order_id = ?", id);
         String receiving = com.fatoora.api.flow.FlowService.level(got, raw), billing = com.fatoora.api.flow.FlowService.level(bill, raw);
+        boolean ended = Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT status IN ('CLOSED','CANCELLED') FROM purchase_order WHERE id = ?", Boolean.class, id));
         List<PoLine> lines = jdbc.query("SELECT * FROM purchase_order_line WHERE purchase_order_id = ? ORDER BY position", (rs, i) -> {
             BigDecimal q = rs.getBigDecimal("quantity");
             BigDecimal r = got.getOrDefault(rs.getLong("id"), BigDecimal.ZERO);
             return new PoLine(rs.getLong("id"), (Long) rs.getObject("product_id"), rs.getString("name"), q, rs.getString("unit_code"),
-                    rs.getBigDecimal("unit_cost"), rs.getBigDecimal("vat_rate"), r, q.subtract(r).max(BigDecimal.ZERO),
+                    rs.getBigDecimal("unit_cost"), rs.getBigDecimal("vat_rate"), r, ended ? BigDecimal.ZERO : q.subtract(r).max(BigDecimal.ZERO),
                     rs.getBigDecimal("uom_factor"), bill.getOrDefault(rs.getLong("id"), BigDecimal.ZERO));
         }, id);
         List<Attachment> att = jdbc.query("SELECT id, file_name, content_type, created_by, created_at FROM purchase_attachment WHERE purchase_order_id = ? ORDER BY id",

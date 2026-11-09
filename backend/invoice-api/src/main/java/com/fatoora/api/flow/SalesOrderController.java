@@ -384,12 +384,15 @@ public class SalesOrderController {
         flow.invoicedDirectBySalesOrderLine(id, null, true, null).forEach((k, v) -> fulfilled.merge(k, v, BigDecimal::add));
         List<Map<String, Object>> raw = jdbc.queryForList("SELECT id, quantity FROM sales_order_line WHERE sales_order_id = ?", id);
         String deliveryStatus = FlowService.level(fulfilled, raw), invoiceStatus = FlowService.level(invoiced, raw);
+        // A closed (by hand) or cancelled order has nothing open any more: the rest was dropped.
+        boolean ended = Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT status IN ('CLOSED','CANCELLED') FROM sales_order WHERE id = ?", Boolean.class, id));
         List<Line> lines = jdbc.query("SELECT * FROM sales_order_line WHERE sales_order_id = ? ORDER BY position", (rs, i) -> {
             long lid = rs.getLong("id");
             BigDecimal qty = rs.getBigDecimal("quantity");
             return new Line(lid, (Long) rs.getObject("quotation_line_id"), (Long) rs.getObject("product_id"), rs.getString("name"), qty,
                     rs.getString("unit_code"), rs.getBigDecimal("unit_price"), rs.getBigDecimal("discount_pct"), rs.getBigDecimal("vat_rate"),
-                    delivered.getOrDefault(lid, BigDecimal.ZERO), open.getOrDefault(lid, qty).max(BigDecimal.ZERO),
+                    delivered.getOrDefault(lid, BigDecimal.ZERO), ended ? BigDecimal.ZERO : open.getOrDefault(lid, qty).max(BigDecimal.ZERO),
                     rs.getBigDecimal("uom_factor"), invoiced.getOrDefault(lid, BigDecimal.ZERO));
         }, id);
         return jdbc.query("""
