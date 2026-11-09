@@ -49,6 +49,46 @@ public class ApiExceptionHandler {
                 .body(new ErrorBody("forbidden", "You don't have permission to do this.", null));
     }
 
+    /** Client mistakes are answered as such (4xx), never as a server error. */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ResponseEntity<ErrorBody> unreadable(Exception e) {
+        return ResponseEntity.badRequest().body(new ErrorBody("malformed_request", "The request body is not valid JSON for this form", null));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<ErrorBody> mediaType(org.springframework.web.HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(new ErrorBody("unsupported_type", "This file or content type is not accepted here (" + e.getContentType() + ")", null));
+    }
+
+    @ExceptionHandler({org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+            org.springframework.web.bind.MissingRequestHeaderException.class})
+    ResponseEntity<ErrorBody> badParameter(Exception e) {
+        return ResponseEntity.badRequest().body(new ErrorBody("invalid_parameter", "A parameter is missing or has the wrong format", null));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ErrorBody> method(Exception e) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(new ErrorBody("method_not_allowed", "This action is not supported here", null));
+    }
+
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    ResponseEntity<ErrorBody> noResource(Exception e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorBody("not_found", "Not found", null));
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    ResponseEntity<ErrorBody> tooLarge(Exception e) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorBody("too_large", "The file is too large", null));
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    ResponseEntity<ErrorBody> integrity(Exception e) {
+        log.warn("Data integrity: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorBody("conflict", "This change conflicts with existing data (duplicate or still in use)", null));
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ErrorBody> unexpected(Exception e) {
         log.error("Unhandled error", e);

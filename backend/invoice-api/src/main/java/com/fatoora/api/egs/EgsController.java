@@ -40,7 +40,9 @@ public class EgsController {
         this.units = units;
     }
 
+    /** The company admin may look (expiry, status); onboarding, renewal and changes stay with the provider. */
     @GetMapping
+    @PreAuthorize("hasAnyRole('OPERATOR','ADMIN')")
     List<EgsDto> list() {
         return units.findByOrganizationIdOrderByCreatedAtDesc(CurrentUser.orgId()).stream().map(this::toDto).toList();
     }

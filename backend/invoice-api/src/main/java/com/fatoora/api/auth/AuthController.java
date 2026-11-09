@@ -79,7 +79,9 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    ResponseEntity<Void> logout() {
+    ResponseEntity<Void> logout(HttpServletRequest req) {
+        if (req.getCookies() != null)
+            for (var c : req.getCookies()) if (JwtService.COOKIE.equals(c.getName())) jwt.revoke(c.getValue());
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
                 .build();

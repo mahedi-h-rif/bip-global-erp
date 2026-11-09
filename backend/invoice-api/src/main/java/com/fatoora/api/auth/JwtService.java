@@ -47,15 +47,36 @@ public class JwtService {
                 .claim("uid", user.getId())
                 .claim("org", user.getOrganizationId())
                 .claim("role", user.getRole().name())
+                .id(java.util.UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)))
                 .signWith(key)
                 .compact();
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    /** Sign-out: this token (not the user's other sessions) stops working now. */
+    public void revoke(String token) {
+        if (jdbc == null || token == null || token.isBlank()) return;
+        try {
+            Claims c = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+            if (c.getId() == null) return;
+            jdbc.update("DELETE FROM revoked_session WHERE expires_at < now()");
+            jdbc.update("INSERT INTO revoked_session (jti, expires_at) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    c.getId(), java.sql.Timestamp.from(c.getExpiration().toInstant()));
+        } catch (JwtException | IllegalArgumentException e) {
+            // already invalid: nothing to revoke
+        }
+    }
+
     public Optional<CurrentUser> parse(String token) {
         try {
             Claims c = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+            if (c.getId() != null && jdbc != null && Boolean.TRUE.equals(jdbc.queryForObject(
+                    "SELECT EXISTS (SELECT 1 FROM revoked_session WHERE jti = ?)", Boolean.class, c.getId())))
+                return Optional.empty();
             return Optional.of(new CurrentUser(
                     c.get("uid", Number.class).longValue(),
                     c.get("org", Number.class).longValue(),

@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import useSWR from "swr";
 import { AlertTriangle, CheckCircle2, Cpu, KeyRound, Plus, RefreshCw, Star, XCircle } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
-import type { EgsUnit, OnboardingResult, Organization } from "@/lib/types";
+import type { EgsUnit, Me, OnboardingResult, Organization } from "@/lib/types";
 import { date, expiresWithinDays } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { Trans, useT } from "@/lib/i18n";
@@ -123,6 +123,9 @@ export default function DevicesPage() {
   const t = useT();
   const { data: units, error, mutate } = useSWR<EgsUnit[]>("/egs-units", fetcher);
   const { data: org } = useSWR<Organization>("/organization", fetcher);
+  const { data: me } = useSWR<Me>("/auth/me", fetcher);
+  // Only the system provider (operator) registers, renews or changes devices; the company admin sees them read-only.
+  const manage = me?.role === "OPERATOR";
   const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState<{ id: number; mode: "onboard" | "renew" } | null>(null);
 
@@ -131,7 +134,7 @@ export default function DevicesPage() {
       <PageHeader
         title={t("ZATCA devices")}
         subtitle={t("E-invoice generation solution (EGS) units registered with the Fatoora platform")}
-        actions={!creating && <Button onClick={() => setCreating(true)}><Plus className="size-4" aria-hidden /> {t("New device")}</Button>}
+        actions={manage && !creating && <Button onClick={() => setCreating(true)}><Plus className="size-4" aria-hidden /> {t("New device")}</Button>}
       />
       {org && (
         <div className="mb-6">
@@ -167,7 +170,7 @@ export default function DevicesPage() {
                       <p className="mt-1 break-all font-mono text-[11px] text-muted/80">{u.serialNumber}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  {manage && <div className="flex flex-wrap gap-2">
                     {u.status !== "ACTIVE" && (
                       <Button onClick={() => setOpen({ id: u.id, mode: "onboard" })}><KeyRound className="size-4" aria-hidden /> {t("Register")}</Button>
                     )}
@@ -183,7 +186,7 @@ export default function DevicesPage() {
                     {u.status === "ACTIVE" && (
                       <Button variant="secondary" onClick={() => setOpen({ id: u.id, mode: "renew" })}><RefreshCw className="size-4" aria-hidden /> {t("Renew")}</Button>
                     )}
-                  </div>
+                  </div>}
                 </div>
                 {open?.id === u.id && <OtpForm unit={u} mode={open.mode} onDone={() => mutate()} />}
               </li>
