@@ -174,6 +174,12 @@ export default function DevicesPage() {
                     {u.status === "ACTIVE" && !u.isDefault && (
                       <Button variant="secondary" onClick={async () => { await api("POST", `/egs-units/${u.id}/default`); mutate(); }}>{t("Make default")}</Button>
                     )}
+                    {!u.isDefault && u.status !== "RETIRED" && (
+                      <Button variant="ghost" onClick={async () => {
+                        if (!window.confirm(t("Retire {name}? It will never sign invoices again. Also revoke its certificate in the Fatoora portal.", { name: u.name }))) return;
+                        await api("POST", `/egs-units/${u.id}/retire`); mutate();
+                      }}>{t("Retire")}</Button>
+                    )}
                     {u.status === "ACTIVE" && (
                       <Button variant="secondary" onClick={() => setOpen({ id: u.id, mode: "renew" })}><RefreshCw className="size-4" aria-hidden /> {t("Renew")}</Button>
                     )}

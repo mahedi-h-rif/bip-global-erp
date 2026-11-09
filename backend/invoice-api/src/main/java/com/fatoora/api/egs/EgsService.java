@@ -206,6 +206,20 @@ public class EgsService {
         all.forEach(u -> u.setDefault(u.getId().equals(unitId)));
     }
 
+    /**
+     * Takes a device out of use (e.g. replaced by one registered with corrected details). It keeps its history and
+     * the invoices it signed; it just can't sign again. The default device can't be retired — make another default first.
+     * Revoke its certificate in the Fatoora portal as well.
+     */
+    @Transactional
+    public void retire(Long orgId, Long unitId) {
+        EgsUnit unit = units.findByOrganizationIdOrderByCreatedAtDesc(orgId).stream().filter(u -> u.getId().equals(unitId)).findFirst()
+                .orElseThrow(() -> ApiException.notFound("EGS unit"));
+        if (unit.isDefault())
+            throw ApiException.conflict("default_device", "This is the default device. Make another active device the default first.");
+        unit.setStatus(EgsUnit.Status.RETIRED);
+    }
+
     // --- helpers -----------------------------------------------------------------------------
 
     private static CsrConfig csrConfig(EgsUnit unit, Organization org) {

@@ -68,6 +68,12 @@ public class EgsController {
         service.makeDefault(CurrentUser.orgId(), id);
     }
 
+    @PostMapping("/{id}/retire")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void retire(@PathVariable Long id) {
+        service.retire(CurrentUser.orgId(), id);
+    }
+
     private EgsDto toDto(EgsUnit u) {
         Instant expires = service.activeProductionCredentials(u.getId()).stream()
                 .map(EgsCredential::getCertificateNotAfter).filter(java.util.Objects::nonNull)
