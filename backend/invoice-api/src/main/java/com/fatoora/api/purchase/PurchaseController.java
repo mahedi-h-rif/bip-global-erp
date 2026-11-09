@@ -254,6 +254,8 @@ public class PurchaseController {
         PoDto first = null;
         for (Long poId : new LinkedHashSet<>(ids)) {
             PoDto p = po(orgId, poId);
+            if (!"APPROVED".equals(p.status()) && !"PARTIALLY_RECEIVED".equals(p.status()))
+                throw ApiException.badRequest("po_not_approved", "Goods can only be received on an approved, open purchase order (" + p.number() + " is " + p.status().toLowerCase() + ")");
             if (first == null) first = p;
             else {
                 if (!first.supplierId().equals(p.supplierId())) throw ApiException.badRequest("mixed_suppliers", "All orders must be from the same supplier");
