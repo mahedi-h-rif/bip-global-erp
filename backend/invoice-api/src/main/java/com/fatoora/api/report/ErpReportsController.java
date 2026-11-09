@@ -29,9 +29,15 @@ public class ErpReportsController {
 
     public record Tile(String key, String label, BigDecimal value, String unit, String href) {}
 
+    /**
+     * {@code monthly}: last 12 months of net sales, net purchases and gross profit; {@code topCustomers} / {@code topProducts}:
+     * this year's five biggest by net sales; {@code receivablesAging} / {@code payablesAging}: open amounts per age bucket.
+     */
     public record Dashboard(List<Tile> tiles, List<Map<String, Object>> salesTrend, List<Map<String, Object>> stockByWarehouse,
                             List<Map<String, Object>> lowStock, List<Map<String, Object>> expiringIds,
-                            List<Map<String, Object>> expiringVehicles) {}
+                            List<Map<String, Object>> expiringVehicles, List<Map<String, Object>> monthly,
+                            List<Map<String, Object>> topCustomers, List<Map<String, Object>> topProducts,
+                            List<Map<String, Object>> receivablesAging, List<Map<String, Object>> payablesAging) {}
 
     public record Hit(String type, String label, String detail, String href) {}
 
@@ -66,6 +72,7 @@ public class ErpReportsController {
             case "pnl" -> pnl(orgId, year == null ? today.getYear() : year);
             case "receivables" -> aging(orgId, true, today);
             case "payables" -> aging(orgId, false, today);
+            case "gross-profit" -> grossProfit(orgId, start, end, groupBy, period);
             default -> throw ApiException.notFound("Report");
         };
     }
@@ -167,7 +174,10 @@ public class ErpReportsController {
                         WHERE v.organization_id = ? AND v.status = 'OPEN' AND v.invoice_date BETWEEN ? AND ? GROUP BY l.name ORDER BY net DESC""",
                         (rs, x) -> row(rs.getString("k"), rs.getLong("n"), rs.getBigDecimal("net"), rs.getBigDecimal("q")), orgId, f, t)
                 : jdbc.query("SELECT " + expr + " AS k, count(DISTINCT v.id) AS n, sum(v.total_sar - v.vat_sar) AS net, sum(v.vat_sar) AS vat, sum(v.total_sar) AS tot"
-                        + " FROM supplier_invoice v JOIN supplier s ON s.id = v.supplier_id WHERE v.organization_id = ? AND v.status = 'OPEN'"
+                        // A/P credit memos count negative, dated on their own date.
+                        + " FROM (SELECT id, supplier_id, organization_id, status, invoice_date, total_sar, vat_sar FROM supplier_invoice"
+                        + " UNION ALL SELECT -id, supplier_id, organization_id, CASE status WHEN 'POSTED' THEN 'OPEN' ELSE status END, credit_date, -total_sar, -vat_sar"
+                        + " FROM supplier_credit_note) v JOIN supplier s ON s.id = v.supplier_id WHERE v.organization_id = ? AND v.status = 'OPEN'"
                         + " AND v.invoice_date BETWEEN ? AND ? GROUP BY 1 ORDER BY 1",
                         (rs, x) -> row(rs.getString("k"), rs.getLong("n"), rs.getBigDecimal("net"), rs.getBigDecimal("vat"), rs.getBigDecimal("tot")), orgId, f, t);
         return "product".equals(groupBy)
@@ -191,6 +201,11 @@ public class ErpReportsController {
         Map<String, Object> in = jdbc.queryForMap("""
                 SELECT COALESCE(sum(total_sar - vat_sar), 0) AS net, COALESCE(sum(vat_sar), 0) AS vat FROM supplier_invoice
                 WHERE organization_id = ? AND status = 'OPEN' AND invoice_date BETWEEN ? AND ?""", orgId, f, t);
+        // A/P credit memos reverse input VAT in the period they are dated.
+        Map<String, Object> cr = jdbc.queryForMap("""
+                SELECT COALESCE(sum(total_sar - vat_sar), 0) AS net, COALESCE(sum(vat_sar), 0) AS vat FROM supplier_credit_note
+                WHERE organization_id = ? AND status = 'POSTED' AND credit_date BETWEEN ? AND ?""", orgId, f, t);
+        in = Map.of("net", ((BigDecimal) in.get("net")).subtract((BigDecimal) cr.get("net")), "vat", ((BigDecimal) in.get("vat")).subtract((BigDecimal) cr.get("vat")));
         BigDecimal outVat = (BigDecimal) out.get("vat"), inVat = (BigDecimal) in.get("vat");
         List<List<Object>> rows = List.of(
                 row("Standard-rated sales (output VAT)", out.get("net"), outVat),
@@ -225,6 +240,31 @@ public class ErpReportsController {
                 row("Total", tot[0], tot[1], tot[2], tot[3], tot[4]));
     }
 
+    /** Gross profit by invoice, customer, product or month: revenue excl. VAT − cost of the stock that left. */
+    private Table grossProfit(Long orgId, Timestamp start, Timestamp end, String groupBy, String period) {
+        String key = switch (groupBy) {
+            case "customer" -> "customer";
+            case "product" -> "product";
+            case "month" -> "to_char(issued_at AT TIME ZONE 'Asia/Riyadh', 'YYYY-MM')";
+            default -> "number";
+        };
+        String col = switch (groupBy) { case "customer" -> "Customer"; case "product" -> "Item"; case "month" -> "Month"; default -> "Invoice"; };
+        List<List<Object>> rows = new ArrayList<>();
+        BigDecimal[] tot = {BigDecimal.ZERO, BigDecimal.ZERO};
+        jdbc.query("SELECT " + key + " AS k, sum(revenue) AS rev, sum(cost) AS cost FROM (" + GrossProfitController.LINES_SQL
+                        + " WHERE i.organization_id = ? AND i.status NOT IN ('DRAFT','REJECTED') AND i.issued_at >= ? AND i.issued_at < ?) x"
+                        + " GROUP BY 1 ORDER BY " + ("month".equals(groupBy) || "invoice".equals(groupBy) || "day".equals(groupBy) ? "1" : "sum(revenue) - sum(cost) DESC"),
+                rs -> {
+                    BigDecimal rev = rs.getBigDecimal("rev"), cost = rs.getBigDecimal("cost"), gp = rev.subtract(cost);
+                    rows.add(row(rs.getString("k"), rev, cost, gp, GrossProfitController.pct(gp, rev).setScale(2, RoundingMode.HALF_UP) + " %"));
+                    tot[0] = tot[0].add(rev);
+                    tot[1] = tot[1].add(cost);
+                }, orgId, start, end);
+        BigDecimal gp = tot[0].subtract(tot[1]);
+        return new Table("Gross profit by " + col.toLowerCase(), period, List.of(col, "Revenue", "Cost", "Gross profit", "GP %"), rows,
+                row("Total", tot[0], tot[1], gp, GrossProfitController.pct(gp, tot[0]) + " %"));
+    }
+
     private Table aging(Long orgId, boolean receivables, LocalDate today) {
         List<Map<String, Object>> docs = receivables ? jdbc.queryForList("""
                 SELECT COALESCE(c.name_en, c.name_ar, 'Walk-in') AS party, i.number, COALESCE(i.due_date, (i.issued_at AT TIME ZONE 'Asia/Riyadh')::date) AS due,
@@ -237,7 +277,8 @@ public class ErpReportsController {
                 : jdbc.queryForList("""
                 SELECT s.name AS party, v.number, COALESCE(v.due_date, v.invoice_date) AS due,
                        v.total_sar - COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a JOIN supplier_payment p ON p.id = a.supplier_payment_id
-                                               WHERE a.supplier_invoice_id = v.id AND p.status = 'POSTED'), 0) AS open
+                                               WHERE a.supplier_invoice_id = v.id AND p.status = 'POSTED'), 0)
+                       - COALESCE((SELECT sum(cn.total_sar) FROM supplier_credit_note cn WHERE cn.supplier_invoice_id = v.id AND cn.status = 'POSTED'), 0) AS open
                 FROM supplier_invoice v JOIN supplier s ON s.id = v.supplier_id WHERE v.organization_id = ? AND v.status = 'OPEN'""", orgId);
         Map<String, BigDecimal[]> by = new TreeMap<>();
         BigDecimal[] tot = new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
@@ -307,7 +348,42 @@ public class ErpReportsController {
                 SELECT id, plate, name, istimara_expiry, insurance_expiry, mvpi_expiry FROM vehicle WHERE organization_id = ? AND active
                   AND (istimara_expiry <= ? OR insurance_expiry <= ? OR mvpi_expiry <= ?) ORDER BY plate LIMIT 15""",
                 orgId, today.plusDays(30), today.plusDays(30), today.plusDays(30));
-        return new Dashboard(tiles, trend, byWh, low, ids, vehicles);
+        // Charts: 12-month sales / purchases / gross profit, top customers and products, aging buckets.
+        List<Map<String, Object>> monthly = new ArrayList<>();
+        LocalDate first = today.withDayOfMonth(1).minusMonths(11);
+        for (int i = 0; i < 12; i++) {
+            LocalDate a = first.plusMonths(i), b = a.plusMonths(1);
+            Timestamp s = Timestamp.from(a.atStartOfDay(InvoiceApiApplication.KSA).toInstant()), e = Timestamp.from(b.atStartOfDay(InvoiceApiApplication.KSA).toInstant());
+            Map<String, Object> gp = jdbc.queryForMap("SELECT COALESCE(sum(revenue), 0) AS rev, COALESCE(sum(cost), 0) AS cost FROM (" + GrossProfitController.LINES_SQL
+                    + " WHERE i.organization_id = ? AND i.status NOT IN ('DRAFT','REJECTED') AND i.issued_at >= ? AND i.issued_at < ?) x", orgId, s, e);
+            BigDecimal purchases = q("""
+                    SELECT COALESCE((SELECT sum(total_sar - vat_sar) FROM supplier_invoice WHERE organization_id = ? AND status = 'OPEN' AND invoice_date >= ? AND invoice_date < ?), 0)
+                         - COALESCE((SELECT sum(total_sar - vat_sar) FROM supplier_credit_note WHERE organization_id = ? AND status = 'POSTED' AND credit_date >= ? AND credit_date < ?), 0)""",
+                    orgId, a, b, orgId, a, b);
+            BigDecimal rev = (BigDecimal) gp.get("rev"), cost = (BigDecimal) gp.get("cost");
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("month", a.toString().substring(0, 7));
+            m.put("sales", rev);
+            m.put("purchases", purchases);
+            m.put("grossProfit", rev.subtract(cost));
+            monthly.add(m);
+        }
+        Timestamp yearStart = Timestamp.from(today.withDayOfYear(1).atStartOfDay(InvoiceApiApplication.KSA).toInstant());
+        List<Map<String, Object>> topCustomers = jdbc.queryForList("SELECT customer AS name, sum(revenue) AS value FROM (" + GrossProfitController.LINES_SQL
+                + " WHERE i.organization_id = ? AND i.status NOT IN ('DRAFT','REJECTED') AND i.issued_at >= ?) x GROUP BY customer HAVING sum(revenue) > 0"
+                + " ORDER BY value DESC LIMIT 5", orgId, yearStart);
+        List<Map<String, Object>> topProducts = jdbc.queryForList("SELECT product AS name, sum(revenue) AS value, sum(revenue) - sum(cost) AS gp FROM ("
+                + GrossProfitController.LINES_SQL + " WHERE i.organization_id = ? AND i.status NOT IN ('DRAFT','REJECTED') AND i.issued_at >= ?) x"
+                + " GROUP BY product HAVING sum(revenue) > 0 ORDER BY value DESC LIMIT 5", orgId, yearStart);
+        return new Dashboard(tiles, trend, byWh, low, ids, vehicles, monthly, topCustomers, topProducts,
+                buckets(aging(orgId, true, today)), buckets(aging(orgId, false, today)));
+    }
+
+    private static List<Map<String, Object>> buckets(Table aging) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (int c = 1; c < aging.columns().size() - 1; c++)
+            out.add(Map.of("bucket", aging.columns().get(c), "value", aging.totals().get(c)));
+        return out;
     }
 
     // --- quick search ----------------------------------------------------------------------------

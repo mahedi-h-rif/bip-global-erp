@@ -10,6 +10,7 @@ import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Requi
 import { SearchInput } from "@/components/voice";
 import { searchCustomers } from "@/lib/voice-parse";
 import { useT } from "@/lib/i18n";
+import { RelationshipMapButton } from "@/components/relationship-map";
 
 const blank: Customer = { nameAr: "", nameEn: "", vatNumber: "", otherIdScheme: "CRN", countryCode: "SA", remindersEnabled: true };
 
@@ -194,6 +195,7 @@ function Customers() {
                 </div>
                 {canWrite && (
                   <span className="inline-flex gap-1">
+                    <RelationshipMapButton type="CUSTOMER" id={c.id!} compact label={c.nameEn || c.nameAr || undefined} />
                     <Button variant="ghost" onClick={() => setEditing(c)} aria-label={t("Edit {name}", { name: c.nameEn || c.nameAr })}>
                       <Pencil className="size-4" aria-hidden />
                     </Button>

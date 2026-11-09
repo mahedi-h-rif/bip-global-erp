@@ -14,7 +14,67 @@ interface Tile { key: string; label: string; value: number; unit: string | null;
 interface Dash { tiles: Tile[]; salesTrend: { date: string; total: number }[]; stockByWarehouse: { name: string; value: number }[];
   lowStock: { id: number; number: string; name: string; warehouse: string; quantity: number; low_stock_threshold: number }[];
   expiringIds: { id: number; name: string; code: string; id_number: string | null; id_expiry: string | null; passport_expiry: string | null }[];
-  expiringVehicles: { id: number; plate: string; name: string; istimara_expiry: string | null; insurance_expiry: string | null; mvpi_expiry: string | null }[] }
+  expiringVehicles: { id: number; plate: string; name: string; istimara_expiry: string | null; insurance_expiry: string | null; mvpi_expiry: string | null }[];
+  monthly: { month: string; sales: number; purchases: number; grossProfit: number }[];
+  topCustomers: { name: string; value: number }[]; topProducts: { name: string; value: number; gp: number }[];
+  receivablesAging: { bucket: string; value: number }[]; payablesAging: { bucket: string; value: number }[] }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const compact = (v: number) => Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : v.toFixed(0);
+
+/** 12 months: sales and purchases as paired bars, gross profit as a line (the "graphs" the meeting asked for). */
+function MonthlyChart({ data }: { data: Dash["monthly"] }) {
+  const t = useT();
+  const W = 720, H = 220, L = 44, B = 24, T = 10;
+  const vals = data.flatMap((d) => [Number(d.sales), Number(d.purchases), Number(d.grossProfit)]);
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+  const y = (v: number) => T + (H - T - B) * (1 - (v - min) / (max - min));
+  const step = (W - L) / data.length, bw = Math.max(4, step * 0.3);
+  const line = data.map((d, i) => `${i ? "L" : "M"}${L + step * i + step / 2},${y(Number(d.grossProfit))}`).join(" ");
+  const ticks = [min, (max + min) / 2, max];
+  return (
+    <div className="overflow-x-auto p-4">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[520px]" role="img" aria-label={t("Sales, purchases and gross profit, last 12 months")}>
+        {ticks.map((v, i) => <g key={i}><line x1={L} x2={W} y1={y(v)} y2={y(v)} stroke="#e2e8f0" /><text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize="10" fill="#64748b">{compact(v)}</text></g>)}
+        {data.map((d, i) => {
+          const x = L + step * i + step / 2;
+          return (
+            <g key={d.month}>
+              <rect x={x - bw - 1} y={Math.min(y(Number(d.sales)), y(0))} width={bw} height={Math.abs(y(0) - y(Number(d.sales)))} rx="2" className="fill-brand/80"><title>{`${d.month} · ${t("Sales")} ${money(d.sales)}`}</title></rect>
+              <rect x={x + 1} y={Math.min(y(Number(d.purchases)), y(0))} width={bw} height={Math.abs(y(0) - y(Number(d.purchases)))} rx="2" fill="#f59e0b" fillOpacity="0.75"><title>{`${d.month} · ${t("Purchases")} ${money(d.purchases)}`}</title></rect>
+              <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="#64748b">{t(MONTHS[Number(d.month.slice(5)) - 1])}</text>
+            </g>
+          );
+        })}
+        <path d={line} fill="none" stroke="#059669" strokeWidth="2" />
+        {data.map((d, i) => <circle key={d.month} cx={L + step * i + step / 2} cy={y(Number(d.grossProfit))} r="3" fill="#059669"><title>{`${d.month} · ${t("Gross profit")} ${money(d.grossProfit)}`}</title></circle>)}
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted">
+        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand/80" />{t("Sales")}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-amber-500/75" />{t("Purchases")}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-emerald-600" />{t("Gross profit")}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Horizontal bars, one row per item, scaled to the largest. */
+function Bars({ rows, tone = "bg-brand/70", note }: { rows: { label: string; value: number; extra?: string }[]; tone?: string; note?: string }) {
+  const t = useT();
+  const max = Math.max(1, ...rows.map((r) => Math.abs(Number(r.value))));
+  if (rows.length === 0) return <p className="p-4 text-sm text-muted">{t("Nothing yet")}</p>;
+  return (
+    <div className="space-y-2 p-4">
+      {rows.map((r) => (
+        <div key={r.label} className="text-sm">
+          <div className="flex justify-between gap-2"><span className="truncate" dir="auto">{t(r.label)}</span><span className="tabular shrink-0">{money(r.value)}{r.extra ? <span className="ms-1 text-xs text-muted">{r.extra}</span> : null}</span></div>
+          <div className="mt-1 h-2 rounded bg-slate-100"><div className={`h-2 rounded ${tone}`} style={{ width: `${(Math.abs(Number(r.value)) / max) * 100}%` }} /></div>
+        </div>
+      ))}
+      {note && <p className="pt-1 text-xs text-muted">{note}</p>}
+    </div>
+  );
+}
 
 /** ERP overview (quotation "Dashboard"): sales, invoices, stock, ZATCA, employee and payroll tiles; 7-day trend; stock by warehouse. */
 export function ErpDashboard() {
@@ -60,6 +120,20 @@ export function ErpDashboard() {
           </div>
         </Card>
       </div>
+      {data.monthly && (
+        <Card>
+          <CardHeader title={t("Sales, purchases and gross profit, last 12 months")} action={<Link className="text-sm text-brand hover:underline" href="/erp-reports?r=gross-profit">{t("Gross profit report")}</Link>} />
+          <MonthlyChart data={data.monthly} />
+        </Card>
+      )}
+      {data.topCustomers && (
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          <Card><CardHeader title={t("Top customers this year")} /><Bars rows={data.topCustomers.map((c) => ({ label: c.name, value: c.value }))} /></Card>
+          <Card><CardHeader title={t("Top items this year")} /><Bars tone="bg-emerald-500/70" rows={data.topProducts.map((p) => ({ label: p.name, value: p.value, extra: Number(p.value) ? `GP ${Math.round((Number(p.gp) / Number(p.value)) * 100)}%` : undefined }))} /></Card>
+          <Card><CardHeader title={t("Receivables by age")} action={<Link className="text-sm text-brand hover:underline" href="/erp-reports?r=receivables">{t("Details")}</Link>} /><Bars tone="bg-sky-500/70" rows={data.receivablesAging.map((a) => ({ label: a.bucket, value: a.value }))} /></Card>
+          <Card><CardHeader title={t("Payables by age")} action={<Link className="text-sm text-brand hover:underline" href="/erp-reports?r=payables">{t("Details")}</Link>} /><Bars tone="bg-amber-500/70" rows={data.payablesAging.map((a) => ({ label: a.bucket, value: a.value }))} /></Card>
+        </div>
+      )}
       {data.expiringVehicles.length > 0 && (
         <Card>
           <CardHeader title={<span className="inline-flex items-center gap-2"><AlertTriangle className="size-4 text-amber-600" aria-hidden />{t("Vehicle documents expiring within 30 days")}</span>} />

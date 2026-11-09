@@ -145,10 +145,15 @@ public class QuotationController {
 
     @GetMapping("/{id}/pdf")
     @Transactional(readOnly = true)
-    ResponseEntity<byte[]> pdf(@PathVariable Long id) {
+    ResponseEntity<byte[]> pdf(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean proforma) {
         Quotation q = load(id);
         Organization org = orgs.findById(q.getOrganizationId()).orElseThrow();
-        byte[] pdf = letterhead.render(org, "Quotation " + q.getNumber(), html(q, org));
+        String body = html(q, org);
+        // Proforma invoice: the same document titled as a request for payment before supply (not a tax invoice).
+        if (proforma) body = body.replace("<h1>Quotation</h1>", "<h1>Proforma Invoice</h1>").replace("<h1>عرض سعر</h1>", "<h1>فاتورة مبدئية</h1>")
+                .replace("Quotation for", "Bill to").replace("عرض سعر إلى", "فاتورة إلى").replace("Quotation details", "Proforma details")
+                .replace("تفاصيل العرض", "تفاصيل الفاتورة المبدئية").replace("Quotation no.", "Proforma no.");
+        byte[] pdf = letterhead.render(org, (proforma ? "Proforma invoice " : "Quotation ") + q.getNumber(), body);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(q.getNumber() + ".pdf").build().toString())

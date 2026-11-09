@@ -43,6 +43,8 @@ public class SupplierController {
         String like = q == null || q.isBlank() ? null : "%" + q.trim().toLowerCase() + "%";
         return jdbc.query("""
                 SELECT s.*, COALESCE((SELECT sum(v.total_sar) FROM supplier_invoice v WHERE v.supplier_id = s.id AND v.status = 'OPEN'), 0)
+                       - COALESCE((SELECT sum(cn.total_sar) FROM supplier_credit_note cn JOIN supplier_invoice v ON v.id = cn.supplier_invoice_id
+                                   WHERE cn.supplier_id = s.id AND cn.status = 'POSTED' AND v.status = 'OPEN'), 0)
                        - COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a JOIN supplier_payment p ON p.id = a.supplier_payment_id
                                    JOIN supplier_invoice v ON v.id = a.supplier_invoice_id
                                    WHERE v.supplier_id = s.id AND p.status = 'POSTED' AND v.status = 'OPEN'), 0) AS payable

@@ -13,8 +13,9 @@ Every phase is verified by an acceptance script against a running system (ZATCA 
 | `deploy/smoke-hr.sh` | employees, leave in working days, holidays, advances, payroll run, payslip, report | 24/24 |
 | `deploy/smoke-erp.sh` | POS + 80 mm receipt, returns, invoice bank details, department permissions, 8 reports, dashboard, search | 34/34 |
 | `deploy/smoke-ops.sh` | fleet, trips & profit, credit limit, payment terms, reorder → PO, CRM, recurring invoices | 25/25 |
+| `deploy/smoke-video.sh` | purchase request → PO, goods return, A/P credit memo, gross profit, partner maps, dashboard charts, print without logo, proforma | 41/41 |
 
-Backend unit tests: 115 passed, 9 skipped (live-only). Empty-database crawl of every list/report endpoint on UAT: all 200.
+Backend unit tests: 130 run, 10 skipped (live-only), 0 failures. Empty-database crawl of every list/report endpoint on UAT: all 200.
 
 ## Phases
 
@@ -29,12 +30,16 @@ Backend unit tests: 115 passed, 9 skipped (live-only). Empty-database crawl of e
 - [x] **G** Settings, reports, dashboard: department roles + permission matrix, sales/stock/purchase/expense/VAT/P&L/aging reports (Excel+PDF), ERP dashboard, quick search
 - [x] **H** Benchmark additions: fleet (Istimara/insurance/Fahas expiry, fuel, maintenance), trips with costs and profit, customer credit limits
       and payment terms, reorder suggestions → PO, CRM pipeline, recurring contract invoices
-- [x] **UAT** http://2.24.60.124:8088 on `bip_uat`, ZATCA SIMULATION, nightly backups, firewall, fail2ban
+- [x] **I** Video integration (SAP B1 parity): purchase requests → PO, goods returns from receipts, A/P credit memos (lower payables
+      and input VAT), gross profit on orders/invoices + GP report, business-partner relationship maps, dashboard charts
+      (12-month sales/purchases/GP, top customers/items, aging), inventory audit chart, print without logo, proforma invoice
+- [x] **UAT** http://2.24.60.124:8088 on `bip_uat`; **Production** http://2.24.60.124:8089 on `bip_prod`; both ZATCA PRODUCTION
+      (devices BIP-UAT-2 / BIP-PROD-2, Industry "Trading", certificates to 08 Nov 2031); nightly backups, firewall, fail2ban
 
 ## Waiting on the client
 
-- [ ] ZATCA **Simulation** device on UAT: OTP from the Fatoora simulation portal (Mr. Umer Wahab)
-- [ ] Go-live: `DB_NAME=bip_prod`, `ORG_ZATCA_ENVIRONMENT=PRODUCTION`, production OTP, domain + HTTPS (then `FATOORA_COOKIE_SECURE=true`)
+- [ ] Revoke the retired "Logistics" devices BIP-PROD-1 / BIP-UAT-1 in the Fatoora portal (client to confirm)
+- [ ] Domain + HTTPS for production (then `FATOORA_COOKIE_SECURE=true`)
 - [ ] Bank details for invoices (Settings → Bank details) and department roles for staff
 
 ## Recommended next phase (outside the signed quotation)

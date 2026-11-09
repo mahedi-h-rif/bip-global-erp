@@ -158,7 +158,7 @@ public final class SkylineLetterhead {
 
     /** The logo faded to a faint watermark, or null when there is no readable logo. */
     public static Watermark watermarkImage(Organization org) {
-        if (org.getLogo() == null) return null;
+        if (org.getLogo() == null || !PrintOptions.showLogo()) return null;
         try {
             BufferedImage src = ImageIO.read(new ByteArrayInputStream(Base64.getDecoder().decode(org.getLogo())));
             if (src == null) return null;

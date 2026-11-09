@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import useSWR from "swr";
-import { FileText, XCircle } from "lucide-react";
+import { FileText, Undo2, XCircle } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { GoodsReceipt } from "@/lib/types";
 import { date, money } from "@/lib/format";
@@ -26,6 +26,7 @@ export default function GoodsReceiptPage({ params }: { params: Promise<{ id: str
         subtitle={<span className="flex items-center gap-2"><StatusPill status={g.status} /><span dir="auto">{g.supplierName}</span></span>}
         actions={<span className="flex flex-wrap gap-2">
           {billable && <ButtonLink href={`/supplier-invoices/new?grnIds=${g.id}`}><FileText className="size-4" aria-hidden /> {t("Copy to supplier invoice")}</ButtonLink>}
+          {g.status === "POSTED" && <ButtonLink variant="secondary" href={`/goods-returns/new?grnId=${g.id}`}><Undo2 className="size-4" aria-hidden /> {t("Return to supplier")}</ButtonLink>}
           <RelationshipMapButton type="GOODS_RECEIPT" id={g.id} />
         </span>} />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}

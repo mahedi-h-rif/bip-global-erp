@@ -41,6 +41,8 @@ import {
   PackageCheck,
   Factory,
   Receipt as ReceiptIcon,
+  Undo2,
+  FileMinus,
   Banknote,
   HandCoins,
   X,
@@ -81,9 +83,12 @@ const salesFlowNav: NavItem[] = [
 
 const purchasingNav: NavItem[] = [
   { href: "/suppliers", label: "Suppliers", icon: Factory },
+  { href: "/purchase-requests", label: "Purchase requests", icon: ClipboardList },
   { href: "/purchase-orders", label: "Purchase orders", icon: ShoppingCart },
   { href: "/goods-receipts", label: "Goods receipts", icon: PackageCheck },
+  { href: "/goods-returns", label: "Goods returns", icon: Undo2 },
   { href: "/supplier-invoices", label: "Supplier invoices", icon: ReceiptIcon },
+  { href: "/supplier-credit-notes", label: "A/P credit memos", icon: FileMinus },
   { href: "/supplier-payments", label: "Supplier payments", icon: Banknote },
   { href: "/reorder", label: "Reorder suggestions", icon: RefreshCcw },
 ];
@@ -218,7 +223,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const moduleOf = (href: string): string | null => {
     const p = href.split("/")[1];
     if (["quotations", "sales-orders", "delivery-notes", "invoices", "receipts", "customers", "pos", "crm", "fleet"].includes(p)) return "sales";
-    if (["suppliers", "purchase-orders", "goods-receipts", "supplier-invoices", "supplier-payments", "reorder"].includes(p)) return "purchasing";
+    if (["suppliers", "purchase-requests", "purchase-orders", "goods-receipts", "goods-returns", "supplier-invoices", "supplier-credit-notes",
+         "supplier-payments", "reorder"].includes(p)) return "purchasing";
     if (["products", "inventory"].includes(p)) return "inventory";
     if (["hr", "payroll", "workers", "documents"].includes(p)) return "hr";
     if (["accounts", "dues", "erp-reports", "audit"].includes(p)) return "finance";

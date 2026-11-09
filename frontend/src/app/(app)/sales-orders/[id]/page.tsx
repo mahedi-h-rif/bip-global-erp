@@ -11,6 +11,7 @@ import { Alert, Button, ButtonLink, Card, CardHeader, PageHeader, Spinner } from
 import { SalesOrderEditor, salesOrderStatusLabel, salesOrderStatusTone } from "@/components/sales-order-editor";
 import { deliveryStatusLabel } from "@/components/delivery-note-editor";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { GrossProfitCard } from "@/components/gross-profit";
 import { useT } from "@/lib/i18n";
 
 export default function SalesOrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -100,6 +101,7 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
         </div>
       </Card>
 
+      <GrossProfitCard path={`/sales-orders/${o.id}/gross-profit`} />
       <Card className="mb-6">
         <CardHeader title={t("Deliveries")} />
         {myNotes.length === 0 ? <p className="p-5 text-sm text-muted">{t("Nothing delivered yet.")}</p> : (

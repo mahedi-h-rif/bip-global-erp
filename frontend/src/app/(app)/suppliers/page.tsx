@@ -10,6 +10,7 @@ import { money } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { currencies } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
+import { RelationshipMapButton } from "@/components/relationship-map";
 
 function SupplierForm({ initial, onDone }: { initial: Supplier; onDone: () => void }) {
   const t = useT();
@@ -104,6 +105,7 @@ export default function SuppliersPage() {
                     <td className="px-2 py-2 text-end">
                       <span className="inline-flex gap-1">
                         <Link className="rounded px-2 py-1 text-xs text-brand hover:underline" href={`/purchase-orders/new?supplierId=${s.id}`}>{t("New PO")}</Link>
+                        <RelationshipMapButton type="SUPPLIER" id={s.id!} compact label={s.name} />
                         <Button variant="ghost" onClick={() => setEditing(s)} aria-label={t("Edit {name}", { name: s.name })}><Pencil className="size-4" aria-hidden /></Button>
                       </span>
                     </td>

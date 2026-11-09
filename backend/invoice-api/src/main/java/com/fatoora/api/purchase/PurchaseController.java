@@ -324,6 +324,9 @@ public class PurchaseController {
         if ("CANCELLED".equals(g.status())) return g;
         if (g.lines().stream().anyMatch(l -> l.invoiced().signum() > 0))
             throw ApiException.conflict("grn_invoiced", "This receipt is on a supplier invoice; cancel that invoice first");
+        Integer returns = jdbc.queryForObject("SELECT count(*) FROM goods_return WHERE goods_receipt_id = ? AND status = 'POSTED'", Integer.class, id);
+        if (returns != null && returns > 0)
+            throw ApiException.conflict("grn_returned", "This receipt has goods returns; cancel them first");
         List<StockService.Move> back = jdbc.query("SELECT product_id, warehouse_id, quantity FROM stock_movement WHERE ref_type = 'goods_receipt' AND ref_id = ?",
                 (rs, i) -> new StockService.Move(rs.getLong(1), rs.getLong(2), rs.getBigDecimal(3).negate(), StockService.Kind.ADJUST,
                         "goods_receipt", id, g.number(), "Goods receipt cancelled"), id);
@@ -425,12 +428,18 @@ public class PurchaseController {
                 SELECT sl.goods_receipt_line_id, sum(sl.quantity) FROM supplier_invoice_line sl JOIN supplier_invoice v ON v.id = sl.supplier_invoice_id
                 JOIN goods_receipt_line gl ON gl.id = sl.goods_receipt_line_id WHERE gl.goods_receipt_id = ? AND v.status = 'OPEN'
                 GROUP BY sl.goods_receipt_line_id""", rs -> { billed.put(rs.getLong(1), rs.getBigDecimal(2)); }, id);
+        // Quantities sent back to the supplier (goods returns) can't be billed either.
+        Map<Long, BigDecimal> returned = new HashMap<>();
+        jdbc.query("""
+                SELECT rl.goods_receipt_line_id, sum(rl.quantity) FROM goods_return_line rl JOIN goods_return r ON r.id = rl.goods_return_id
+                JOIN goods_receipt_line gl ON gl.id = rl.goods_receipt_line_id WHERE gl.goods_receipt_id = ? AND r.status = 'POSTED'
+                GROUP BY rl.goods_receipt_line_id""", rs -> { returned.put(rs.getLong(1), rs.getBigDecimal(2)); }, id);
         List<GrnLine> lines = jdbc.query("SELECT * FROM goods_receipt_line WHERE goods_receipt_id = ? ORDER BY position", (rs, i) -> {
             BigDecimal q = rs.getBigDecimal("quantity");
             BigDecimal b = billed.getOrDefault(rs.getLong("id"), BigDecimal.ZERO);
             return new GrnLine(rs.getLong("id"), (Long) rs.getObject("purchase_order_line_id"), (Long) rs.getObject("product_id"),
                     rs.getString("name"), q, rs.getString("unit_code"), rs.getBigDecimal("unit_cost"), rs.getBigDecimal("vat_rate"),
-                    rs.getBigDecimal("landed_unit_cost"), b, q.subtract(b).max(BigDecimal.ZERO));
+                    rs.getBigDecimal("landed_unit_cost"), b, q.subtract(b).subtract(returned.getOrDefault(rs.getLong("id"), BigDecimal.ZERO)).max(BigDecimal.ZERO));
         }, id);
         List<Cost> costs = jdbc.query("SELECT description, amount FROM goods_receipt_cost WHERE goods_receipt_id = ? ORDER BY id",
                 (rs, i) -> new Cost(rs.getString(1), rs.getBigDecimal(2)), id);

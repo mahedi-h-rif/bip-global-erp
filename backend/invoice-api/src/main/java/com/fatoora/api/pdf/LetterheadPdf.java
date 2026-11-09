@@ -357,13 +357,13 @@ public class LetterheadPdf {
     }
 
     private static String logoCell(Organization org) {
-        String img = img(org.getLogo(), org.getLogoContentType(), 70, 170);
+        String img = PrintOptions.showLogo() ? img(org.getLogo(), org.getLogoContentType(), 70, 170) : null;
         return img == null ? "" : "<td style=\"width:1%; padding-right:10px\">" + img + "</td>";
     }
 
     /** The logo, faded to a light watermark behind the text. */
     private static String watermark(Organization org) {
-        if (org.getLogo() == null) return "";
+        if (org.getLogo() == null || !PrintOptions.showLogo()) return "";
         try {
             BufferedImage src = ImageIO.read(new ByteArrayInputStream(Base64.getDecoder().decode(org.getLogo())));
             if (src == null) return "";

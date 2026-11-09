@@ -17,8 +17,13 @@ public class DocumentGraph {
 
     public enum Type {
         QUOTATION, SALES_ORDER, DELIVERY_NOTE, INVOICE, RECEIPT,
-        PURCHASE_ORDER, GOODS_RECEIPT, SUPPLIER_INVOICE, SUPPLIER_PAYMENT
+        PURCHASE_REQUEST, PURCHASE_ORDER, GOODS_RECEIPT, GOODS_RETURN, SUPPLIER_INVOICE, SUPPLIER_CREDIT, SUPPLIER_PAYMENT,
+        /** Business partner maps (video: "relationship map for the vendor"): the partner and every document chain it starts. */
+        CUSTOMER, SUPPLIER
     }
+
+    /** Documents per type shown from a business partner (newest first), so a busy partner's map stays readable. */
+    private static final int PARTNER_ROOTS = 25;
 
     /** {@code state}: OPEN, PARTIAL, CLOSED, PAID, UNPAID, DRAFT, CANCELLED … for colouring the node. */
     public record Node(Type type, Long id, String number, String label, LocalDate date, String party, String ref,
@@ -100,6 +105,34 @@ public class DocumentGraph {
                 for (String part : snap.split(";"))
                     if (!part.isBlank()) out.add(e(Type.INVOICE, Long.parseLong(part.split(":")[0]), Type.RECEIPT, id));
             }
+            case CUSTOMER -> {
+                ids("SELECT id FROM quotation WHERE customer_id = ? ORDER BY id DESC LIMIT " + PARTNER_ROOTS, id).forEach(x -> out.add(e(Type.CUSTOMER, id, Type.QUOTATION, x)));
+                ids("SELECT id FROM sales_order WHERE customer_id = ? AND quotation_id IS NULL ORDER BY id DESC LIMIT " + PARTNER_ROOTS, id).forEach(x -> out.add(e(Type.CUSTOMER, id, Type.SALES_ORDER, x)));
+                ids("SELECT id FROM delivery_note WHERE customer_id = ? AND sales_order_id IS NULL AND invoice_id IS NULL ORDER BY id DESC LIMIT " + PARTNER_ROOTS, id)
+                        .forEach(x -> out.add(e(Type.CUSTOMER, id, Type.DELIVERY_NOTE, x)));
+                ids("""
+                        SELECT i.id FROM invoice i WHERE i.customer_id = ? AND i.original_invoice_id IS NULL
+                          AND NOT EXISTS (SELECT 1 FROM quotation q WHERE q.invoice_id = i.id)
+                          AND NOT EXISTS (SELECT 1 FROM invoice_line l WHERE l.invoice_id = i.id AND l.delivery_note_line_id IS NOT NULL)
+                        ORDER BY i.id DESC""" + " LIMIT " + PARTNER_ROOTS, id).forEach(x -> out.add(e(Type.CUSTOMER, id, Type.INVOICE, x)));
+                ids("""
+                        SELECT r.id FROM receipt r WHERE r.customer_id = ? AND NOT EXISTS (SELECT 1 FROM invoice_payment p WHERE p.receipt_id = r.id)
+                          AND COALESCE(r.cancelled_allocations, '') = '' ORDER BY r.id DESC""" + " LIMIT " + PARTNER_ROOTS, id)
+                        .forEach(x -> out.add(e(Type.CUSTOMER, id, Type.RECEIPT, x)));
+            }
+            case SUPPLIER -> {
+                ids("SELECT id FROM purchase_order WHERE supplier_id = ? ORDER BY id DESC LIMIT " + PARTNER_ROOTS, id).forEach(x -> out.add(e(Type.SUPPLIER, id, Type.PURCHASE_ORDER, x)));
+                ids("SELECT id FROM goods_receipt WHERE supplier_id = ? AND purchase_order_id IS NULL ORDER BY id DESC LIMIT " + PARTNER_ROOTS, id)
+                        .forEach(x -> out.add(e(Type.SUPPLIER, id, Type.GOODS_RECEIPT, x)));
+                ids("""
+                        SELECT v.id FROM supplier_invoice v WHERE v.supplier_id = ?
+                          AND NOT EXISTS (SELECT 1 FROM supplier_invoice_line l WHERE l.supplier_invoice_id = v.id AND l.goods_receipt_line_id IS NOT NULL)
+                        ORDER BY v.id DESC""" + " LIMIT " + PARTNER_ROOTS, id).forEach(x -> out.add(e(Type.SUPPLIER, id, Type.SUPPLIER_INVOICE, x)));
+                ids("""
+                        SELECT p.id FROM supplier_payment p WHERE p.supplier_id = ?
+                          AND NOT EXISTS (SELECT 1 FROM supplier_payment_allocation a WHERE a.supplier_payment_id = p.id)
+                        ORDER BY p.id DESC""" + " LIMIT " + PARTNER_ROOTS, id).forEach(x -> out.add(e(Type.SUPPLIER, id, Type.SUPPLIER_PAYMENT, x)));
+            }
             default -> out.addAll(purchaseNeighbours(t, id));
         }
         jdbc.query("SELECT from_type, from_id, to_type, to_id FROM doc_link WHERE organization_id = ? AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))",
@@ -113,8 +146,21 @@ public class DocumentGraph {
         if (!tableExists("purchase_order")) return List.of();
         List<Edge> out = new ArrayList<>();
         switch (t) {
-            case PURCHASE_ORDER -> ids("SELECT id FROM goods_receipt WHERE purchase_order_id = ?", id).forEach(x -> out.add(e(Type.PURCHASE_ORDER, id, Type.GOODS_RECEIPT, x)));
+            case PURCHASE_REQUEST -> ids("SELECT id FROM purchase_order WHERE purchase_request_id = ?", id).forEach(x -> out.add(e(Type.PURCHASE_REQUEST, id, Type.PURCHASE_ORDER, x)));
+            case PURCHASE_ORDER -> {
+                ids("SELECT id FROM goods_receipt WHERE purchase_order_id = ?", id).forEach(x -> out.add(e(Type.PURCHASE_ORDER, id, Type.GOODS_RECEIPT, x)));
+                ids("SELECT purchase_request_id FROM purchase_order WHERE id = ? AND purchase_request_id IS NOT NULL", id).forEach(x -> out.add(e(Type.PURCHASE_REQUEST, x, Type.PURCHASE_ORDER, id)));
+            }
+            case GOODS_RETURN -> {
+                ids("SELECT goods_receipt_id FROM goods_return WHERE id = ?", id).forEach(x -> out.add(e(Type.GOODS_RECEIPT, x, Type.GOODS_RETURN, id)));
+                ids("SELECT id FROM supplier_credit_note WHERE goods_return_id = ?", id).forEach(x -> out.add(e(Type.GOODS_RETURN, id, Type.SUPPLIER_CREDIT, x)));
+            }
+            case SUPPLIER_CREDIT -> {
+                ids("SELECT supplier_invoice_id FROM supplier_credit_note WHERE id = ?", id).forEach(x -> out.add(e(Type.SUPPLIER_INVOICE, x, Type.SUPPLIER_CREDIT, id)));
+                ids("SELECT goods_return_id FROM supplier_credit_note WHERE id = ? AND goods_return_id IS NOT NULL", id).forEach(x -> out.add(e(Type.GOODS_RETURN, x, Type.SUPPLIER_CREDIT, id)));
+            }
             case GOODS_RECEIPT -> {
+                ids("SELECT id FROM goods_return WHERE goods_receipt_id = ?", id).forEach(x -> out.add(e(Type.GOODS_RECEIPT, id, Type.GOODS_RETURN, x)));
                 ids("SELECT purchase_order_id FROM goods_receipt WHERE id = ? AND purchase_order_id IS NOT NULL", id).forEach(x -> out.add(e(Type.PURCHASE_ORDER, x, Type.GOODS_RECEIPT, id)));
                 ids("""
                         SELECT DISTINCT sl.supplier_invoice_id FROM supplier_invoice_line sl JOIN goods_receipt_line gl ON gl.id = sl.goods_receipt_line_id
@@ -125,6 +171,7 @@ public class DocumentGraph {
                         SELECT DISTINCT gl.goods_receipt_id FROM supplier_invoice_line sl JOIN goods_receipt_line gl ON gl.id = sl.goods_receipt_line_id
                         WHERE sl.supplier_invoice_id = ?""", id).forEach(x -> out.add(e(Type.GOODS_RECEIPT, x, Type.SUPPLIER_INVOICE, id)));
                 ids("SELECT DISTINCT supplier_payment_id FROM supplier_payment_allocation WHERE supplier_invoice_id = ?", id).forEach(x -> out.add(e(Type.SUPPLIER_INVOICE, id, Type.SUPPLIER_PAYMENT, x)));
+                ids("SELECT id FROM supplier_credit_note WHERE supplier_invoice_id = ?", id).forEach(x -> out.add(e(Type.SUPPLIER_INVOICE, id, Type.SUPPLIER_CREDIT, x)));
             }
             case SUPPLIER_PAYMENT -> ids("SELECT DISTINCT supplier_invoice_id FROM supplier_payment_allocation WHERE supplier_payment_id = ?", id).forEach(x -> out.add(e(Type.SUPPLIER_INVOICE, x, Type.SUPPLIER_PAYMENT, id)));
             default -> { }
@@ -162,6 +209,12 @@ public class DocumentGraph {
                     SELECT r.number, r.receipt_date AS d, COALESCE(c.name_en, c.name_ar) AS party, r.reference AS ref,
                            r.amount AS total, CASE WHEN r.status = 'CANCELLED' THEN 'CANCELLED' ELSE r.method END AS status, FALSE AS open
                     FROM receipt r JOIN customer c ON c.id = r.customer_id WHERE r.id = ? AND r.organization_id = ?""";
+            case CUSTOMER -> """
+                    SELECT COALESCE(c.name_en, c.name_ar) AS number, NULL::date AS d, COALESCE(c.name_en, c.name_ar) AS party, c.vat_number AS ref,
+                           NULL::numeric AS total, 'PARTNER' AS status, FALSE AS open FROM customer c WHERE c.id = ? AND c.organization_id = ?""";
+            case SUPPLIER -> """
+                    SELECT s.name AS number, NULL::date AS d, s.name AS party, s.vat_number AS ref, NULL::numeric AS total, 'PARTNER' AS status,
+                           FALSE AS open FROM supplier s WHERE s.id = ? AND s.organization_id = ?""";
             default -> purchaseNodeSql(t);
         };
         if (sql == null) return null;
@@ -184,8 +237,18 @@ public class DocumentGraph {
                     FROM goods_receipt g JOIN supplier s ON s.id = g.supplier_id WHERE g.id = ? AND g.organization_id = ?""";
             case SUPPLIER_INVOICE -> """
                     SELECT v.number, v.invoice_date AS d, s.name AS party, v.supplier_invoice_no AS ref, v.total_incl_vat AS total, v.status,
-                           v.status = 'OPEN' AND v.total_sar > COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a JOIN supplier_payment sp ON sp.id = a.supplier_payment_id WHERE a.supplier_invoice_id = v.id AND sp.status = 'POSTED'), 0) AS open
+                           v.status = 'OPEN' AND v.total_sar > COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a JOIN supplier_payment sp ON sp.id = a.supplier_payment_id WHERE a.supplier_invoice_id = v.id AND sp.status = 'POSTED'), 0)
+                             + COALESCE((SELECT sum(cn.total_sar) FROM supplier_credit_note cn WHERE cn.supplier_invoice_id = v.id AND cn.status = 'POSTED'), 0) AS open
                     FROM supplier_invoice v JOIN supplier s ON s.id = v.supplier_id WHERE v.id = ? AND v.organization_id = ?""";
+            case PURCHASE_REQUEST -> """
+                    SELECT r.number, r.request_date AS d, r.requester AS party, r.department AS ref, NULL::numeric AS total, r.status,
+                           r.status = 'OPEN' AS open FROM purchase_request r WHERE r.id = ? AND r.organization_id = ?""";
+            case GOODS_RETURN -> """
+                    SELECT r.number, r.return_date AS d, s.name AS party, NULL AS ref, r.total_incl_vat AS total, r.status, FALSE AS open
+                    FROM goods_return r JOIN supplier s ON s.id = r.supplier_id WHERE r.id = ? AND r.organization_id = ?""";
+            case SUPPLIER_CREDIT -> """
+                    SELECT c.number, c.credit_date AS d, s.name AS party, c.supplier_ref AS ref, c.total_incl_vat AS total, c.status, FALSE AS open
+                    FROM supplier_credit_note c JOIN supplier s ON s.id = c.supplier_id WHERE c.id = ? AND c.organization_id = ?""";
             case SUPPLIER_PAYMENT -> """
                     SELECT p.number, p.payment_date AS d, s.name AS party, p.reference AS ref, p.amount AS total, p.method AS status,
                            FALSE AS open
@@ -209,6 +272,11 @@ public class DocumentGraph {
             case GOODS_RECEIPT -> "Goods receipt";
             case SUPPLIER_INVOICE -> "Supplier invoice";
             case SUPPLIER_PAYMENT -> "Outgoing payment";
+            case PURCHASE_REQUEST -> "Purchase request";
+            case GOODS_RETURN -> "Goods return";
+            case SUPPLIER_CREDIT -> "A/P credit memo";
+            case CUSTOMER -> "Customer";
+            case SUPPLIER -> "Supplier";
             default -> t.name();
         };
     }

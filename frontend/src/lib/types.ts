@@ -823,7 +823,40 @@ export interface SalesOrder extends SalesOrderRequest {
 
 export type DocType =
   | "QUOTATION" | "SALES_ORDER" | "DELIVERY_NOTE" | "INVOICE" | "RECEIPT"
-  | "PURCHASE_ORDER" | "GOODS_RECEIPT" | "SUPPLIER_INVOICE" | "SUPPLIER_PAYMENT";
+  | "PURCHASE_REQUEST" | "PURCHASE_ORDER" | "GOODS_RECEIPT" | "GOODS_RETURN" | "SUPPLIER_INVOICE" | "SUPPLIER_CREDIT" | "SUPPLIER_PAYMENT"
+  | "CUSTOMER" | "SUPPLIER";
+
+export interface PurchaseRequestLine { productId: number | null; name: string; quantity: number; unitCode: string }
+export interface PurchaseRequest {
+  id: number; number: string; requester: string; department: string | null; requestDate: string; requiredDate: string | null;
+  warehouseId: number | null; warehouseName: string | null; status: string; remarks: string | null; createdBy: string; createdAt: string;
+  lines: PurchaseRequestLine[]; purchaseOrders: { id: number; number: string; status: string }[];
+}
+
+export interface GoodsReturn {
+  id: number; number: string; goodsReceiptId: number; goodsReceiptNumber: string; supplierId: number; supplierName: string;
+  returnDate: string; warehouseId: number; warehouseName: string; currency: string; reason: string | null; status: string;
+  totalExclVat: number; vatTotal: number; totalInclVat: number; createdBy: string; createdAt: string;
+  lines: { goodsReceiptLineId: number; productId: number | null; name: string; quantity: number; unitCost: number; vatRate: number }[];
+  creditNoteId: number | null; creditNoteNumber: string | null;
+}
+
+export interface CreditLine { productId: number | null; name: string; quantity: number; unitCost: number; vatRate: number }
+export interface SupplierCreditNote {
+  id: number; number: string; supplierId: number; supplierName: string; supplierInvoiceId: number; supplierInvoiceNumber: string;
+  goodsReturnId: number | null; goodsReturnNumber: string | null; supplierRef: string | null; creditDate: string; currency: string;
+  exchangeRate: number; status: string; remarks: string | null; totalExclVat: number; vatTotal: number; totalInclVat: number;
+  totalSar: number; vatSar: number; createdBy: string; createdAt: string; lines: CreditLine[];
+}
+export interface CreditRequest {
+  supplierInvoiceId: number; goodsReturnId: number | null; supplierRef: string | null; creditDate: string | null;
+  remarks: string | null; lines: CreditLine[];
+}
+
+export interface GrossProfit {
+  basis: string; revenue: number; cost: number; grossProfit: number; gpPct: number;
+  lines: { name: string; quantity: number; revenue: number; unitCost: number; cost: number; grossProfit: number; gpPct: number }[];
+}
 
 export interface GraphNode {
   type: DocType;

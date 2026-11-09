@@ -522,6 +522,7 @@ function AuditTab({ warehouses, products }: { warehouses: Warehouse[]; products:
       </div>
       {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
       {!productId && <Empty title={t("No stock items")} />}
+      {data && data.rows.length > 1 && <AuditChart data={data} />}
       {data && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -553,6 +554,34 @@ function AuditTab({ warehouses, products }: { warehouses: Warehouse[]; products:
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * The inventory audit as a picture: cumulative quantity (bars) and cumulative value (line) after every movement,
+ * so receipts, landed costs and sales at moving average are visible at a glance.
+ */
+function AuditChart({ data }: { data: InventoryAudit }) {
+  const t = useT();
+  const pts = [{ q: Number(data.openingQty), v: Number(data.openingValue), label: t("Opening balance") },
+    ...data.rows.map((r) => ({ q: Number(r.cumulativeQty), v: Number(r.cumulativeValue), label: `${r.postingDate} · ${r.document}` }))];
+  const W = 720, H = 170, L = 8, R = 8, T = 10, B = 10;
+  const maxQ = Math.max(1, ...pts.map((p) => p.q)), maxV = Math.max(1, ...pts.map((p) => p.v));
+  const step = (W - L - R) / pts.length, bw = Math.max(2, step * 0.6);
+  const yq = (q: number) => T + (H - T - B) * (1 - Math.max(0, q) / maxQ), yv = (v: number) => T + (H - T - B) * (1 - Math.max(0, v) / maxV);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${L + step * i + step / 2},${yv(p.v)}`).join(" ");
+  return (
+    <div className="border-b border-line p-4">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={t("Cumulative quantity and value")}>
+        {pts.map((p, i) => <rect key={i} x={L + step * i + (step - bw) / 2} y={yq(p.q)} width={bw} height={H - B - yq(p.q)} rx="1.5" className="fill-brand/25"><title>{`${p.label} · ${t("Cumulative qty")} ${p.q}`}</title></rect>)}
+        <path d={line} fill="none" stroke="#059669" strokeWidth="2" />
+        {pts.map((p, i) => <circle key={i} cx={L + step * i + step / 2} cy={yv(p.v)} r="2.5" fill="#059669"><title>{`${p.label} · ${t("Cumulative value")} ${money(p.v)}`}</title></circle>)}
+      </svg>
+      <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted">
+        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand/25" />{t("Cumulative qty")} ({t("max")} {maxQ})</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-emerald-600" />{t("Cumulative value")} ({t("max")} {money(maxV)})</span>
+      </div>
+    </div>
   );
 }
 

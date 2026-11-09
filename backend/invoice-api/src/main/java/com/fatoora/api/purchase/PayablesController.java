@@ -133,7 +133,10 @@ public class PayablesController {
             BigDecimal billed = jdbc.queryForObject("""
                     SELECT COALESCE(sum(sl.quantity), 0) FROM supplier_invoice_line sl JOIN supplier_invoice v ON v.id = sl.supplier_invoice_id
                     WHERE sl.goods_receipt_line_id = ? AND v.status = 'OPEN'""", BigDecimal.class, e.getKey());
-            BigDecimal left = ((BigDecimal) gl.get("quantity")).subtract(billed);
+            BigDecimal back = jdbc.queryForObject("""
+                    SELECT COALESCE(sum(rl.quantity), 0) FROM goods_return_line rl JOIN goods_return r ON r.id = rl.goods_return_id
+                    WHERE rl.goods_receipt_line_id = ? AND r.status = 'POSTED'""", BigDecimal.class, e.getKey());
+            BigDecimal left = ((BigDecimal) gl.get("quantity")).subtract(billed).subtract(back);
             if (e.getValue().compareTo(left) > 0)
                 throw ApiException.badRequest("over_billing", "A line bills more than is left on " + gl.get("number") + " (" + StockService.plainOf(left) + ")");
         }
@@ -246,11 +249,14 @@ public class PayablesController {
         BigDecimal paid = jdbc.queryForObject("""
                 SELECT COALESCE(sum(a.amount), 0) FROM supplier_payment_allocation a JOIN supplier_payment p ON p.id = a.supplier_payment_id
                 WHERE a.supplier_invoice_id = ? AND p.status = 'POSTED'""", BigDecimal.class, id);
+        // A/P credit memos lower what is owed exactly like a payment does.
+        BigDecimal credited = jdbc.queryForObject("SELECT COALESCE(sum(total_sar), 0) FROM supplier_credit_note WHERE supplier_invoice_id = ? AND status = 'POSTED'",
+                BigDecimal.class, id);
         LocalDate today = LocalDate.now(InvoiceApiApplication.KSA);
         return jdbc.query("""
                 SELECT v.*, s.name AS sname FROM supplier_invoice v JOIN supplier s ON s.id = v.supplier_id WHERE v.id = ? AND v.organization_id = ?""",
                 (rs, i) -> {
-                    BigDecimal due = "OPEN".equals(rs.getString("status")) ? rs.getBigDecimal("total_sar").subtract(paid).max(BigDecimal.ZERO) : BigDecimal.ZERO;
+                    BigDecimal due = "OPEN".equals(rs.getString("status")) ? rs.getBigDecimal("total_sar").subtract(paid).subtract(credited).max(BigDecimal.ZERO) : BigDecimal.ZERO;
                     LocalDate dd = rs.getObject("due_date", LocalDate.class);
                     long overdue = due.signum() > 0 && dd != null ? Math.max(0, ChronoUnit.DAYS.between(dd, today)) : 0;
                     return new InvDto(rs.getLong("id"), rs.getString("number"), rs.getLong("supplier_id"), rs.getString("sname"),

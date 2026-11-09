@@ -145,7 +145,7 @@ public class InvoicePdfService {
 
     /** The company logo as the first header cell, at its own aspect ratio; nothing when none is uploaded. */
     private static String logo(Organization org) {
-        if (org.getLogo() == null) return "";
+        if (org.getLogo() == null || !PrintOptions.showLogo()) return "";
         int w = LOGO_HEIGHT, h = LOGO_HEIGHT;
         try {
             var img = javax.imageio.ImageIO.read(new ByteArrayInputStream(java.util.Base64.getDecoder().decode(org.getLogo())));

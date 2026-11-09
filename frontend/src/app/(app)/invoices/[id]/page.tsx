@@ -13,6 +13,7 @@ import { PaymentsCard } from "@/components/payments-card";
 import { EditDeleteActions } from "@/components/invoice-actions";
 import { WhatsAppInvoiceButton } from "@/components/whatsapp";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { GrossProfitCard } from "@/components/gross-profit";
 import { ReturnItems } from "@/components/return-items";
 import { useT } from "@/lib/i18n";
 
@@ -114,6 +115,15 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               onClick={() => act("print", () => printFile(`/invoices/${inv.id}/pdf`))}
             >
               <Printer className="size-4" aria-hidden /> {t("Print")}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!inv.downloadable}
+              title={t("For pre-printed letterhead paper")}
+              loading={busy === "print-plain"}
+              onClick={() => act("print-plain", () => printFile(`/invoices/${inv.id}/pdf?logo=false`))}
+            >
+              <Printer className="size-4" aria-hidden /> {t("Print without logo")}
             </Button>
             <Button
               variant="secondary"
@@ -236,6 +246,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           </Card>
         </div>
 
+        <GrossProfitCard path={`/invoices/${inv.id}/gross-profit`} />
         {inv.paymentStatus != null && <PaymentsCard key={`${inv.id}-${inv.dueDate}`} inv={inv} canWrite={canWrite} onChange={() => mutate()} />}
 
         {accepted && inv.type === "INVOICE" && canWrite && (

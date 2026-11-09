@@ -18,6 +18,7 @@ const REPORTS: { id: string; label: string; groups?: [string, string][]; dates?:
   { id: "purchases", label: "Purchases", dates: true, groups: [["supplier", "By supplier"], ["month", "By month"], ["product", "By item"]] },
   { id: "expenses", label: "Expenses", dates: true, groups: [["category", "By category"], ["month", "By month"]] },
   { id: "vat", label: "VAT summary", dates: true },
+  { id: "gross-profit", label: "Gross profit", dates: true, groups: [["invoice", "By invoice"], ["customer", "By customer"], ["product", "By item"], ["month", "By month"]] },
   { id: "pnl", label: "Profit & loss", year: true },
   { id: "receivables", label: "Receivables aging" },
   { id: "payables", label: "Payables aging" },

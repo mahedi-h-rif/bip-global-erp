@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import useSWR from "swr";
-import { XCircle } from "lucide-react";
+import { FileMinus, XCircle } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { SupplierInvoice } from "@/lib/types";
 import { date, money } from "@/lib/format";
@@ -24,6 +24,7 @@ export default function SupplierInvoicePage({ params }: { params: Promise<{ id: 
         subtitle={<span className="flex items-center gap-2"><StatusPill status={v.status} /><span dir="auto">{v.supplierName}</span></span>}
         actions={<span className="flex gap-2">
           {v.status === "OPEN" && Number(v.due) > 0 && <ButtonLink href={`/supplier-payments/new?supplierId=${v.supplierId}`}>{t("Pay supplier")}</ButtonLink>}
+          {v.status === "OPEN" && Number(v.due) > 0 && <ButtonLink variant="secondary" href={`/supplier-credit-notes/new?invoiceId=${v.id}`}><FileMinus className="size-4" aria-hidden /> {t("Credit memo")}</ButtonLink>}
           <RelationshipMapButton type="SUPPLIER_INVOICE" id={v.id} />
         </span>} />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}

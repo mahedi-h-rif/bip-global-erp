@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { FileDown, FilePlus2, Plus, Printer, Save, Trash2, UserPlus } from "lucide-react";
+import { FileDown, FilePlus2, FileText, Plus, Printer, Save, Trash2, UserPlus } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { Customer, InvoiceDetail, Product, Quotation, QuotationLine, QuotationStatus } from "@/lib/types";
 import { money, todayKsa, unitCodes } from "@/lib/format";
@@ -167,6 +167,12 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
           </Button>
           <Button variant="secondary" loading={busy === "print"} onClick={() => act("print", () => printFile(`/quotations/${initial.id}/pdf`))}>
             <Printer className="size-4" aria-hidden /> {t("Print")}
+          </Button>
+          <Button variant="secondary" title={t("For pre-printed letterhead paper")} onClick={() => act("print", () => printFile(`/quotations/${initial.id}/pdf?logo=false`))}>
+            <Printer className="size-4" aria-hidden /> {t("Print without logo")}
+          </Button>
+          <Button variant="secondary" title={t("A request for payment before supply; not a tax invoice")} onClick={() => act("pdf", () => openFile(`/quotations/${initial.id}/pdf?proforma=true`))}>
+            <FileText className="size-4" aria-hidden /> {t("Proforma invoice")}
           </Button>
           {initial.invoiceId ? (
             <Link href={`/invoices/${initial.invoiceId}`} className="inline-flex items-center gap-2 rounded-lg border border-line bg-white px-3.5 py-2 text-sm font-medium">
