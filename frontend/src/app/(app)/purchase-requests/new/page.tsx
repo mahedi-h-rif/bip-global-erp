@@ -6,8 +6,8 @@ import useSWR from "swr";
 import { Plus, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Product, PurchaseRequest, Warehouse } from "@/lib/types";
-import { unitCodes } from "@/lib/format";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, Textarea } from "@/components/ui";
+import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import { useT } from "@/lib/i18n";
 
 interface Line { productId: string; name: string; quantity: string; unitCode: string }
@@ -17,6 +17,7 @@ export default function NewPurchaseRequestPage() {
   const t = useT();
   const router = useRouter();
   const { data: products } = useSWR<Product[]>("/products", fetcher);
+  const itemUnits = useItemUnits();
   const { data: warehouses } = useSWR<Warehouse[]>("/warehouses", fetcher);
   const [requester, setRequester] = useState("");
   const [department, setDepartment] = useState("");
@@ -63,11 +64,12 @@ export default function NewPurchaseRequestPage() {
                 <tr key={i}>
                   <td className="px-4 py-2"><Select value={l.productId} aria-label={t("Item")} onChange={(e) => {
                     const p = products?.find((x) => String(x.id) === e.target.value);
-                    set(i, { productId: e.target.value, name: p?.name ?? l.name, unitCode: p?.unitCode ?? l.unitCode });
+                    const du = p ? defaultUnit(itemUnits, p.id!, true) : undefined;
+                    set(i, { productId: e.target.value, name: p?.name ?? l.name, unitCode: du?.unitCode ?? p?.unitCode ?? l.unitCode });
                   }}><option value="">{t("Free text")}</option>{products?.filter((p) => p.active !== false).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></td>
                   <td className="px-4 py-2"><Input value={l.name} aria-label={t("Description")} onChange={(e) => set(i, { name: e.target.value })} required dir="auto" /></td>
                   <td className="px-4 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Quantity")} value={l.quantity} onChange={(e) => set(i, { quantity: e.target.value })} required /></td>
-                  <td className="px-4 py-2"><Select value={l.unitCode} aria-label={t("Unit")} onChange={(e) => set(i, { unitCode: e.target.value })}>{unitCodes.map((u) => <option key={u.code} value={u.code}>{u.code}</option>)}</Select></td>
+                  <td className="px-4 py-2"><UnitSelect productId={l.productId ? Number(l.productId) : null} value={l.unitCode} onPick={(u) => set(i, { unitCode: u })} /></td>
                   <td className="px-2 py-2">{lines.length > 1 && <Button type="button" variant="ghost" aria-label={t("Remove line")} onClick={() => setLines(lines.filter((_, k) => k !== i))}><Trash2 className="size-4" aria-hidden /></Button>}</td>
                 </tr>
               ))}

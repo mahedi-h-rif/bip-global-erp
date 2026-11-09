@@ -110,9 +110,9 @@ public class DeliveryNoteController {
         String owner = CurrentUser.owner();
         List<Long> ids = jdbc.queryForList("""
                 SELECT id FROM delivery_note WHERE organization_id = ? AND (?::text IS NULL OR status = ?::text)
-                  AND (?::bigint IS NULL OR invoice_id = ?::bigint) AND (?::bigint IS NULL OR sales_order_id = ?::bigint)
+                  AND (?::bigint IS NULL OR invoice_id = ?::bigint) AND (?::bigint IS NULL OR sales_order_id = ?::bigint OR EXISTS (SELECT 1 FROM delivery_note_line dl JOIN sales_order_line sl ON sl.id = dl.sales_order_line_id WHERE dl.delivery_note_id = delivery_note.id AND sl.sales_order_id = ?::bigint))
                   AND (?::text IS NULL OR lower(created_by) = lower(?::text))
-                ORDER BY id DESC LIMIT 500""", Long.class, orgId, status, status, invoiceId, invoiceId, salesOrderId, salesOrderId, owner, owner);
+                ORDER BY id DESC LIMIT 500""", Long.class, orgId, status, status, invoiceId, invoiceId, salesOrderId, salesOrderId, salesOrderId, owner, owner);
         List<Dto> out = new ArrayList<>();
         for (Long id : ids) out.add(dto(orgId, id));
         return out;

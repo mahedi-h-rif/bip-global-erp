@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import useSWR from "swr";
-import { FileDown, Pencil, Printer, Truck, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FileDown, FileText, Lock, Pencil, Printer, Truck, XCircle } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { DeliveryNote, SalesOrder } from "@/lib/types";
 import { date, money } from "@/lib/format";
@@ -21,6 +22,7 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
   const { data: notes } = useSWR<DeliveryNote[]>(o ? `/delivery-notes?salesOrderId=${o.id}` : null, fetcher);
   const [editing, setEditing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const router = useRouter();
 
   if (error) return <Alert tone="bad">{error.message}</Alert>;
   if (!o) return <Spinner />;
@@ -28,7 +30,22 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
 
   const open = o.status === "OPEN" || o.status === "PARTIALLY_DELIVERED";
   const leftToDeliver = o.lines.some((l) => Number(l.remaining) > 0);
-  const myNotes = (notes ?? []).filter((n) => n.salesOrderId === o.id);
+  const myNotes = (notes ?? []).filter((n) => n.salesOrderId === o.id || (n.salesOrderNumbers ?? []).includes(o.number));
+  const levelLabel: Record<string, string> = { NONE: "Not yet", PARTIAL: "Partly", FULL: "Fully" };
+
+  async function close() {
+    const reason = window.prompt(t("Close {number}? What is delivered or invoiced stays; the rest will not be delivered. Reason:", { number: o!.number }));
+    if (!reason) return;
+    try { await mutate(await api<SalesOrder>("POST", `/sales-orders/${o!.id}/close`, { reason }), { revalidate: false }); }
+    catch (e) { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); }
+  }
+
+  async function invoice() {
+    try {
+      const r = await api<{ invoiceId: number }>("POST", "/sales-orders/invoice", { salesOrderIds: [o!.id] });
+      router.push(`/invoices/${r.invoiceId}`);
+    } catch (e) { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); }
+  }
 
   async function cancel() {
     if (!window.confirm(t("Cancel sales order {number}?", { number: o!.number }))) return;
@@ -43,10 +60,12 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
     <>
       <PageHeader
         title={t("Sales order {number}", { number: o.number })}
-        subtitle={<span className="flex flex-wrap items-center gap-2"><span className={`rounded px-2 py-0.5 text-xs font-medium ${salesOrderStatusTone[o.status]}`}>{t(salesOrderStatusLabel[o.status])}</span><span dir="auto">{o.customerName ?? o.clientName}</span></span>}
+        subtitle={<span className="flex flex-wrap items-center gap-2"><span className={`rounded px-2 py-0.5 text-xs font-medium ${salesOrderStatusTone[o.status]}`}>{t(salesOrderStatusLabel[o.status])}</span><span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{t("Delivered")}: {t(levelLabel[o.deliveryStatus] ?? o.deliveryStatus)}</span><span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{t("Invoiced")}: {t(levelLabel[o.invoiceStatus] ?? o.invoiceStatus)}</span><span dir="auto">{o.customerName ?? o.clientName}</span></span>}
         actions={
           <span className="flex flex-wrap gap-2">
             {open && leftToDeliver && <ButtonLink href={`/delivery-notes/new?salesOrderId=${o.id}`}><Truck className="size-4" aria-hidden /> {t("Copy to delivery")}</ButtonLink>}
+            {open && leftToDeliver && o.customerId && <Button variant="secondary" title={t("Invoice without a delivery (services, goods collected at the counter)")} onClick={invoice}><FileText className="size-4" aria-hidden /> {t("Copy to invoice")}</Button>}
+            {open && <Button variant="secondary" onClick={close}><Lock className="size-4" aria-hidden /> {t("Close order")}</Button>}
             <RelationshipMapButton type="SALES_ORDER" id={o.id} />
             <Button variant="secondary" onClick={() => printFile(`/sales-orders/${o.id}/pdf`)}><Printer className="size-4" aria-hidden /> {t("Print")}</Button>
             <Button variant="secondary" onClick={() => openFile(`/sales-orders/${o.id}/pdf`)}><FileDown className="size-4" aria-hidden /> PDF</Button>
@@ -55,6 +74,7 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
         }
       />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}
+      {o.closedReason && <div className="mb-4"><Alert tone="info">{t("Closed by hand by {who} on {date}: {reason}", { who: o.closedBy ?? "", date: date(o.closedAt), reason: o.closedReason })}</Alert></div>}
 
       <Card className="mb-6">
         <dl className="grid gap-x-6 gap-y-3 p-5 text-sm md:grid-cols-4">

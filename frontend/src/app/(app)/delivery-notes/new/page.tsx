@@ -13,8 +13,11 @@ function NewDeliveryNote() {
   const t = useT();
   const params = useSearchParams();
   const invoiceId = params.get("invoiceId");
-  const salesOrderId = params.get("salesOrderId");
-  const source = salesOrderId ? `/delivery-notes/from-sales-order/${salesOrderId}` : invoiceId ? `/delivery-notes/from-invoice/${invoiceId}` : null;
+  // One order (?salesOrderId=) or several of the same customer (?salesOrderIds=1,2).
+  const salesOrderIds = params.get("salesOrderIds");
+  const salesOrderId = params.get("salesOrderId") ?? salesOrderIds?.split(",")[0] ?? null;
+  const source = salesOrderIds ? `/delivery-notes/from-sales-orders?ids=${salesOrderIds}`
+    : salesOrderId ? `/delivery-notes/from-sales-order/${salesOrderId}` : invoiceId ? `/delivery-notes/from-invoice/${invoiceId}` : null;
   const { data: prefill, error } = useSWR<DeliveryNoteRequest>(source, fetcher);
   const { data: invoice } = useSWR<InvoiceDetail>(invoiceId ? `/invoices/${invoiceId}` : null, fetcher);
   const { data: order } = useSWR<SalesOrder>(salesOrderId ? `/sales-orders/${salesOrderId}` : null, fetcher);
@@ -24,7 +27,7 @@ function NewDeliveryNote() {
   if (error) return <Alert tone="bad">{error.message}</Alert>;
   if (!prefill) return <Spinner />;
   if (prefill.lines.length === 0) return <Alert tone="ok">{salesOrderId ? t("Everything on this order is already on delivery notes.") : t("Everything on this invoice has already been put on delivery notes.")}</Alert>;
-  return <DeliveryNoteEditor initial={prefill} invoiceNumber={invoice?.number} orderNumber={order?.number} />;
+  return <DeliveryNoteEditor initial={prefill} invoiceNumber={invoice?.number} orderNumber={salesOrderIds && salesOrderIds.includes(",") ? undefined : order?.number} />;
 }
 
 export default function NewDeliveryNotePage() {

@@ -781,6 +781,8 @@ export interface DeliveryNote extends DeliveryNoteRequest {
   createdBy: string;
   createdAt: string;
   salesOrderNumber: string | null;
+  /** Every order the lines come from (a delivery may combine several). */
+  salesOrderNumbers?: string[];
   invoicing: "NONE" | "PARTIAL" | "FULL";
 }
 
@@ -824,6 +826,12 @@ export interface SalesOrder extends SalesOrderRequest {
   totalInclVat: number;
   createdBy: string;
   createdAt: string;
+  /** NONE / PARTIAL / FULL (delivered or invoiced directly; invoiced in any way). */
+  deliveryStatus: "NONE" | "PARTIAL" | "FULL";
+  invoiceStatus: "NONE" | "PARTIAL" | "FULL";
+  closedReason: string | null;
+  closedBy: string | null;
+  closedAt: string | null;
 }
 
 export type DocType =
@@ -958,7 +966,12 @@ export interface PurchaseOrder {
   warehouseName: string | null;
   currency: string;
   exchangeRate: number;
-  status: "PENDING" | "APPROVED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+  status: "PENDING" | "APPROVED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CLOSED" | "CANCELLED";
+  receivingStatus?: "NONE" | "PARTIAL" | "FULL";
+  billingStatus?: "NONE" | "PARTIAL" | "FULL";
+  closedReason?: string | null;
+  closedBy?: string | null;
+  closedAt?: string | null;
   remarks: string | null;
   totalExclVat: number;
   vatTotal: number;

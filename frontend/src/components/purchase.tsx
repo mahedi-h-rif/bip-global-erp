@@ -19,6 +19,7 @@ export const poStatus: Record<string, { label: string; tone: string }> = {
   OPEN: { label: "Open", tone: "bg-blue-50 text-blue-700" },
   PAID: { label: "Paid", tone: "bg-emerald-50 text-emerald-700" },
   ORDERED: { label: "Ordered", tone: "bg-emerald-50 text-emerald-700" },
+  CLOSED: { label: "Closed", tone: "bg-slate-100 text-slate-600" },
 };
 
 export function StatusPill({ status }: { status: string }) {

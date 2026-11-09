@@ -110,14 +110,17 @@ function GrnForm({ initial, poNumber }: { initial: GrnRequest; poNumber?: string
 
 function NewGrn() {
   const t = useT();
-  const poId = useSearchParams().get("purchaseOrderId");
-  const { data, error } = useSWR<GrnRequest>(poId ? `/goods-receipts/from-purchase-order/${poId}` : null, fetcher);
+  const sp = useSearchParams();
+  // One order (?purchaseOrderId=) or several of one supplier (?purchaseOrderIds=1,2).
+  const poIds = sp.get("purchaseOrderIds");
+  const poId = sp.get("purchaseOrderId") ?? poIds?.split(",")[0] ?? null;
+  const { data, error } = useSWR<GrnRequest>(poIds ? `/goods-receipts/from-purchase-orders?ids=${poIds}` : poId ? `/goods-receipts/from-purchase-order/${poId}` : null, fetcher);
   const { data: po } = useSWR<PurchaseOrder>(poId ? `/purchase-orders/${poId}` : null, fetcher);
   if (!poId) return <GrnForm initial={{ warehouseId: null, currency: "SAR", exchangeRate: 1, lines: [blank()], costs: [] }} />;
   if (error) return <Alert tone="bad">{error.message}</Alert>;
   if (!data) return <Spinner />;
   if (data.lines.length === 0) return <Alert tone="ok">{t("Everything on this order has been received.")}</Alert>;
-  return <GrnForm initial={data} poNumber={po?.number} />;
+  return <GrnForm initial={data} poNumber={poIds && poIds.includes(",") ? undefined : po?.number} />;
 }
 
 export default function NewGoodsReceiptPage() {

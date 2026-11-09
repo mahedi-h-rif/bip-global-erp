@@ -7,6 +7,7 @@ import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Product } from "@/lib/types";
 import { money, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
+import { ProductUnits } from "@/components/units";
 import { useT } from "@/lib/i18n";
 
 const blank: Product = { name: "", unitPrice: "" };
@@ -138,6 +139,7 @@ export default function ProductsPage() {
         actions={canWrite && !editing && <Button onClick={() => setEditing(blank)}><Plus className="size-4" aria-hidden /> {t("New product")}</Button>}
       />
       {editing && <ProductForm key={editing.id ?? "new"} initial={editing} onDone={() => { setEditing(null); mutate(); }} />}
+      {editing?.id && <ProductUnits key={`u-${editing.id}`} productId={editing.id} baseUnit={editing.unitCode ?? "PCE"} basePrice={editing.unitPrice} />}
       {notice && <div className="mb-4"><Alert tone={notice.tone}>{notice.text}</Alert></div>}
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">

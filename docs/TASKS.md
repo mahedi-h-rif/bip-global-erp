@@ -13,6 +13,7 @@ Every phase is verified by an acceptance script against a running system (ZATCA 
 | `deploy/smoke-hr.sh` | employees, leave in working days, holidays, advances, payroll run, payslip, report | 24/24 |
 | `deploy/smoke-erp.sh` | POS + 80 mm receipt, returns, invoice bank details, department permissions, 8 reports, dashboard, search | 34/34 |
 | `deploy/smoke-ops.sh` | fleet, trips & profit, credit limit, payment terms, reorder → PO, CRM, recurring invoices | 25/25 |
+| `deploy/smoke-lifecycle.sh` | units (piece/dozen/carton), delivery from 2 orders, invoice from order, close order/PO, receipt from 2 POs, statuses | 37/37 |
 | `deploy/smoke-video.sh` | purchase request → PO, goods return, A/P credit memo, gross profit, partner maps, dashboard charts, print without logo, proforma | 41/41 |
 
 Backend unit tests: 130 run, 10 skipped (live-only), 0 failures. Empty-database crawl of every list/report endpoint on UAT: all 200.
@@ -43,11 +44,11 @@ Rules (SAP Business One / Odoo): a document is OPEN until fully copied to its ta
 copied. Targets may combine several base documents of the same business partner; every line keeps its base line, so remaining
 quantities, statuses and the relationship map follow the data. One quotation → one sales order (BIP rule).
 
-- [ ] J1 Units of measure: item base unit + alternative units (dozen, carton…) with factor, own price and barcode, default sales /
+- [x] J1 Units of measure: item base unit + alternative units (dozen, carton…) with factor, own price and barcode, default sales /
       purchase unit; every document line keeps unit + factor; stock always posts in the base unit (qty × factor)
-- [ ] J2 Sales: close order by hand, one delivery from several orders of the same customer, invoice straight from an order
+- [x] J2 Sales: close order by hand, one delivery from several orders of the same customer, invoice straight from an order
       (services / no delivery), delivery- and invoice-status on orders, "Based on" text, map edges per line
-- [ ] J3 Purchasing: close PO by hand, one goods receipt from several POs of the same supplier, receiving-/billing-status on POs
+- [x] J3 Purchasing: close PO by hand, one goods receipt from several POs of the same supplier, receiving-/billing-status on POs
 - [ ] J4 Full web test on UAT (CRUD of every module, edge cases, security), fix + retest until clean
       (ZATCA: only 2 real invoices + 2 full credit notes on customer "TEST – SoudaCore QA")
 - [ ] J5 Report (web page): screenshots, module connectivity, database relations, data effects, business flow

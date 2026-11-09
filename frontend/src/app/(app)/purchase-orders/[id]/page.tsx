@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useRef, useState } from "react";
 import useSWR from "swr";
-import { CheckCircle2, Download, FileDown, PackageCheck, Paperclip, Printer, XCircle } from "lucide-react";
+import { CheckCircle2, Lock, Download, FileDown, PackageCheck, Paperclip, Printer, XCircle } from "lucide-react";
 import { api, ApiError, download, fetcher, openFile, printFile, uploadFile } from "@/lib/api";
 import type { GoodsReceipt, Me, PurchaseOrder } from "@/lib/types";
 import { date, dateTime } from "@/lib/format";
@@ -36,15 +36,23 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
   return (
     <>
       <PageHeader title={t("Purchase order {number}", { number: p.number })}
-        subtitle={<span className="flex items-center gap-2"><StatusPill status={p.status} /><span dir="auto">{p.supplierName}</span></span>}
+        subtitle={<span className="flex flex-wrap items-center gap-2"><StatusPill status={p.status} />
+          {p.receivingStatus && <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{t("Received")}: {t(({ NONE: "Not yet", PARTIAL: "Partly", FULL: "Fully" } as Record<string, string>)[p.receivingStatus])}</span>}
+          {p.billingStatus && <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{t("Billed")}: {t(({ NONE: "Not yet", PARTIAL: "Partly", FULL: "Fully" } as Record<string, string>)[p.billingStatus])}</span>}
+          <span dir="auto">{p.supplierName}</span></span>}
         actions={<span className="flex flex-wrap gap-2">
           {p.status === "PENDING" && me?.role === "ADMIN" && <Button loading={busy === "approve"} onClick={() => act("approve", () => api("POST", `/purchase-orders/${p.id}/approve`))}><CheckCircle2 className="size-4" aria-hidden /> {t("Approve")}</Button>}
           {receivable && <ButtonLink href={`/goods-receipts/new?purchaseOrderId=${p.id}`}><PackageCheck className="size-4" aria-hidden /> {t("Copy to goods receipt")}</ButtonLink>}
+          {receivable && <Button variant="secondary" loading={busy === "close"} onClick={() => {
+            const reason = window.prompt(t("Close {number}? What was received stays; the rest will not come. Reason:", { number: p.number }));
+            if (reason) void act("close", () => api("POST", `/purchase-orders/${p.id}/close`, { reason }));
+          }}><Lock className="size-4" aria-hidden /> {t("Close order")}</Button>}
           <RelationshipMapButton type="PURCHASE_ORDER" id={p.id} />
           <Button variant="secondary" onClick={() => printFile(`/purchase-orders/${p.id}/pdf`)}><Printer className="size-4" aria-hidden /> {t("Print")}</Button>
           <Button variant="secondary" onClick={() => openFile(`/purchase-orders/${p.id}/pdf`)}><FileDown className="size-4" aria-hidden /> PDF</Button>
         </span>} />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}
+      {p.closedReason && <div className="mb-4"><Alert tone="info">{t("Closed by hand by {who} on {date}: {reason}", { who: p.closedBy ?? "", date: date(p.closedAt ?? null), reason: p.closedReason })}</Alert></div>}
       {p.status === "PENDING" && me?.role !== "ADMIN" && <div className="mb-4"><Alert tone="info">{t("Waiting for an admin to approve this requisition.")}</Alert></div>}
       <Card className="mb-6">
         <dl className="grid gap-x-6 gap-y-3 p-5 text-sm md:grid-cols-4">

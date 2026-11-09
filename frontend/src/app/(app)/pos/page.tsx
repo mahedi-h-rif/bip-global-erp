@@ -7,10 +7,12 @@ import { api, ApiError, fetcher, printFile } from "@/lib/api";
 import type { Customer, Warehouse } from "@/lib/types";
 import { money } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
+import { UnitSelect, useItemUnits } from "@/components/units";
 import { useT } from "@/lib/i18n";
 
-interface GridItem { id: number; number: string | null; name: string; nameAr: string | null; barcode: string | null; category: string | null; unitPrice: number; unitCode: string; trackStock: boolean; onHand: number }
-interface CartLine { item: GridItem; quantity: number; unitPrice: number; discountPct: number }
+interface GridItem { id: number; number: string | null; name: string; nameAr: string | null; barcode: string | null; category: string | null; unitPrice: number; unitCode: string; trackStock: boolean; onHand: number; scannedUnit?: string | null }
+/** {@code unitCode}/{@code factor}: the unit sold (a carton holds {@code factor} base units). */
+interface CartLine { item: GridItem; quantity: number; unitPrice: number; discountPct: number; unitCode: string; factor: number }
 interface SaleResult { invoiceId: number; number: string; status: string; total: number; paid: number; change: number; due: number }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -24,6 +26,7 @@ export default function PosPage() {
   const [q, setQ] = useState("");
   const { data: items, mutate: reload } = useSWR<GridItem[]>(wh ? `/pos/products?warehouseId=${wh}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}` : null, fetcher, { keepPreviousData: true });
   const [cart, setCart] = useState<CartLine[]>([]);
+  const itemUnits = useItemUnits();
   const [customerId, setCustomerId] = useState("");
   const [cash, setCash] = useState("");
   const [card, setCard] = useState("");
@@ -41,15 +44,19 @@ export default function PosPage() {
   const tendered = (Number(cash) || 0) + (Number(card) || 0);
   const change = Math.max(0, r2(tendered - totals.total));
 
-  function add(item: GridItem) {
+  /** Adds one of {@code unitCode} (default: the scanned unit, else the item's base unit); stock is checked in base units. */
+  function add(item: GridItem, unitCode?: string) {
     setDone(null);
     setError(null);
+    const code = unitCode ?? item.scannedUnit ?? item.unitCode;
+    const u = itemUnits.find((x) => x.productId === item.id && x.unitCode === code);
+    const factor = Number(u?.factor ?? 1);
     setCart((c) => {
-      const i = c.findIndex((l) => l.item.id === item.id);
-      const inCart = i >= 0 ? c[i].quantity : 0;
-      if (item.trackStock && inCart + 1 > Number(item.onHand)) { setError(t("Only {n} of “{name}” in stock", { n: String(Number(item.onHand)), name: item.name })); return c; }
+      const i = c.findIndex((l) => l.item.id === item.id && l.unitCode === code);
+      const inBase = c.filter((l) => l.item.id === item.id).reduce((s, l) => s + l.quantity * l.factor, 0);
+      if (item.trackStock && inBase + factor > Number(item.onHand)) { setError(t("Only {n} of “{name}” in stock", { n: String(Number(item.onHand)), name: item.name })); return c; }
       if (i >= 0) return c.map((l, j) => (j === i ? { ...l, quantity: l.quantity + 1 } : l));
-      return [...c, { item, quantity: 1, unitPrice: Number(item.unitPrice), discountPct: 0 }];
+      return [...c, { item, quantity: 1, unitPrice: Number(u?.price ?? item.unitPrice), discountPct: 0, unitCode: code, factor }];
     });
   }
   const set = (i: number, patch: Partial<CartLine>) => setCart((c) => c.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -63,7 +70,7 @@ export default function PosPage() {
     try {
       const r = await api<SaleResult>("POST", "/pos/sale", {
         warehouseId: Number(wh), customerId: customerId ? Number(customerId) : null, payments,
-        lines: cart.map((l) => ({ productId: l.item.id, quantity: l.quantity, unitPrice: l.unitPrice, discountPct: l.discountPct })),
+        lines: cart.map((l) => ({ productId: l.item.id, quantity: l.quantity, unitPrice: l.unitPrice, discountPct: l.discountPct, unitCode: l.unitCode })),
       });
       setDone(r);
       setCart([]); setCash(""); setCard(""); setCustomerId("");
@@ -124,7 +131,7 @@ export default function PosPage() {
             )}
             {cart.length === 0 && !done && <p className="py-6 text-center text-sm text-muted">{t("Tap a product or scan a barcode.")}</p>}
             {cart.map((l, i) => (
-              <div key={l.item.id} className="rounded-lg border border-line p-2 text-sm">
+              <div key={`${l.item.id}-${l.unitCode}`} className="rounded-lg border border-line p-2 text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-medium" dir="auto">{l.item.name}</span>
                   <Button variant="ghost" onClick={() => setCart(cart.filter((_, j) => j !== i))} aria-label={t("Remove")}><Trash2 className="size-4" aria-hidden /></Button>
@@ -132,7 +139,12 @@ export default function PosPage() {
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Button variant="secondary" onClick={() => (l.quantity > 1 ? set(i, { quantity: l.quantity - 1 }) : setCart(cart.filter((_, j) => j !== i)))} aria-label={t("Less")}><Minus className="size-3" aria-hidden /></Button>
                   <span className="tabular w-8 text-center">{l.quantity}</span>
-                  <Button variant="secondary" onClick={() => add(l.item)} aria-label={t("More")}><Plus className="size-3" aria-hidden /></Button>
+                  <Button variant="secondary" onClick={() => add(l.item, l.unitCode)} aria-label={t("More")}><Plus className="size-3" aria-hidden /></Button>
+                  <span className="w-28"><UnitSelect productId={l.item.id} value={l.unitCode} onPick={(u, price, factor) => {
+                    const others = cart.filter((x, j) => j !== i && x.item.id === l.item.id).reduce((s2, x) => s2 + x.quantity * x.factor, 0);
+                    if (l.item.trackStock && others + l.quantity * factor > Number(l.item.onHand)) { setError(t("Only {n} of “{name}” in stock", { n: String(Number(l.item.onHand)), name: l.item.name })); return; }
+                    set(i, { unitCode: u, factor, unitPrice: price ?? l.unitPrice });
+                  }} /></span>
                   <Input type="number" min="0" step="0.01" className="w-24" value={l.unitPrice} onChange={(e) => set(i, { unitPrice: Number(e.target.value) })} aria-label={t("Unit price")} />
                   <Input type="number" min="0" max="100" step="1" className="w-16" value={l.discountPct} onChange={(e) => set(i, { discountPct: Number(e.target.value) })} aria-label={t("Discount %")} title={t("Discount %")} />
                   <span className="tabular ms-auto font-semibold">{money(r2(l.quantity * r2(l.unitPrice * (1 - l.discountPct / 100)) * 1.15))}</span>
