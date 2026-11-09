@@ -49,9 +49,13 @@ quantities, statuses and the relationship map follow the data. One quotation →
 - [x] J2 Sales: close order by hand, one delivery from several orders of the same customer, invoice straight from an order
       (services / no delivery), delivery- and invoice-status on orders, "Based on" text, map edges per line
 - [x] J3 Purchasing: close PO by hand, one goods receipt from several POs of the same supplier, receiving-/billing-status on POs
-- [ ] J4 Full web test on UAT (CRUD of every module, edge cases, security), fix + retest until clean
+- [x] J4 Full web test on UAT (CRUD of every module, edge cases, security), fix + retest until clean
       (ZATCA: only 2 real invoices + 2 full credit notes on customer "TEST – SoudaCore QA")
-- [ ] J5 Report (web page): screenshots, module connectivity, database relations, data effects, business flow
+- [x] J5 Report (web page): screenshots, module connectivity, database relations, data effects, business flow
+
+Result: 260 business checks + 33 security checks + 80 browser checks + 130 unit tests pass locally on the final code;
+on UAT 217/217 business checks (no ZATCA submission), 79/80 browser, 29/31 security before the fixes (fixed, deploy pending approval).
+Report: https://claude.ai/artifact/5cDsoHxSTFQP42W3qL276t
 
 ## Waiting on the client
 
