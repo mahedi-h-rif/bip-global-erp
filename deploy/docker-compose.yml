@@ -1,5 +1,5 @@
 # SoudaCore ERP · BIP Gulf Logistics. One Postgres holding bip_uat and bip_prod; the app uses ${DB_NAME}.
-# Going to production = DB_NAME=bip_prod + ORG_ZATCA_ENVIRONMENT=PRODUCTION in the env file, then deploy.
+# UAT = api/web on ${WEB_PORT} (bip_uat); production = api-prod/web-prod on ${WEB_PORT_PROD} (bip_prod). Both use ZATCA PRODUCTION.
 #   docker compose -p bip-erp --env-file clients/bip-gulf.env up -d --build
 # Put a TLS-terminating reverse proxy (Caddy) in front of "web" once a domain is mapped.
 services:
@@ -53,6 +53,29 @@ services:
       - "${WEB_PORT:-8088}:3000"
     depends_on:
       - api
+
+  # Production instance on the same server and Postgres, database bip_prod, its own logins and secrets.
+  api-prod:
+    build: ../backend
+    restart: unless-stopped
+    env_file: clients/bip-gulf-prod.env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/bip_prod
+      DB_USERNAME: erp
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web-prod:
+    build:
+      context: ../frontend
+      args:
+        API_ORIGIN: http://api-prod:8080
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT_PROD:-8089}:3000"
+    depends_on:
+      - api-prod
 
 volumes:
   pgdata:
