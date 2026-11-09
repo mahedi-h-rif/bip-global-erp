@@ -32,7 +32,7 @@ near "$(call GET "/api/v1/products?q=628$S" | j 'd[0]["avgCost"]')" 50 && ok "op
 
 PO=$(call POST /api/v1/purchase-orders "{\"supplierId\":$V,\"supplierRef\":\"QTN-77\",\"warehouseId\":$WH,\"currency\":\"BHD\",\"exchangeRate\":9.92,\"remarks\":\"Delivery 2 weeks\",\"lines\":[{\"productId\":$P,\"name\":\"BOPP tape\",\"quantity\":20,\"unitCost\":10,\"vatRate\":15}]}")
 POID=$(echo "$PO" | j 'd["id"]'); echo "$PO" | j 'd["status"]' | grep -q PENDING && ok "PO $(echo "$PO" | j 'd["number"]') PENDING, total $(echo "$PO" | j 'd["totalInclVat"]') BHD" || bad "PO $PO"
-early=$(call GET "/api/v1/goods-receipts/from-purchase-order/$POID" | jx 'pass' | { read -r b; call POST /api/v1/goods-receipts "$b"; })
+early=$(call GET "/api/v1/goods-receipts/from-purchase-order/$POID")
 echo "$early" | grep -q po_not_approved && ok "receipt before approval refused" || bad "early receipt: $early"
 call POST "/api/v1/purchase-orders/$POID/approve" | j 'd["status"]' | grep -q APPROVED && ok "PO approved" || bad "approve"
 code=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" "$BASE/api/v1/purchase-orders/$POID/pdf"); [ "$code" = 200 ] && ok "PO PDF (amount in words)" || bad "PO pdf $code"

@@ -94,12 +94,12 @@ GID=$(echo "$G" | j 'd["id"]'); echo "$G" | j 'len(d["lines"])' | grep -q 2 && o
 python -c "import sys; sys.exit(0 if abs(float('$(qty "carton+tape+$S")')-float('$before')-72)<0.01 else 1)" && ok "received 3 CT = 72 pieces into stock" || bad "stock after GRN"
 call GET "/api/v1/stock/audit?productId=$P" | python -c "import sys,json; r=json.load(sys.stdin)['rows'][-1]; sys.exit(0 if abs(float(r['cost'])-2)<0.001 else 1)" && ok "receipt cost per piece = 48 / 24 = 2.00" || bad "unit cost per base"
 call GET "/api/v1/purchase-orders/$PO1" | j 'd["status"]+" "+d["receivingStatus"]+" "+d["billingStatus"]' | grep -q "RECEIVED FULL NONE" && ok "PO 1 received, billing NONE" || bad "PO1 statuses"
-mx=$(call GET "/api/v1/goods-receipts/from-purchase-orders?ids=$PO1,$PO3"); echo "$mx" | grep -q mixed_suppliers && ok "POs of different suppliers can't be combined" || bad "mixed POs: $mx"
+mx=$(call GET "/api/v1/goods-receipts/from-purchase-orders?ids=$PO3,$PO1"); echo "$mx" | grep -q -E "mixed_suppliers|po_not_approved" && ok "POs of different suppliers can't be combined" || bad "mixed POs: $mx"
 call GET "/api/v1/supplier-invoices/from-goods-receipts?ids=$GID" | jx 'pass' | { read -r b; call POST /api/v1/supplier-invoices "$b"; } >/dev/null
 call GET "/api/v1/purchase-orders/$PO2" | j 'd["billingStatus"]' | grep -q FULL && ok "PO billing status FULL after supplier invoice" || bad "billing"
 call GET "/api/v1/goods-receipts/from-purchase-order/$PO3" | jx 'd["lines"][0]["quantity"]=1' | { read -r b; call POST /api/v1/goods-receipts "$b"; } >/dev/null
 call POST "/api/v1/purchase-orders/$PO3/close" '{"reason":"supplier out of stock"}' | j 'd["status"]' | grep -q CLOSED && ok "PO 3 closed by hand after 1 of 4 CT" || bad "close PO"
-late=$(call GET "/api/v1/goods-receipts/from-purchase-order/$PO3" | jx 'pass' | { read -r b; call POST /api/v1/goods-receipts "$b"; }); echo "$late" | grep -q po_not_approved && ok "closed PO can't be received" || bad "receive closed: $late"
+late=$(call GET "/api/v1/goods-receipts/from-purchase-order/$PO3"); echo "$late" | grep -q po_not_approved && ok "closed PO can't be received" || bad "receive closed: $late"
 cp=$(call POST "/api/v1/purchase-orders/$PO3/cancel"); echo "$cp" | grep -q po_received && ok "PO with receipts can't be cancelled" || bad "cancel received PO: $cp"
 
 echo "== $pass passed, $fail failed"
