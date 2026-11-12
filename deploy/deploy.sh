@@ -36,8 +36,15 @@ if [ -f "$PROD_ENV" ]; then
 fi
 git log -1 --format='%H %s' | $SSH "cat > $APP_DIR/REVISION"
 
-echo "== build + start (first build takes several minutes)"
-$SSH "cd $APP_DIR/deploy && docker compose -p bip-erp --env-file clients/bip-gulf.env up -d --build --remove-orphans 2>&1 | tail -5"
+# One image at a time: building the backend and both frontends together runs the server out of memory.
+# The backend image is built once and shared by api and api-prod.
+echo "== build (one image at a time)"
+for svc in api web web-prod; do
+  echo "   $svc"
+  $SSH "cd $APP_DIR/deploy && docker compose -p bip-erp --env-file clients/bip-gulf.env build $svc 2>&1 | tail -3"
+done
+echo "== start"
+$SSH "cd $APP_DIR/deploy && docker compose -p bip-erp --env-file clients/bip-gulf.env up -d --remove-orphans 2>&1 | tail -5"
 # WhatsApp is turned off for now: stop the container left from earlier deploys (its login data volume is kept).
 $SSH "docker rm -f bip-erp-whatsapp-1 >/dev/null 2>&1 || true"
 

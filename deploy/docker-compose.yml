@@ -23,6 +23,7 @@ services:
 
   api:
     build: ../backend
+    image: bip-erp-api:latest
     restart: unless-stopped
     env_file: clients/${CLIENT:-bip-gulf}.env
     environment:
@@ -56,8 +57,9 @@ services:
       - api
 
   # Production instance on the same server and Postgres, database bip_prod, its own logins and secrets.
+  # Same image as api (built once): only its env and database differ.
   api-prod:
-    build: ../backend
+    image: bip-erp-api:latest
     restart: unless-stopped
     env_file: clients/bip-gulf-prod.env
     environment:
