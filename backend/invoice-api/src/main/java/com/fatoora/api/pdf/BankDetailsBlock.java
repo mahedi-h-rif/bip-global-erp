@@ -20,9 +20,16 @@ public final class BankDetailsBlock {
         List<Row> rows = new ArrayList<>();
         add(rows, "ACCOUNT NAME", "إسم الحساب", org.getBankAccountName());
         add(rows, "ACCOUNT NUMBER", "رقم الحساب", org.getBankAccountNo());
-        add(rows, "IBAN", "رقم الآيبان", org.getBankIban());
+        add(rows, "IBAN", "رقم الآيبان", groupIban(org.getBankIban()));
         add(rows, "BANK NAME", "إسم البنك", org.getBankName());
         return rows;
+    }
+
+    /** "SA5680000450608010141252" → "SA56 8000 0450 6080 1014 1252", as printed on bank letters. */
+    static String groupIban(String iban) {
+        if (iban == null) return null;
+        String compact = iban.replaceAll("\s+", "").toUpperCase();
+        return compact.replaceAll("(.{4})(?!$)", "$1 ");
     }
 
     private static void add(List<Row> rows, String en, String ar, String value) {

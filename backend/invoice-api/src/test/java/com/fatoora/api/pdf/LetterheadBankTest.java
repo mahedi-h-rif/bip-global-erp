@@ -65,6 +65,12 @@ class LetterheadBankTest {
     }
 
     @Test
+    void ibanGroupedByFour() {
+        assertEquals("SA56 8000 0450 6080 1014 1252", BankDetailsBlock.groupIban("SA5680000450608010141252"));
+        assertEquals("SA56 8000 0450 6080 1014 1252", BankDetailsBlock.groupIban("sa56 8000 0450 6080 1014 1252"));
+    }
+
+    @Test
     void noBlockWithoutIban() {
         Organization o = org("CLASSIC");
         o.setBankIban(null);
