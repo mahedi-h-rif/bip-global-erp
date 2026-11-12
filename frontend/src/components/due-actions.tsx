@@ -5,7 +5,7 @@ import { Mail, MessageCircle } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { NotificationEntry } from "@/lib/types";
 import { Button } from "@/components/ui";
-import { useWhatsApp } from "@/components/whatsapp";
+import { useWhatsApp, WHATSAPP_ENABLED } from "@/components/whatsapp";
 import { useT } from "@/lib/i18n";
 
 const statusText: Record<NotificationEntry["status"], string> = {
@@ -94,7 +94,7 @@ export function DueActions({ customerId, email, phone, onDone, compact = false }
         >
           <Mail className="size-4" aria-hidden /> {compact ? <span className="sr-only">{t("Send reminder")}</span> : t("Send reminder")}
         </Button>
-        <Button
+        {WHATSAPP_ENABLED && <Button
           variant="secondary"
           className={`${compact ? "px-2.5 py-1.5" : ""} text-emerald-700`}
           loading={busy === "wa"}
@@ -103,7 +103,7 @@ export function DueActions({ customerId, email, phone, onDone, compact = false }
           onClick={whatsapp}
         >
           <MessageCircle className="size-4" aria-hidden /> {compact ? <span className="sr-only">WhatsApp</span> : "WhatsApp"}
-        </Button>
+        </Button>}
       </span>
       {result && (
         <span className={`text-xs ${result.ok ? "text-ok" : "text-bad"}`} role="status">

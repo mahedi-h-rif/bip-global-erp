@@ -54,7 +54,7 @@ import { LanguagePrompt, LanguageSwitcher } from "@/components/language";
 import { NotificationBell } from "@/components/notification-bell";
 import { OrgFavicon } from "@/components/favicon";
 import { SoudaCoreCredit } from "@/components/souda-credit";
-import { WhatsAppBanner } from "@/components/whatsapp";
+import { WhatsAppBanner, WHATSAPP_ENABLED } from "@/components/whatsapp";
 import { VoiceAssistant } from "@/components/voice";
 import { useT } from "@/lib/i18n";
 import { QuickSearch } from "@/components/erp-dashboard";
@@ -111,7 +111,8 @@ const workforceNav: NavItem[] = [
   { href: "/hr", label: "HR", icon: IdCard },
   { href: "/payroll", label: "Payroll", icon: Wallet2 },
   { href: "/workers", label: "Workers", icon: HardHat },
-  { href: "/documents", label: "Documents", icon: FolderLock },
+  // Hidden for now; the /documents page still works. Uncomment to show it again.
+  // { href: "/documents", label: "Documents", icon: FolderLock },
 ];
 
 // Company money, partners' withdrawals and the business audit: admins only.
@@ -144,7 +145,7 @@ const adminNav: NavItem[] = [
   { href: "/settings/roles", label: "Departments & permissions", icon: ShieldCheck },
   { href: "/settings/bank", label: "Bank details", icon: CreditCard },
   { href: "/settings/agreement", label: "Agreement template", icon: FileSignature },
-  { href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle },
+  ...(WHATSAPP_ENABLED ? [{ href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle }] : []),
   { href: "/settings/audit", label: "Audit log", icon: ScrollText },
 ];
 
@@ -392,7 +393,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <main inert={menuOpen} className="min-w-0 flex-1 px-4 py-6 lg:px-8 lg:py-8">
         <div className="mx-auto max-w-6xl">
-          {isAdmin && pathname !== "/settings/whatsapp" && <WhatsAppBanner />}
+          {WHATSAPP_ENABLED && isAdmin && pathname !== "/settings/whatsapp" && <WhatsAppBanner />}
           {children}
         </div>
       </main>

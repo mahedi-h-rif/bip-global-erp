@@ -284,11 +284,12 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
           tone={error.saved ? "warn" : "bad"}
           title={error.saved ? t("Saved as draft, but not issued") : t("Not saved")}
         >
-          {error.err.message}
-          {error.err.fields && (
+          {error.err.fields && Object.keys(error.err.fields).length > 0 ? (
             <ul className="mt-1 list-disc ps-5">
-              {Object.entries(error.err.fields).map(([f, m]) => <li key={f}>{f}: {m}</li>)}
+              {Object.entries(error.err.fields).map(([f, m]) => <li key={f}>{m}</li>)}
             </ul>
+          ) : (
+            error.err.message
           )}
           {error.saved && error.err.code === "not_issuable" && /Customer/.test(error.err.message) && (
             <p className="mt-2">

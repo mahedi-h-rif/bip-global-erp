@@ -9,6 +9,12 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.validation.FieldError;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -25,11 +31,41 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(e.status()).body(new ErrorBody(e.code(), e.getMessage(), fields));
     }
 
+    /** Each field's error is a full sentence ("Line 2: Name is required"), and the message lists them all. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ErrorBody> validation(MethodArgumentNotValidException e) {
-        Map<String, String> fields = e.getBindingResult().getFieldErrors().stream()
-                .collect(Collectors.toMap(f -> f.getField(), f -> String.valueOf(f.getDefaultMessage()), (a, b) -> a));
-        return ResponseEntity.badRequest().body(new ErrorBody("validation", "Some fields are invalid", fields));
+        Map<String, String> fields = new LinkedHashMap<>();
+        for (FieldError f : e.getBindingResult().getFieldErrors()) fields.putIfAbsent(f.getField(), FriendlyValidation.message(f));
+        List<String> problems = new ArrayList<>(fields.values());
+        e.getBindingResult().getGlobalErrors().forEach(g -> problems.add(FriendlyValidation.message(g)));
+        return ResponseEntity.badRequest().body(new ErrorBody("validation", summary(problems), fields.isEmpty() ? null : fields));
+    }
+
+    /** Validation of a list body or of request parameters (e.g. @Valid List<Line>). */
+    @ExceptionHandler(org.springframework.web.method.annotation.HandlerMethodValidationException.class)
+    ResponseEntity<ErrorBody> methodValidation(org.springframework.web.method.annotation.HandlerMethodValidationException e) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        List<String> problems = new ArrayList<>();
+        for (var result : e.getParameterValidationResults()) {
+            for (MessageSourceResolvable r : result.getResolvableErrors()) {
+                if (r instanceof FieldError f) {
+                    String key = result.getContainerIndex() != null ? "[" + result.getContainerIndex() + "]." + f.getField() : f.getField();
+                    fields.putIfAbsent(key, FriendlyValidation.message(key, f));
+                } else {
+                    String name = result.getMethodParameter().getParameterName();
+                    String label = name == null ? "" : FriendlyValidation.label(name);
+                    String msg = r.getDefaultMessage() == null ? "is invalid" : r.getDefaultMessage();
+                    problems.add(label.isEmpty() ? FriendlyValidation.capitalize(msg) : label + ": " + msg);
+                }
+            }
+        }
+        problems.addAll(0, fields.values());
+        return ResponseEntity.badRequest().body(new ErrorBody("validation", summary(problems), fields.isEmpty() ? null : fields));
+    }
+
+    private static String summary(List<String> problems) {
+        if (problems.isEmpty()) return "Some details are invalid. Please check the form.";
+        return problems.stream().map(p -> p.endsWith(".") ? p : p + ".").collect(Collectors.joining(" "));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -51,8 +87,21 @@ public class ApiExceptionHandler {
 
     /** Client mistakes are answered as such (4xx), never as a server error. */
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
-    ResponseEntity<ErrorBody> unreadable(Exception e) {
-        return ResponseEntity.badRequest().body(new ErrorBody("malformed_request", "The request body is not valid JSON for this form", null));
+    ResponseEntity<ErrorBody> unreadable(org.springframework.http.converter.HttpMessageNotReadableException e) {
+        // A wrong value in one field (text in a number, a bad date): name the field instead of blaming the "JSON".
+        if (e.getCause() instanceof tools.jackson.databind.DatabindException d && !d.getPath().isEmpty()) {
+            StringBuilder path = new StringBuilder();
+            for (var ref : d.getPath()) {
+                if (ref.getPropertyName() != null) path.append(path.isEmpty() ? "" : ".").append(ref.getPropertyName());
+                else if (ref.getIndex() >= 0) path.append("[").append(ref.getIndex()).append("]");
+            }
+            String key = path.toString();
+            if (!key.isEmpty()) {
+                String text = FriendlyValidation.label(key) + " has an invalid value";
+                return ResponseEntity.badRequest().body(new ErrorBody("validation", text + ".", Map.of(key, text)));
+            }
+        }
+        return ResponseEntity.badRequest().body(new ErrorBody("malformed_request", "Some of the entered values could not be read. Please check the form and try again.", null));
     }
 
     @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
@@ -65,12 +114,12 @@ public class ApiExceptionHandler {
             org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
             org.springframework.web.bind.MissingRequestHeaderException.class})
     ResponseEntity<ErrorBody> badParameter(Exception e) {
-        return ResponseEntity.badRequest().body(new ErrorBody("invalid_parameter", "A parameter is missing or has the wrong format", null));
+        return ResponseEntity.badRequest().body(new ErrorBody("invalid_parameter", "Some required information is missing or in the wrong format. Please check and try again.", null));
     }
 
     @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
     ResponseEntity<ErrorBody> method(Exception e) {
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(new ErrorBody("method_not_allowed", "This action is not supported here", null));
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(new ErrorBody("method_not_allowed", "This action isn't available here.", null));
     }
 
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
@@ -86,12 +135,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     ResponseEntity<ErrorBody> integrity(Exception e) {
         log.warn("Data integrity: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorBody("conflict", "This change conflicts with existing data (duplicate or still in use)", null));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorBody("conflict", "This can't be saved because it duplicates an existing record, or the record is still in use elsewhere.", null));
     }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ErrorBody> unexpected(Exception e) {
         log.error("Unhandled error", e);
-        return ResponseEntity.internalServerError().body(new ErrorBody("internal", "Unexpected server error", null));
+        return ResponseEntity.internalServerError().body(new ErrorBody("internal", "Something went wrong on our side. Please try again; if it keeps happening, contact support.", null));
     }
 }

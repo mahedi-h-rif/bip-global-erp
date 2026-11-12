@@ -69,7 +69,7 @@ function CustomerForm({ initial, onDone }: { initial: Customer; onDone: () => vo
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("Mobile (WhatsApp)")} hint={t("Use the customer's WhatsApp number: 05XXXXXXXX or with country code. Used for WhatsApp and SMS reminders")} error={fe("phone")}>
+          <Field label={t("Mobile")} hint={t("05XXXXXXXX or with country code. Used for SMS reminders")} error={fe("phone")}>
             <Input inputMode="tel" required value={c.phone ?? ""} onChange={set("phone")} />
           </Field>
           <Field label={t("Email")} optional hint={t("Payment reminders are emailed here")} error={fe("email")}><Input type="email" value={c.email ?? ""} onChange={set("email")} /></Field>

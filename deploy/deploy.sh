@@ -38,6 +38,8 @@ git log -1 --format='%H %s' | $SSH "cat > $APP_DIR/REVISION"
 
 echo "== build + start (first build takes several minutes)"
 $SSH "cd $APP_DIR/deploy && docker compose -p bip-erp --env-file clients/bip-gulf.env up -d --build --remove-orphans 2>&1 | tail -5"
+# WhatsApp is turned off for now: stop the container left from earlier deploys (its login data volume is kept).
+$SSH "docker rm -f bip-erp-whatsapp-1 >/dev/null 2>&1 || true"
 
 echo "== health"
 for port in $WEB_PORT ${WEB_PORT_PROD:-}; do

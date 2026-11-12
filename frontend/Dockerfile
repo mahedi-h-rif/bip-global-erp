@@ -5,7 +5,9 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 # Rewrites are resolved at build time, so the API address is a build argument.
 ARG API_ORIGIN=http://api:8080
-ENV API_ORIGIN=$API_ORIGIN NEXT_TELEMETRY_DISABLED=1
+# WhatsApp is off unless built with NEXT_PUBLIC_WHATSAPP=on.
+ARG NEXT_PUBLIC_WHATSAPP=off
+ENV API_ORIGIN=$API_ORIGIN NEXT_PUBLIC_WHATSAPP=$NEXT_PUBLIC_WHATSAPP NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:24-alpine

@@ -10,11 +10,17 @@ import { Button, Input } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
 /**
+ * WhatsApp is switched off for now: no buttons, banner, menu entry or settings page.
+ * Build with NEXT_PUBLIC_WHATSAPP=on (and run the whatsapp container) to bring it back.
+ */
+export const WHATSAPP_ENABLED = process.env.NEXT_PUBLIC_WHATSAPP === "on";
+
+/**
  * The linked WhatsApp number's status, refreshed every minute (every 3 s while a QR is waiting to be scanned).
  * `direct` is true when messages go out from the linked number; otherwise WhatsApp buttons open a prefilled chat.
  */
 export function useWhatsApp() {
-  const { data, mutate } = useSWR<WhatsAppStatus>("/whatsapp/status", fetcher, {
+  const { data, mutate } = useSWR<WhatsAppStatus>(WHATSAPP_ENABLED ? "/whatsapp/status" : null, fetcher, {
     refreshInterval: (d) => (d?.status === "qr" || d?.status === "connecting" ? 3000 : 60_000),
   });
   return { wa: data, direct: data?.configured === true && data.status === "connected", mutate };
@@ -24,7 +30,7 @@ export function useWhatsApp() {
 export function WhatsAppBanner() {
   const t = useT();
   const { wa } = useWhatsApp();
-  if (!wa?.configured || wa.status === "connected" || wa.status === "connecting") return null;
+  if (!WHATSAPP_ENABLED || !wa?.configured || wa.status === "connected" || wa.status === "connecting") return null;
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-warn/30 bg-warn/5 px-4 py-2.5 text-sm">
       <WifiOff className="size-4 shrink-0 text-warn" aria-hidden />

@@ -64,8 +64,17 @@ public class DeliveryNoteController {
                           @NotEmpty List<@Valid Line> lines,
                           Long salesOrderId, @Size(max = 100) String customerRef, @Size(max = 200) String salesEmployee) {}
 
-    /** Copy To Invoice: one or more delivered notes of the same customer. */
-    public record InvoiceFromDeliveries(@NotEmpty List<Long> deliveryNoteIds, com.fatoora.zatca.model.InvoiceKind kind) {}
+    /**
+     * Copy To Invoice: one or more delivered notes of the same customer. {@code quantities} (optional) invoices only
+     * part of a delivery: a line left out takes everything not yet invoiced, 0 skips it, and the rest stays open
+     * for another invoice.
+     */
+    public record InvoiceFromDeliveries(@NotEmpty List<Long> deliveryNoteIds, com.fatoora.zatca.model.InvoiceKind kind,
+                                        List<@Valid Pick> quantities) {}
+
+    /** How much of one delivery line (by its position on the note, from 0) goes on this invoice. */
+    public record Pick(@NotNull Long deliveryNoteId, @NotNull @jakarta.validation.constraints.PositiveOrZero Integer line,
+                       @NotNull @jakarta.validation.constraints.PositiveOrZero BigDecimal quantity) {}
 
     public record DeliverRequest(@NotBlank @Size(max = 200) String receivedBy) {}
 
@@ -210,6 +219,8 @@ public class DeliveryNoteController {
         Long orgId = CurrentUser.orgId();
         List<Dto> notes = new ArrayList<>();
         for (Long nid : new LinkedHashSet<>(req.deliveryNoteIds())) notes.add(load(nid));
+        Map<String, BigDecimal> picked = new java.util.HashMap<>();
+        if (req.quantities() != null) for (Pick q : req.quantities()) picked.put(q.deliveryNoteId() + ":" + q.line(), q.quantity());
         Long customerId = notes.getFirst().customerId();
         if (customerId == null)
             throw ApiException.badRequest("no_customer", "Only deliveries to a customer from the customer list can be invoiced this way");
@@ -228,6 +239,14 @@ public class DeliveryNoteController {
                 Long lineId = lineIds.get(i);
                 BigDecimal left = l.quantity().subtract(billed.getOrDefault(lineId, BigDecimal.ZERO));
                 if (left.signum() <= 0) continue;
+                BigDecimal want = picked.get(n.id() + ":" + i);
+                if (want != null) {
+                    if (want.compareTo(left) > 0)
+                        throw ApiException.badRequest("over_invoice", n.number() + ", " + l.name() + ": only "
+                                + left.stripTrailingZeros().toPlainString() + " left to invoice");
+                    if (want.signum() == 0) continue;
+                    left = want;
+                }
                 BigDecimal price = l.unitPrice() != null ? l.unitPrice() : l.productId() == null ? BigDecimal.ZERO
                         : jdbc.queryForObject("SELECT unit_price FROM product WHERE id = ?", BigDecimal.class, l.productId());
                 lines.add(new com.fatoora.api.invoice.InvoiceDtos.LineDto(l.name(), left, l.unitCode(), price,
@@ -240,7 +259,8 @@ public class DeliveryNoteController {
             if (employee == null) employee = n.salesEmployee();
             if (supply == null || n.deliveryDate().isAfter(supply)) supply = n.deliveryDate();
         }
-        if (lines.isEmpty()) throw ApiException.badRequest("nothing_to_invoice", "These deliveries are already fully invoiced");
+        if (lines.isEmpty()) throw ApiException.badRequest("nothing_to_invoice", picked.isEmpty()
+                ? "These deliveries are already fully invoiced" : "Enter a quantity to invoice on at least one line");
         Customer c = customers.findById(customerId).orElseThrow();
         com.fatoora.zatca.model.InvoiceKind kind = req.kind() != null ? req.kind()
                 : c.getVatNumber() != null && !c.getVatNumber().isBlank() ? com.fatoora.zatca.model.InvoiceKind.STANDARD

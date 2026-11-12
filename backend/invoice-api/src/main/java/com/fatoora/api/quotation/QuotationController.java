@@ -65,7 +65,6 @@ public class QuotationController {
             BigDecimal totalExclVat, BigDecimal vatTotal, BigDecimal totalInclVat, Long invoiceId,
             List<LineDto> lines, String createdBy, Instant createdAt) {}
 
-    public record InvoiceLinkRequest(@NotNull Long invoiceId) {}
 
     private final QuotationRepository repo;
     private final CustomerRepository customers;
@@ -134,16 +133,12 @@ public class QuotationController {
         audit.record(q.getOrganizationId(), "QUOTATION_DELETED", "quotation", q.getId(), q.getNumber());
     }
 
-    /** Records the invoice draft made from this quotation. */
+    /** Quotations are never invoiced directly: they become a sales order, and the order is invoiced. */
     @PostMapping("/{id}/invoiced")
     @PreAuthorize(WRITE)
-    @Transactional
-    QuotationDto invoiced(@PathVariable Long id, @Valid @RequestBody InvoiceLinkRequest req) {
-        Quotation q = load(id);
-        q.setInvoiceId(req.invoiceId());
-        q.setStatus(Quotation.Status.INVOICED);
-        audit.record(q.getOrganizationId(), "QUOTATION_INVOICED", "quotation", q.getId(), q.getNumber() + " → invoice " + req.invoiceId());
-        return dto(q);
+    QuotationDto invoiced(@PathVariable Long id) {
+        throw ApiException.conflict("quotation_to_sales_order",
+                "A quotation can't be turned into an invoice directly. Copy it to a sales order first, then invoice the order.");
     }
 
     @GetMapping("/{id}/pdf")

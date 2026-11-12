@@ -11,7 +11,7 @@ import { Alert, Button, ButtonLink, Card, CardHeader, Field, Input, PageHeader, 
 import { InvoiceEditor } from "@/components/invoice-editor";
 import { PaymentsCard } from "@/components/payments-card";
 import { EditDeleteActions } from "@/components/invoice-actions";
-import { WhatsAppInvoiceButton } from "@/components/whatsapp";
+import { WhatsAppInvoiceButton, WHATSAPP_ENABLED } from "@/components/whatsapp";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { GrossProfitCard } from "@/components/gross-profit";
 import { ReturnItems } from "@/components/return-items";
@@ -133,7 +133,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             >
               <FileCode2 className="size-4" aria-hidden /> XML
             </Button>
-            {canWrite && <WhatsAppInvoiceButton invoiceId={inv.id} disabled={!inv.downloadable} />}
+            {canWrite && WHATSAPP_ENABLED && <WhatsAppInvoiceButton invoiceId={inv.id} disabled={!inv.downloadable} />}
             {inv.status === "SIGNED" && (
               <Button loading={busy === "send"} onClick={() => act("send", async () => { await api("POST", `/invoices/${inv.id}/submit`); await mutate(); })}>
                 <Send className="size-4" aria-hidden /> {t("Send to ZATCA now")}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { FileDown, FilePlus2, FileText, Plus, Printer, Save, Trash2, UserPlus } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
-import type { Customer, InvoiceDetail, Product, Quotation, QuotationLine, QuotationStatus } from "@/lib/types";
+import type { Customer, Product, Quotation, QuotationLine, QuotationStatus } from "@/lib/types";
 import { money, todayKsa, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, RequiredMark, Select } from "@/components/ui";
 import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
@@ -74,7 +74,6 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const sum = useMemo(() => totals(lines), [lines]);
-  const customer = customers?.find((c) => String(c.id) === customerId);
 
   function setLine(i: number, patch: Partial<QuotationLine>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -130,38 +129,13 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
     return saved.id;
   }
 
-  /** Saves, then opens an invoice draft with the same customer and items. */
-  async function convert() {
-    const id = await save();
-    const q = await api<Quotation>("GET", `/quotations/${id}`);
-    const inv = await api<InvoiceDetail>("POST", "/invoices", {
-      kind: customer?.vatNumber ? "STANDARD" : "SIMPLIFIED",
-      type: "INVOICE",
-      customerId: q.customerId,
-      supplyDate: todayKsa(),
-      paymentMeans: "10",
-      sendMode: "NOW",
-      internalNote: `From quotation ${q.number}`,
-      lines: q.lines.map((l) => ({
-        name: l.name,
-        quantity: Number(l.quantity),
-        unitCode: l.unitCode,
-        unitPrice: Number(l.unitPrice),
-        vatCategory: "S",
-        vatRate: Number(l.vatRate),
-        productId: l.productId ?? null,
-      })),
-    });
-    await api("POST", `/quotations/${id}/invoiced`, { invoiceId: inv.id });
-    router.push(`/invoices/${inv.id}`);
-  }
-
   return (
     <div className="space-y-6">
       {error && (
         <Alert tone="bad" title={t("Not saved")}>
-          {error.message}
-          {error.fields && <ul className="mt-1 list-disc ps-5">{Object.entries(error.fields).map(([f, m]) => <li key={f}>{f}: {m}</li>)}</ul>}
+          {error.fields && Object.keys(error.fields).length > 0
+            ? <ul className="mt-1 list-disc ps-5">{Object.entries(error.fields).map(([f, m]) => <li key={f}>{m}</li>)}</ul>
+            : error.message}
         </Alert>
       )}
 
@@ -179,14 +153,12 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
           <Button variant="secondary" title={t("A request for payment before supply; not a tax invoice")} onClick={() => act("pdf", () => openFile(`/quotations/${initial.id}/pdf?proforma=true`))}>
             <FileText className="size-4" aria-hidden /> {t("Proforma invoice")}
           </Button>
-          {initial.invoiceId ? (
+          {/* Quotations go to a sales order (button in the page header), never straight to an invoice.
+              Older quotations that were invoiced directly still link to that invoice. */}
+          {initial.invoiceId != null && (
             <Link href={`/invoices/${initial.invoiceId}`} className="inline-flex items-center gap-2 rounded-lg border border-line bg-white px-3.5 py-2 text-sm font-medium">
               <FilePlus2 className="size-4" aria-hidden /> {t("Open its invoice")}
             </Link>
-          ) : (
-            <Button variant="success" loading={busy === "convert"} onClick={() => act("convert", convert)}>
-              <FilePlus2 className="size-4" aria-hidden /> {t("Convert to invoice")}
-            </Button>
           )}
           <span className="ms-auto" />
           {!confirmDelete ? (
@@ -310,7 +282,7 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
       </Card>
 
       <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur md:-mx-8 md:px-8">
-        <p className="me-auto text-xs text-muted">{t("A quotation is a price offer only: it is never sent to ZATCA. Convert it to an invoice when the client confirms.")}</p>
+        <p className="me-auto text-xs text-muted">{t("A quotation is a price offer only: it is never sent to ZATCA. Copy it to a sales order when the client confirms.")}</p>
         <Button loading={busy === "save"} disabled={busy != null}
           onClick={() => act("save", async () => { const id = await save(); router.push(`/quotations/${id}`); router.refresh(); })}>
           <Save className="size-4" aria-hidden /> {t("Save quotation")}

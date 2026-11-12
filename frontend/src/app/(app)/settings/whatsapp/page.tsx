@@ -5,7 +5,7 @@ import { CheckCircle2, Link2Off, Loader2, MessageCircle, Power, QrCode, RefreshC
 import { api, ApiError } from "@/lib/api";
 import type { SendOutcome, WhatsAppStatus } from "@/lib/types";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner } from "@/components/ui";
-import { useWhatsApp } from "@/components/whatsapp";
+import { useWhatsApp, WHATSAPP_ENABLED } from "@/components/whatsapp";
 import { useT } from "@/lib/i18n";
 
 const statusLabel: Record<WhatsAppStatus["status"], string> = {
@@ -23,6 +23,19 @@ const statusLabel: Record<WhatsAppStatus["status"], string> = {
  * invoices and document messages are sent from it directly. If it ever disconnects, scan again here.
  */
 export default function WhatsAppSettingsPage() {
+  const t = useT();
+  if (!WHATSAPP_ENABLED) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t("WhatsApp")} />
+        <Alert tone="warn">{t("WhatsApp is turned off for now.")}</Alert>
+      </div>
+    );
+  }
+  return <WhatsAppSettings />;
+}
+
+function WhatsAppSettings() {
   const t = useT();
   const { wa, mutate } = useWhatsApp();
   const [busy, setBusy] = useState<string | null>(null);

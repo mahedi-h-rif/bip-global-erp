@@ -10,6 +10,7 @@ import type { Customer, DeliveryNote } from "@/lib/types";
 import { date } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, CardHeader, Empty, PageHeader, Select, Spinner } from "@/components/ui";
 import { deliveryStatusLabel } from "@/components/delivery-note-editor";
+import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from "@/components/invoice-quantities";
 import { useT } from "@/lib/i18n";
 
 const tone: Record<DeliveryNote["status"], string> = {
@@ -26,6 +27,8 @@ function InvoiceDeliveries() {
   const [customerId, setCustomerId] = useState("");
   const { data: notes } = useSWR<DeliveryNote[]>(customerId ? `/delivery-notes/to-invoice?customerId=${customerId}` : null, fetcher);
   const [picked, setPicked] = useState<number[]>([]);
+  const [qty, setQty] = useState<QuantityInput>({});
+  const chosen = (notes ?? []).filter((n) => picked.includes(n.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +36,7 @@ function InvoiceDeliveries() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ invoiceId: number }>("POST", "/delivery-notes/invoice", { deliveryNoteIds: picked });
+      const r = await api<{ invoiceId: number }>("POST", "/delivery-notes/invoice", { deliveryNoteIds: picked, quantities: invoicePicks(chosen, qty) });
       router.push(`/invoices/${r.invoiceId}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("Could not reach the server"));
@@ -43,10 +46,10 @@ function InvoiceDeliveries() {
 
   return (
     <Card className="mb-6">
-      <CardHeader title={t("Invoice deliveries")} subtitle={t("Pick delivered notes of one customer; one draft invoice is made from all of them.")} />
+      <CardHeader title={t("Invoice deliveries")} subtitle={t("Pick delivered notes of one customer and how much of each line to invoice; one draft invoice is made. Anything left out stays open for another invoice.")} />
       <div className="space-y-3 p-5">
         {error && <Alert tone="bad">{error}</Alert>}
-        <Select className="w-80" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setPicked([]); }} aria-label={t("Customer")}>
+        <Select className="w-80" value={customerId} onChange={(e) => { setCustomerId(e.target.value); setPicked([]); setQty({}); }} aria-label={t("Customer")}>
           <option value="">{t("Select a customer…")}</option>
           {customers?.map((c) => <option key={c.id} value={c.id}>{c.nameEn || c.nameAr}</option>)}
         </Select>
@@ -67,7 +70,8 @@ function InvoiceDeliveries() {
                 </li>
               ))}
             </ul>
-            <Button disabled={picked.length === 0} loading={busy} onClick={create}><FileText className="size-4" aria-hidden /> {t("Create invoice from {n} deliveries", { n: String(picked.length) })}</Button>
+            {chosen.length > 0 && <InvoiceQuantities notes={chosen} value={qty} onChange={setQty} />}
+            <Button disabled={picked.length === 0 || !picksValid(chosen, qty)} loading={busy} onClick={create}><FileText className="size-4" aria-hidden /> {t("Create invoice from {n} deliveries", { n: String(picked.length) })}</Button>
           </>
         )}
       </div>

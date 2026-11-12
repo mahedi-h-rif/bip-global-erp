@@ -11,6 +11,7 @@ import { date, dateTime } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner } from "@/components/ui";
 import { DeliveryNoteEditor, deliveryStatusLabel } from "@/components/delivery-note-editor";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from "@/components/invoice-quantities";
 import { useT } from "@/lib/i18n";
 
 export default function DeliveryNotePage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +23,9 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
   const [receivedBy, setReceivedBy] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  /** Open while choosing how much of this delivery goes on a new invoice. */
+  const [invoicing, setInvoicing] = useState(false);
+  const [qty, setQty] = useState<QuantityInput>({});
 
   async function act(name: string, run: () => Promise<DeliveryNote>) {
     setBusy(name);
@@ -54,13 +58,9 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
         actions={
           <span className="flex flex-wrap gap-2">
             {n.status === "DELIVERED" && n.invoiceId == null && n.customerId != null && n.invoicing !== "FULL" && (
-              <Button loading={busy === "invoice"} onClick={() => {
-                setBusy("invoice");
-                setProblem(null);
-                api<{ invoiceId: number }>("POST", "/delivery-notes/invoice", { deliveryNoteIds: [n.id] })
-                  .then((r) => router.push(`/invoices/${r.invoiceId}`))
-                  .catch((e) => { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); setBusy(null); });
-              }}><FileText className="size-4" aria-hidden /> {t("Copy to invoice")}</Button>
+              <Button onClick={() => { setInvoicing(true); setQty({}); setProblem(null); }}>
+                <FileText className="size-4" aria-hidden /> {n.invoicing === "PARTIAL" ? t("Invoice the rest") : t("Copy to invoice")}
+              </Button>
             )}
             <RelationshipMapButton type="DELIVERY_NOTE" id={n.id} />
             <Button variant="secondary" onClick={() => printFile(`/delivery-notes/${n.id}/pdf`)}><Printer className="size-4" aria-hidden /> {t("Print")}</Button>
@@ -70,6 +70,26 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
         }
       />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}
+
+      {invoicing && (
+        <Card className="mb-6">
+          <CardHeader title={t("Copy to invoice")}
+                      subtitle={t("Choose how much goes on this invoice. Whatever you leave out stays open for another invoice.")} />
+          <div className="space-y-3 p-5">
+            <InvoiceQuantities notes={[n]} value={qty} onChange={setQty} />
+            <div className="flex flex-wrap gap-2">
+              <Button loading={busy === "invoice"} disabled={!picksValid([n], qty)} onClick={() => {
+                setBusy("invoice");
+                setProblem(null);
+                api<{ invoiceId: number }>("POST", "/delivery-notes/invoice", { deliveryNoteIds: [n.id], quantities: invoicePicks([n], qty) })
+                  .then((r) => router.push(`/invoices/${r.invoiceId}`))
+                  .catch((e) => { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); setBusy(null); });
+              }}><FileText className="size-4" aria-hidden /> {t("Create invoice")}</Button>
+              <Button variant="ghost" onClick={() => setInvoicing(false)}>{t("Cancel")}</Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {n.status === "DRAFT" && (
         <Card className="mb-6">

@@ -8,7 +8,7 @@ import { api, fetcher } from "@/lib/api";
 import type { DocumentAlerts } from "@/lib/types";
 import { dateTime } from "@/lib/format";
 import { useT } from "@/lib/i18n";
-import { DocumentWhatsAppButton } from "@/components/whatsapp";
+import { DocumentWhatsAppButton, WHATSAPP_ENABLED } from "@/components/whatsapp";
 
 /** Document expiry reminders: unread count on the bell, the list in a panel, a WhatsApp share for each. */
 export function NotificationBell({ className = "" }: { className?: string }) {
@@ -71,8 +71,10 @@ export function NotificationBell({ className = "" }: { className?: string }) {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <Link href={`/documents?id=${a.documentId}`} onClick={() => { setOpen(false); if (!a.readAt) void read(a.id); }}
                             className="rounded-md border border-line px-2 py-0.5 text-xs font-medium hover:bg-canvas">{t("Open")}</Link>
-                      <DocumentWhatsAppButton documentId={a.documentId} phone={a.workerPhone} url={a.whatsappUrl}
-                                              className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-xs font-medium hover:bg-canvas" />
+                      {WHATSAPP_ENABLED && (
+                        <DocumentWhatsAppButton documentId={a.documentId} phone={a.workerPhone} url={a.whatsappUrl}
+                                                className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-xs font-medium hover:bg-canvas" />
+                      )}
                       {!a.readAt && (
                         <button onClick={() => read(a.id)} className="rounded-md px-2 py-0.5 text-xs text-muted hover:bg-canvas hover:text-ink">{t("Mark read")}</button>
                       )}
