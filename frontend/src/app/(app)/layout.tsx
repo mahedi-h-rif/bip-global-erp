@@ -52,7 +52,6 @@ import type { Me, Organization } from "@/lib/types";
 import { Alert, Button, Spinner } from "@/components/ui";
 import { LanguagePrompt, LanguageSwitcher } from "@/components/language";
 import { NotificationBell } from "@/components/notification-bell";
-import { OrgFavicon } from "@/components/favicon";
 import { SoudaCoreCredit } from "@/components/souda-credit";
 import { WhatsAppBanner, WHATSAPP_ENABLED } from "@/components/whatsapp";
 import { VoiceAssistant } from "@/components/voice";
@@ -256,7 +255,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
   const logo = org?.logoUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={org.logoUrl} alt="" className="h-10 w-auto max-w-16 shrink-0 rounded-md bg-white object-contain p-1" />
+    <img src={org.logoUrl} alt="" className="h-10 w-auto max-w-28 shrink-0 rounded-md bg-white object-contain p-1" />
   ) : (
     <ShieldCheck className="size-6 shrink-0" aria-hidden />
   );
@@ -271,7 +270,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:flex" style={org?.brandColor ? ({ "--color-brand": org.brandColor } as React.CSSProperties) : undefined}>
-      <OrgFavicon org={org} />
       {/* Phones and tablets: a top bar with the company and quick tools; everything else is in the menu. */}
       <header inert={menuOpen} className="sticky top-0 z-30 flex h-14 items-center gap-1 bg-brand px-1.5 text-white shadow-sm lg:hidden">
         <button

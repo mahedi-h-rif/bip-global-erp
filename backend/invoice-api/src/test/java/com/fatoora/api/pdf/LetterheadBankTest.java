@@ -31,6 +31,15 @@ class LetterheadBankTest {
         o.setBankAccountNo("45000-001-0006080141252");
         o.setBankIban("SA56 8000 0450 6080 1014 1252");
         o.setBankName("AL RAJHI BANK");
+        try {
+            var logo = Path.of("..", "..", "deploy", "assets", "bip-logo.png");
+            if (Files.exists(logo)) {
+                o.setLogo(java.util.Base64.getEncoder().encodeToString(Files.readAllBytes(logo)));
+                o.setLogoContentType("image/png");
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
         return o;
     }
 

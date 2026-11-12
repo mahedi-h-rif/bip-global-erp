@@ -343,7 +343,7 @@ public class InvoicePdfService {
                 logo(org),
                 esc(brandEn),
                 contact(org),
-                LetterheadPdf.registrationEn(org),
+                LetterheadPdf.registrationLines(org),
                 // The registration name (Arabic when there is one); not repeated when it is the English name.
                 esc(brandEn.equals(seller.name()) ? null : seller.name()),
                 esc(nz(seller.address() == null ? null : seller.address().city())),
