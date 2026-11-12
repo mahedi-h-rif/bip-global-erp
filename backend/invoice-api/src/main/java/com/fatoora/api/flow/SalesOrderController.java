@@ -455,7 +455,7 @@ public class SalesOrderController {
                 """.formatted(client, meta, th, th, th, th, th, th, th, rows,
                 LetterheadPdf.money(d.totalExclVat()), LetterheadPdf.money(d.vatTotal()), brand, brand, LetterheadPdf.money(d.totalInclVat()),
                 d.remarks() == null ? "" : "<h2>Remarks · ملاحظات</h2><p>" + LetterheadPdf.text(d.remarks()) + "</p>",
-                LetterheadPdf.signatures(org, clientName == null ? "" : clientName));
+                com.fatoora.api.pdf.BankDetailsBlock.html(org) + LetterheadPdf.signatures(org, clientName == null ? "" : clientName));
     }
 
     private static String td(String content, String align) {

@@ -101,7 +101,7 @@ public final class SkylineLetterhead {
         return """
                 <div id="sky-header">
                   <table style="margin-top:7.5mm"><tr>
-                    <td style="width:38%%; padding-top:2mm">%s%s</td>
+                    <td style="width:38%%; padding-top:2mm">%s%s%s</td>
                     <td style="width:24%%; text-align:center">%s</td>
                     <td style="width:38%%; padding-top:2.5mm"><table class="contact">%s</table></td>
                   </tr></table>
@@ -110,18 +110,17 @@ public final class SkylineLetterhead {
                   <table style="margin-top:%smm"><tr>
                     <td style="width:7mm; padding-top:1px"><img src="%s" style="width:3.6mm;height:4.6mm"/></td>
                     <td><span dir="rtl">%s</span><br/>%s</td>
-                    <td class="ids" style="width:58mm"><b>VAT</b> %s<br/><b>CR</b> %s<br/><span class="pageno"></span></td>
+                    <td class="ids" style="width:30mm"><span class="pageno"></span></td>
                   </tr></table>
                 </div>
                 %s
                 """.formatted(
-                name, tag,
+                name, tag, LetterheadPdf.registrationLines(org),
                 logo == null ? "" : logo,
                 contacts,
                 // The footer band starts 276.5 mm down the page; the footer margin box starts at 297 - BOTTOM.
                 String.valueOf(276.5 - (297 - BOTTOM) + 4.5),
                 PIN, esc(address), esc(numbers),
-                esc(nz(org.getVatNumber())), esc(nz(org.getOtherId())),
                 watermark(org));
     }
 

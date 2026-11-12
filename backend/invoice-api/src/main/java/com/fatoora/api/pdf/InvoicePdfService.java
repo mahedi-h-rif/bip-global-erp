@@ -316,15 +316,7 @@ public class InvoicePdfService {
                 .append(esc(com.fatoora.api.common.AmountInWords.arabic(total))).append("</div>");
         if (inv.getInternalNote() != null && inv.getInternalNote().startsWith("Based on"))
             b.append("<div style=\"margin-top:4px\"><b>Remarks:</b> ").append(esc(inv.getInternalNote())).append("</div>");
-        if (org.getBankIban() != null && !org.getBankIban().isBlank()) {
-            b.append("<table style=\"margin-top:6px; width:60%; border:1px solid #d6dbe6\"><tr><td colspan=\"2\" style=\"padding:3px 6px; font-weight:700\">Bank details · البيانات البنكية</td></tr>");
-            for (String[] r : new String[][]{{"Account name · اسم الحساب", org.getBankAccountName()}, {"Bank · البنك", org.getBankName()},
-                    {"Account no. · رقم الحساب", org.getBankAccountNo()}, {"IBAN · الآيبان", org.getBankIban()}})
-                if (r[1] != null && !r[1].isBlank())
-                    b.append("<tr><td style=\"padding:2px 6px; color:#555\">").append(r[0]).append("</td><td style=\"padding:2px 6px\">")
-                            .append(esc(r[1])).append("</td></tr>");
-            b.append("</table>");
-        }
+        b.append(BankDetailsBlock.html(org));
         b.append("<div style=\"margin-top:6px; color:#555\">This is a system-generated e-invoice and does not need a signature · "
                 + "هذه فاتورة إلكترونية صادرة من النظام ولا تحتاج إلى توقيع</div>");
         if (org.getInvoiceFooter() != null && !org.getInvoiceFooter().isBlank())
@@ -340,18 +332,22 @@ public class InvoicePdfService {
                   <td>
                     <div class="brand-en">%s</div>
                     %s
+                    %s
                   </td>
                   <td class="rtl">
                     <div class="brand-ar">%s</div>
                     <div class="muted">%s</div>
+                    %s
                   </td>
                 </tr></table>""".formatted(
                 logo(org),
                 esc(brandEn),
                 contact(org),
+                LetterheadPdf.registrationEn(org),
                 // The registration name (Arabic when there is one); not repeated when it is the English name.
                 esc(brandEn.equals(seller.name()) ? null : seller.name()),
-                esc(nz(seller.address() == null ? null : seller.address().city())));
+                esc(nz(seller.address() == null ? null : seller.address().city())),
+                LetterheadPdf.registrationAr(org));
     }
 
     static String[] title(InvoiceKind kind, DocumentType type) {

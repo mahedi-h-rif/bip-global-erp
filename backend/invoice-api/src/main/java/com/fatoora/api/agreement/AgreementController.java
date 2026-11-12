@@ -275,6 +275,7 @@ public class AgreementController {
         String html = "<h1 style=\"text-align:center; text-transform:uppercase; letter-spacing:0.5px\">"
                 + LetterheadPdf.esc(a.getTitle()) + "</h1>" + meta
                 + "<div style=\"margin-top:8px\">" + body(withoutEmptyArabicName(a.getBody(), values), values) + "</div>"
+                + com.fatoora.api.pdf.BankDetailsBlock.html(org)
                 + LetterheadPdf.signatures(org, a.getClientName());
         return letterhead.render(org, a.getTitle() + " " + a.getNumber(), html);
     }

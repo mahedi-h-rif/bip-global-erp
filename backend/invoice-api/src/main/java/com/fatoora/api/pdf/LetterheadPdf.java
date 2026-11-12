@@ -86,8 +86,9 @@ public class LetterheadPdf {
                       <td>
                         <div class="en">%s</div>
                         %s
+                        %s
                       </td>
-                      <td class="rtl" style="white-space:nowrap; width:32%%"><div class="ar">%s</div><div class="muted">%s</div></td>
+                      <td class="rtl" style="white-space:nowrap; width:32%%"><div class="ar">%s</div><div class="muted">%s</div>%s</td>
                     </tr></table>
                     <div class="rule"></div>
                   </div>
@@ -106,14 +107,15 @@ public class LetterheadPdf {
                 logoCell(org),
                 InvoicePdfService.esc(nz(org.getLegalNameEn())),
                 contact(org),
+                registrationEn(org),
                 InvoicePdfService.esc(nz(org.getLegalNameAr())),
                 InvoicePdfService.esc(nz(org.getCity())),
+                registrationAr(org),
                 // Arabic address and the numbers on separate lines, so right-to-left text and digits never mix.
                 "<span dir=\"rtl\">" + InvoicePdfService.esc(joined("، ", org.getStreet(), org.getDistrict(), org.getCity())) + "</span>",
                 InvoicePdfService.esc(joined(" · ",
                         org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
-                        org.getPostalCode() == null ? null : "Postal " + org.getPostalCode(),
-                        "VAT " + nz(org.getVatNumber()), "CR " + nz(org.getOtherId()))),
+                        org.getPostalCode() == null ? null : "Postal " + org.getPostalCode())),
                 watermark(org),
                 bodyHtml);
 
@@ -176,8 +178,7 @@ public class LetterheadPdf {
         String addr = "<span dir=\"rtl\">" + InvoicePdfService.esc(joined("، ", org.getStreet(), org.getDistrict(), org.getCity())) + "</span>";
         String reg = InvoicePdfService.esc(joined(" · ",
                 org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
-                org.getPostalCode() == null ? null : "Postal " + org.getPostalCode(),
-                "VAT " + nz(org.getVatNumber()), "CR " + nz(org.getOtherId())));
+                org.getPostalCode() == null ? null : "Postal " + org.getPostalCode()));
         String contactLine = InvoicePdfService.esc(joined(" · ", org.getEmail(), org.getWebsite(),
                 org.getPhone() == null || org.getPhone().isBlank() ? null : "Mobile " + org.getPhone()));
         return """
@@ -224,8 +225,9 @@ public class LetterheadPdf {
                         <div class="en">%s</div>
                         <div class="tag">%s</div>
                         %s
+                        %s
                       </td>
-                      <td class="rtl" style="white-space:nowrap; width:34%%"><div class="ar">%s</div><div class="muted">%s</div></td>
+                      <td class="rtl" style="white-space:nowrap; width:34%%"><div class="ar">%s</div><div class="muted">%s</div>%s</td>
                     </tr></table>
                     <div class="rule"></div><div class="rule2"></div>
                   </div>
@@ -247,8 +249,10 @@ public class LetterheadPdf {
                 InvoicePdfService.esc(nz(org.getLegalNameEn())),
                 InvoicePdfService.esc(nz(org.getCity()) + (org.getCountryCode() == null ? "" : " · KSA")),
                 contact(org),
+                registrationEn(org),
                 InvoicePdfService.esc(nz(org.getLegalNameAr())),
                 InvoicePdfService.esc(nz(org.getCity())),
+                registrationAr(org),
                 addr, reg, contactLine,
                 watermark(org),
                 landmark(color),
@@ -437,6 +441,35 @@ public class LetterheadPdf {
                     </td>
                   </tr></table>
                 </td>""".formatted(padding, esc(heading), esc(nz(name)));
+    }
+
+    /** "VAT No. … · CR No. …" for the header (English side); empty when neither is set. */
+    public static String registrationEn(Organization org) {
+        String s = joined(" · ",
+                org.getVatNumber() == null || org.getVatNumber().isBlank() ? null : "VAT No. " + org.getVatNumber(),
+                org.getOtherId() == null || org.getOtherId().isBlank() ? null : "CR No. " + org.getOtherId());
+        return s.isEmpty() ? "" : "<div style=\"font-size:8.5pt; font-weight:700; color:#1b2233; margin-top:1px\">" + InvoicePdfService.esc(s) + "</div>";
+    }
+
+    /** VAT and CR on two short lines, for narrow header columns. */
+    public static String registrationLines(Organization org) {
+        StringBuilder b = new StringBuilder();
+        if (org.getVatNumber() != null && !org.getVatNumber().isBlank())
+            b.append("<div style=\"font-size:8.5pt; font-weight:700; color:#1b2233; margin-top:2px\">VAT No. ").append(InvoicePdfService.esc(org.getVatNumber())).append("</div>");
+        if (org.getOtherId() != null && !org.getOtherId().isBlank())
+            b.append("<div style=\"font-size:8.5pt; font-weight:700; color:#1b2233\">CR No. ").append(InvoicePdfService.esc(org.getOtherId())).append("</div>");
+        return b.toString();
+    }
+
+    /** The same numbers with Arabic labels, for the right-hand (Arabic) side of the header. */
+    public static String registrationAr(Organization org) {
+        String vat = org.getVatNumber() == null || org.getVatNumber().isBlank() ? null : "الرقم الضريبي: " + org.getVatNumber();
+        String cr = org.getOtherId() == null || org.getOtherId().isBlank() ? null : "السجل التجاري: " + org.getOtherId();
+        if (vat == null && cr == null) return "";
+        StringBuilder b = new StringBuilder();
+        for (String line : new String[]{vat, cr})
+            if (line != null) b.append("<div dir=\"rtl\" style=\"font-size:8.5pt; font-weight:700; color:#1b2233\">").append(InvoicePdfService.esc(line)).append("</div>");
+        return b.toString();
     }
 
     static String joined(String sep, String... parts) {
