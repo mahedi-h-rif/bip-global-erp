@@ -133,36 +133,6 @@ public class InvoicePdfService {
         return s.isEmpty() ? null : s;
     }
 
-    /** "Email · website", then "Mobile ...", under the company name, leaving out whatever is not set. */
-    private static String contact(Organization org) {
-        String web = joined(" · ", org.getEmail(), org.getWebsite());
-        String mobile = joined("", org.getPhone());
-        return (web == null ? "" : "<div class=\"muted\">" + web + "</div>")
-                + (mobile == null ? "" : "<div class=\"muted\">Mobile " + mobile + "</div>");
-    }
-
-    private static final int LOGO_HEIGHT = 52, LOGO_MAX_WIDTH = 140;
-
-    /** The company logo as the first header cell, at its own aspect ratio; nothing when none is uploaded. */
-    private static String logo(Organization org) {
-        if (org.getLogo() == null || !PrintOptions.showLogo()) return "";
-        int w = LOGO_HEIGHT, h = LOGO_HEIGHT;
-        try {
-            var img = javax.imageio.ImageIO.read(new ByteArrayInputStream(java.util.Base64.getDecoder().decode(org.getLogo())));
-            if (img != null) {
-                w = Math.round(LOGO_HEIGHT * (float) img.getWidth() / img.getHeight());
-                if (w > LOGO_MAX_WIDTH) {
-                    h = Math.round(h * (float) LOGO_MAX_WIDTH / w);
-                    w = LOGO_MAX_WIDTH;
-                }
-            }
-        } catch (IOException ignored) {
-            // Unreadable dimensions: fall back to a square.
-        }
-        return "<td style=\"width:" + (w + 10) + "px\"><img src=\"data:" + org.getLogoContentType() + ";base64,"
-                + org.getLogo() + "\" style=\"width:" + w + "px;height:" + h + "px\"/></td>";
-    }
-
     private String html(Invoice inv, Organization org, Party seller, Party buyer) {
         InvoiceTotals totals = InvoiceTotals.of(inv.getLines().stream().map(InvoiceLineEntity::toModel).toList());
         var issued = inv.getIssuedAt().atZone(InvoiceApiApplication.KSA);
@@ -199,7 +169,6 @@ public class InvoicePdfService {
                     .append(row("Reason", esc(inv.getReason()), "سبب الإصدار"));
         }
 
-        String buyerBlock = buyer == null ? "" : party("Buyer", "المشتري", buyer);
         String brandEn = org.getLegalNameEn() == null || org.getLegalNameEn().isBlank() ? nz(seller.name()) : org.getLegalNameEn();
 
         String[] stamp = switch (inv.getStatus()) {
@@ -258,18 +227,7 @@ public class InvoicePdfService {
 
                   <table class="kv">%s</table>
 
-                  <table class="parties"><tr>
-                    <td class="col">%s</td>
-                    <td class="col">%s
-                      <table style="margin-top:8px"><tr>
-                        <td style="width:128px; vertical-align:top"><img src="%s" style="width:120px;height:120px"/></td>
-                        <td style="vertical-align:middle">
-                          <div class="stamp">%s</div>
-                          <div class="stamp rtl">%s</div>
-                        </td>
-                      </tr></table>
-                    </td>
-                  </tr></table>
+                  %s
 
                   <table class="lines">
                     <tr>
@@ -302,14 +260,78 @@ public class InvoicePdfService {
                 skyline ? SkylineLetterhead.chrome(org) : classicHead(org, seller, brandEn),
                 title[1], title[0],
                 meta,
-                party("Seller", "البائع", seller, org.getLegalNameEn()), buyerBlock,
-                qrDataUri(inv.getQrCode()), stamp[0], stamp[1],
+                parties(seller, org.getLegalNameEn(), buyer, qrDataUri(inv.getQrCode()), stamp),
                 rows,
                 money(totals.taxExclusive()), cur,
                 money(totals.vatTotal()), cur,
                 money(totals.taxInclusive()), cur,
                 extras(inv, org, totals.taxInclusive()),
                 inv.getUuid(), inv.getIcv(), esc(inv.getInvoiceHash()));
+    }
+
+    /**
+     * Seller and buyer side by side in one table, so each field sits on the same row for both parties and the two
+     * columns always have the same height; the ZATCA QR code and status take the right-hand column.
+     */
+    private static String parties(Party seller, String sellerNameEn, Party buyer, String qr, String[] stamp) {
+        String[][] s = fields(seller, sellerNameEn), b = buyer == null ? null : fields(buyer, null);
+        String[][] labels = {{"Name", "الاسم"}, {"Name (English)", "الاسم بالإنجليزية"}, {"VAT number", "الرقم الضريبي"},
+                {schemeLabel(seller.otherIdScheme())[0], schemeLabel(seller.otherIdScheme())[1]},
+                {"Address", "العنوان"}, {"Building / postal", "المبنى / الرمز البريدي"}};
+        String cell = "border:1px solid #d9dee8; padding:4px 6px; vertical-align:middle; ";
+        String label = "<td style=\"" + cell + "width:13%%; background:#f6f8fb; color:#5a6275; font-size:7.5pt; line-height:1.3\">%s<br/><span dir=\"rtl\">%s</span></td>";
+        String value = "<td style=\"" + cell + "width:24%%; font-weight:700; font-size:8.5pt; line-height:1.35\"%s>%s</td>";
+        StringBuilder rows = new StringBuilder();
+        int shown = 0;
+        for (int i = 0; i < labels.length; i++) {
+            String sv = s[i][0], bv = b == null ? null : b[i][0];
+            if (blank(sv) && blank(bv)) continue;
+            rows.append("<tr>")
+                    .append(label.formatted(labels[i][0], labels[i][1]))
+                    .append(value.formatted(rtlAttr(sv), blank(sv) ? "—" : sv))
+                    .append(i == 3 && buyer != null
+                            ? label.formatted(schemeLabel(buyer.otherIdScheme())[0], schemeLabel(buyer.otherIdScheme())[1])
+                            : label.formatted(labels[i][0], labels[i][1]))
+                    .append(value.formatted(rtlAttr(bv), blank(bv) ? "—" : bv));
+            if (shown++ == 0)
+                rows.append("<td rowspan=\"__QR_ROWS__\" style=\"width:26%; vertical-align:top; text-align:center; padding:0 0 0 8px\">")
+                        .append("<img src=\"").append(qr).append("\" style=\"width:118px;height:118px\"/>")
+                        .append(stamp[0].isEmpty() ? "" : "<div class=\"stamp\" style=\"margin-top:3px\">" + stamp[0] + "</div>")
+                        .append(stamp[1].isEmpty() ? "" : "<div class=\"stamp\" dir=\"rtl\" style=\"margin-top:0\">" + stamp[1] + "</div>")
+                        .append("</td>");
+            rows.append("</tr>");
+        }
+        String head = "<td colspan=\"2\" style=\"" + cell + "background:#e9edf4; font-weight:700\">%s<span style=\"float:right\" dir=\"rtl\">%s</span></td>";
+        return ("<table style=\"margin-top:10px; border-collapse:collapse; page-break-inside:avoid\"><tr>"
+                + head.formatted("Seller", "البائع") + head.formatted("Buyer", "المشتري") + "<td></td></tr>"
+                + rows + "</table>").replace("__QR_ROWS__", String.valueOf(Math.max(shown, 1)));
+    }
+
+    /** One party's values in the order of the labels in {@link #parties}. */
+    private static String[][] fields(Party p, String nameEn) {
+        Address a = p.address();
+        String place = a == null ? null : joined("، ", a.street(), a.district(), a.city());
+        String numbers = a == null ? null : joined(" · ",
+                blank(a.buildingNumber()) ? null : "Bldg " + a.buildingNumber(),
+                blank(a.postalCode()) ? null : "Postal " + a.postalCode(),
+                blank(a.additionalNumber()) ? null : "Add. " + a.additionalNumber(),
+                a.countryCode());
+        return new String[][]{
+                {esc(p.name())},
+                {nameEn == null || nameEn.isBlank() || nameEn.equals(p.name()) ? null : esc(nameEn)},
+                {p.hasVat() ? esc(p.vatNumber()) : null},
+                {esc(p.otherId())},
+                {place},
+                {numbers}};
+    }
+
+    private static boolean blank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private static String rtlAttr(String v) {
+        return v != null && v.codePoints().anyMatch(c -> Character.UnicodeBlock.of(c) == Character.UnicodeBlock.ARABIC)
+                ? " dir=\"rtl\"" : "";
     }
 
     /** Amount in words, references ("Based on …"), bank details and the company's footer line. */
@@ -330,26 +352,9 @@ public class InvoicePdfService {
 
     /** The classic invoice header: logo, English name and contacts, then the registration name and city. */
     private static String classicHead(Organization org, Party seller, String brandEn) {
-        return """
-                <table class="head"><tr>
-                  %s
-                  <td>
-                    <div class="brand-en">%s</div>
-                    %s
-                  </td>
-                  <td class="rtl" style="padding-left:14px">
-                    <div class="brand-ar">%s</div>
-                    <div class="muted">%s</div>
-                  </td>
-                </tr></table>
-                %s""".formatted(
-                logo(org),
-                esc(brandEn),
-                contact(org),
-                // The registration name (Arabic when there is one); not repeated when it is the English name.
-                esc(brandEn.equals(seller.name()) ? null : seller.name()),
-                esc(nz(seller.address() == null ? null : seller.address().city())),
-                LetterheadPdf.registrationStrip(org));
+        // Same header as every other document: English details, logo in the middle, Arabic details.
+        // The title below draws the brand rule under it.
+        return LetterheadPdf.patternHeader(org, org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor());
     }
 
     static String[] title(InvoiceKind kind, DocumentType type) {
@@ -365,40 +370,6 @@ public class InvoicePdfService {
                     ? new String[]{"إشعار مدين مبسط", "Simplified Debit Note"}
                     : new String[]{"إشعار مدين", "Debit Note"};
         };
-    }
-
-    /** Party box: one row per field, English label left, Arabic label right. */
-    private static String party(String en, String ar, Party p) {
-        return party(en, ar, p, null);
-    }
-
-    /** {@code nameEn}: the English trading name, printed under the Arabic legal name when it differs. */
-    private static String party(String en, String ar, Party p, String nameEn) {
-        StringBuilder kv = new StringBuilder().append(row("Name", esc(p.name()), "الاسم"));
-        if (nameEn != null && !nameEn.isBlank() && !nameEn.equals(p.name()))
-            kv.append(row("Name (English)", esc(nameEn), "الاسم بالإنجليزية"));
-        if (p.hasVat()) kv.append(row("VAT number", esc(p.vatNumber()), "الرقم الضريبي"));
-        if (p.otherId() != null) {
-            String[] label = schemeLabel(p.otherIdScheme());
-            kv.append(row(label[0], esc(p.otherId()), label[1]));
-        }
-        Address a = p.address();
-        if (a != null) {
-            // Two compact rows: the (usually Arabic) street, district and city, then the numbers.
-            String place = joined("، ", a.street(), a.district(), a.city());
-            String numbers = joined(" · ",
-                    a.buildingNumber() == null || a.buildingNumber().isBlank() ? null : "Bldg " + a.buildingNumber(),
-                    a.postalCode() == null || a.postalCode().isBlank() ? null : "Postal " + a.postalCode(),
-                    a.additionalNumber() == null || a.additionalNumber().isBlank() ? null : "Add. " + a.additionalNumber(),
-                    a.countryCode());
-            kv.append(row("Address", place, "العنوان"))
-                    .append(row("Building / postal", numbers, "المبنى / الرمز البريدي"));
-        }
-        return """
-                <div class="box">
-                  <table><tr><td class="hd">%s</td><td class="hd rtl">%s</td></tr></table>
-                  <table class="kv">%s</table>
-                </div>""".formatted(en, ar, kv);
     }
 
     /** "English label | value | Arabic label"; skipped when there is no value. */

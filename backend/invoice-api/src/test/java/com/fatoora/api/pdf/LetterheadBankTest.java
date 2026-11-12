@@ -55,8 +55,10 @@ class LetterheadBankTest {
                 String text = new PDFTextStripper().getText(doc);
                 assertTrue(text.contains("312798399100003"), style + ": VAT in header");
                 assertTrue(text.contains("7043504286"), style + ": CR in header");
-                assertEquals(1, text.split("312798399100003", -1).length - 1, style + ": VAT number printed exactly once");
-                assertEquals(1, text.split("7043504286", -1).length - 1, style + ": CR number printed exactly once");
+                // The header pattern: English side and Arabic side each show the numbers once; never again in the footer.
+                int expected = "SKYLINE".equals(style) ? 1 : 2;
+                assertEquals(expected, text.split("312798399100003", -1).length - 1, style + ": VAT number only in the header");
+                assertEquals(expected, text.split("7043504286", -1).length - 1, style + ": CR number only in the header");
                 assertTrue(text.contains("SA56 8000 0450 6080 1014 1252"), style + ": IBAN in bank block");
                 assertTrue(text.contains("AL RAJHI BANK"), style + ": bank name");
                 var r = new org.apache.pdfbox.rendering.PDFRenderer(doc).renderImageWithDPI(0, 80);
