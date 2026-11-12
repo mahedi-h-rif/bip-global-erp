@@ -204,6 +204,8 @@ public class InvoicePdfService {
                   .box td.hd { background: #e9edf4; padding: 5px 8px; font-weight: 700; }
                   .box .kv td { padding: 2px 8px; font-size: 8.5pt; }
                   .box .kv td.en, .box .kv td.ar { width: 28%%; }
+                  .pk td { padding: 2px 6px; font-size: 8pt; }
+                  .pk td.en, .pk td.ar { width: 27%%; }
                   .lines { margin-top: 12px; }
                   .lines th { background: %s; color: #fff; font-weight: 700; font-size: 8pt; padding: 5px 4px; text-align: center; }
                   .lines td { border-bottom: 1px solid #e3e7ef; padding: 6px 4px; }
@@ -270,68 +272,50 @@ public class InvoicePdfService {
     }
 
     /**
-     * Seller and buyer side by side in one table, so each field sits on the same row for both parties and the two
-     * columns always have the same height; the ZATCA QR code and status take the right-hand column.
+     * Seller and buyer boxes side by side, then the ZATCA QR code and status. The boxes are table cells of one row,
+     * so they always share the same height; each shows only the fields that are filled in.
      */
     private static String parties(Party seller, String sellerNameEn, Party buyer, String qr, String[] stamp) {
-        String[][] s = fields(seller, sellerNameEn), b = buyer == null ? null : fields(buyer, null);
-        String[][] labels = {{"Name", "الاسم"}, {"Name (English)", "الاسم بالإنجليزية"}, {"VAT number", "الرقم الضريبي"},
-                {schemeLabel(seller.otherIdScheme())[0], schemeLabel(seller.otherIdScheme())[1]},
-                {"Address", "العنوان"}, {"Building / postal", "المبنى / الرمز البريدي"}};
-        String cell = "border:1px solid #d9dee8; padding:4px 6px; vertical-align:middle; ";
-        String label = "<td style=\"" + cell + "width:13%%; background:#f6f8fb; color:#5a6275; font-size:7.5pt; line-height:1.3\">%s<br/><span dir=\"rtl\">%s</span></td>";
-        String value = "<td style=\"" + cell + "width:24%%; font-weight:700; font-size:8.5pt; line-height:1.35\"%s>%s</td>";
-        StringBuilder rows = new StringBuilder();
-        int shown = 0;
-        for (int i = 0; i < labels.length; i++) {
-            String sv = s[i][0], bv = b == null ? null : b[i][0];
-            if (blank(sv) && blank(bv)) continue;
-            rows.append("<tr>")
-                    .append(label.formatted(labels[i][0], labels[i][1]))
-                    .append(value.formatted(rtlAttr(sv), blank(sv) ? "—" : sv))
-                    .append(i == 3 && buyer != null
-                            ? label.formatted(schemeLabel(buyer.otherIdScheme())[0], schemeLabel(buyer.otherIdScheme())[1])
-                            : label.formatted(labels[i][0], labels[i][1]))
-                    .append(value.formatted(rtlAttr(bv), blank(bv) ? "—" : bv));
-            if (shown++ == 0)
-                rows.append("<td rowspan=\"__QR_ROWS__\" style=\"width:26%; vertical-align:top; text-align:center; padding:0 0 0 8px\">")
-                        .append("<img src=\"").append(qr).append("\" style=\"width:118px;height:118px\"/>")
-                        .append(stamp[0].isEmpty() ? "" : "<div class=\"stamp\" style=\"margin-top:3px\">" + stamp[0] + "</div>")
-                        .append(stamp[1].isEmpty() ? "" : "<div class=\"stamp\" dir=\"rtl\" style=\"margin-top:0\">" + stamp[1] + "</div>")
-                        .append("</td>");
-            rows.append("</tr>");
-        }
-        String head = "<td colspan=\"2\" style=\"" + cell + "background:#e9edf4; font-weight:700\">%s<span style=\"float:right\" dir=\"rtl\">%s</span></td>";
-        return ("<table style=\"margin-top:10px; border-collapse:collapse; page-break-inside:avoid\"><tr>"
-                + head.formatted("Seller", "البائع") + head.formatted("Buyer", "المشتري") + "<td></td></tr>"
-                + rows + "</table>").replace("__QR_ROWS__", String.valueOf(Math.max(shown, 1)));
+        String box = "<td style=\"width:37%%; vertical-align:top; padding:0; border:1px solid #e3e7ef; background:#f6f8fb\">"
+                + "<table><tr><td class=\"hd\" style=\"background:#e9edf4; padding:5px 8px; font-weight:700\">%s</td>"
+                + "<td class=\"hd rtl\" style=\"background:#e9edf4; padding:5px 8px; font-weight:700\">%s</td></tr></table>"
+                + "<table class=\"kv pk\">%s</table></td>";
+        String gap = "<td style=\"width:1.5%; padding:0\"></td>";
+        String qrCell = "<td style=\"width:23%; vertical-align:top; text-align:center; padding:0\">"
+                + "<img src=\"" + qr + "\" style=\"width:118px;height:118px\"/>"
+                + (stamp[0].isEmpty() ? "" : "<div class=\"stamp\" style=\"margin-top:3px\">" + stamp[0] + "</div>")
+                + (stamp[1].isEmpty() ? "" : "<div class=\"stamp\" dir=\"rtl\" style=\"margin-top:0\">" + stamp[1] + "</div>")
+                + "</td>";
+        String buyerCell = buyer == null ? "<td style=\"width:37%; padding:0\"></td>" : box.formatted("Buyer", "المشتري", partyRows(buyer, null));
+        return "<table style=\"margin-top:10px; page-break-inside:avoid\"><tr>"
+                + box.formatted("Seller", "البائع", partyRows(seller, sellerNameEn)) + gap + buyerCell + gap + qrCell
+                + "</tr></table>";
     }
 
-    /** One party's values in the order of the labels in {@link #parties}. */
-    private static String[][] fields(Party p, String nameEn) {
+    /** "English label | value | Arabic label" rows for one party, leaving out whatever is not filled in. */
+    private static String partyRows(Party p, String nameEn) {
+        StringBuilder kv = new StringBuilder().append(row("Name", esc(p.name()), "الاسم"));
+        if (nameEn != null && !nameEn.isBlank() && !nameEn.equals(p.name()))
+            kv.append(row("Name (English)", esc(nameEn), "الاسم بالإنجليزية"));
+        if (p.hasVat()) kv.append(row("VAT number", esc(p.vatNumber()), "الرقم الضريبي"));
+        if (!blank(p.otherId())) {
+            String[] label = schemeLabel(p.otherIdScheme());
+            kv.append(row(label[0], esc(p.otherId()), label[1]));
+        }
         Address a = p.address();
-        String place = a == null ? null : joined("، ", a.street(), a.district(), a.city());
-        String numbers = a == null ? null : joined(" · ",
-                blank(a.buildingNumber()) ? null : "Bldg " + a.buildingNumber(),
-                blank(a.postalCode()) ? null : "Postal " + a.postalCode(),
-                blank(a.additionalNumber()) ? null : "Add. " + a.additionalNumber(),
-                a.countryCode());
-        return new String[][]{
-                {esc(p.name())},
-                {nameEn == null || nameEn.isBlank() || nameEn.equals(p.name()) ? null : esc(nameEn)},
-                {p.hasVat() ? esc(p.vatNumber()) : null},
-                {esc(p.otherId())},
-                {place},
-                {numbers}};
+        if (a != null) {
+            kv.append(row("Address", joined("، ", a.street(), a.district(), a.city()), "العنوان"))
+                    .append(row("Building / postal", joined(" · ",
+                            blank(a.buildingNumber()) ? null : "Bldg " + a.buildingNumber(),
+                            blank(a.postalCode()) ? null : "Postal " + a.postalCode(),
+                            blank(a.additionalNumber()) ? null : "Add. " + a.additionalNumber(),
+                            a.countryCode()), "المبنى / الرمز البريدي"));
+        }
+        return kv.toString();
     }
 
     private static boolean blank(String s) {
         return s == null || s.isBlank();
-    }
-
-    private static String rtlAttr(String v) {
-        return v != null && v.codePoints().anyMatch(c -> Character.UnicodeBlock.of(c) == Character.UnicodeBlock.ARABIC)
-                ? " dir=\"rtl\"" : "";
     }
 
     /** Amount in words, references ("Based on …"), bank details and the company's footer line. */
