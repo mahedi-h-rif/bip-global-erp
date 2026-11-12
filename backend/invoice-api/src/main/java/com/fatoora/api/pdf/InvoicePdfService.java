@@ -141,7 +141,7 @@ public class InvoicePdfService {
                 + (mobile == null ? "" : "<div class=\"muted\">Mobile " + mobile + "</div>");
     }
 
-    private static final int LOGO_HEIGHT = 66, LOGO_MAX_WIDTH = 160;
+    private static final int LOGO_HEIGHT = 52, LOGO_MAX_WIDTH = 140;
 
     /** The company logo as the first header cell, at its own aspect ratio; nothing when none is uploaded. */
     private static String logo(Organization org) {
@@ -220,8 +220,8 @@ public class InvoicePdfService {
                   table { width: 100%%; border-collapse: collapse; }
                   .rtl { direction: rtl; text-align: right; }
                   .head td { vertical-align: top; }
-                  .brand-en { font-size: 14pt; font-weight: 700; color: %s; }
-                  .brand-ar { font-size: 15pt; font-weight: 700; color: %s; }
+                  .brand-en { font-size: 11.5pt; font-weight: 700; color: %s; white-space: nowrap; }
+                  .brand-ar { font-size: 11.5pt; font-weight: 700; color: %s; }
                   .muted { color: #5a6275; }
                   .title { margin: 12px 0 10px; border-top: 3px solid %s; border-bottom: 1px solid #e3e7ef; }
                   .title td { font-size: 15pt; font-weight: 700; color: %s; padding: 8px 0; }
@@ -260,7 +260,15 @@ public class InvoicePdfService {
 
                   <table class="parties"><tr>
                     <td class="col">%s</td>
-                    <td class="col">%s</td>
+                    <td class="col">%s
+                      <table style="margin-top:8px"><tr>
+                        <td style="width:128px; vertical-align:top"><img src="%s" style="width:120px;height:120px"/></td>
+                        <td style="vertical-align:middle">
+                          <div class="stamp">%s</div>
+                          <div class="stamp rtl">%s</div>
+                        </td>
+                      </tr></table>
+                    </td>
                   </tr></table>
 
                   <table class="lines">
@@ -273,11 +281,7 @@ public class InvoicePdfService {
                   </table>
 
                   <table class="bottom"><tr>
-                    <td class="col" style="width:40%%">
-                      <img src="%s" style="width:160px;height:160px"/>
-                      <div class="stamp">%s</div>
-                      <div class="stamp" style="direction:rtl;text-align:left">%s</div>
-                    </td>
+                    <td class="col" style="width:40%%"></td>
                     <td class="col" style="width:60%%">
                       <table class="sum">
                         <tr><td>Total excl. VAT</td><td class="rtl">الإجمالي غير شامل الضريبة</td><td class="v">%s %s</td></tr>
@@ -299,8 +303,8 @@ public class InvoicePdfService {
                 title[1], title[0],
                 meta,
                 party("Seller", "البائع", seller, org.getLegalNameEn()), buyerBlock,
-                rows,
                 qrDataUri(inv.getQrCode()), stamp[0], stamp[1],
+                rows,
                 money(totals.taxExclusive()), cur,
                 money(totals.vatTotal()), cur,
                 money(totals.taxInclusive()), cur,
@@ -332,22 +336,20 @@ public class InvoicePdfService {
                   <td>
                     <div class="brand-en">%s</div>
                     %s
-                    %s
                   </td>
-                  <td class="rtl">
+                  <td class="rtl" style="padding-left:14px">
                     <div class="brand-ar">%s</div>
                     <div class="muted">%s</div>
-                    %s
                   </td>
-                </tr></table>""".formatted(
+                </tr></table>
+                %s""".formatted(
                 logo(org),
                 esc(brandEn),
                 contact(org),
-                LetterheadPdf.registrationLines(org),
                 // The registration name (Arabic when there is one); not repeated when it is the English name.
                 esc(brandEn.equals(seller.name()) ? null : seller.name()),
                 esc(nz(seller.address() == null ? null : seller.address().city())),
-                LetterheadPdf.registrationAr(org));
+                LetterheadPdf.registrationStrip(org));
     }
 
     static String[] title(InvoiceKind kind, DocumentType type) {

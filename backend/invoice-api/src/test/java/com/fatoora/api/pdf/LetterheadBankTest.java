@@ -53,10 +53,10 @@ class LetterheadBankTest {
             Files.write(out.resolve(style + ".pdf"), pdf);
             try (var doc = Loader.loadPDF(pdf)) {
                 String text = new PDFTextStripper().getText(doc);
-                assertTrue(text.contains("VAT No. 312798399100003"), style + ": VAT in header");
-                assertTrue(text.contains("CR No. 7043504286"), style + ": CR in header");
-                assertEquals(1, text.split("312798399100003", -1).length - 1 - (text.contains("الرقم الضريبي") ? 1 : 0),
-                        style + ": VAT printed once in English (not again in the footer)");
+                assertTrue(text.contains("312798399100003"), style + ": VAT in header");
+                assertTrue(text.contains("7043504286"), style + ": CR in header");
+                assertEquals(1, text.split("312798399100003", -1).length - 1, style + ": VAT number printed exactly once");
+                assertEquals(1, text.split("7043504286", -1).length - 1, style + ": CR number printed exactly once");
                 assertTrue(text.contains("SA56 8000 0450 6080 1014 1252"), style + ": IBAN in bank block");
                 assertTrue(text.contains("AL RAJHI BANK"), style + ": bank name");
                 var r = new org.apache.pdfbox.rendering.PDFRenderer(doc).renderImageWithDPI(0, 80);

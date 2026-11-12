@@ -55,7 +55,7 @@ public class LetterheadPdf {
                 <title>%s</title>
                 <style>
                   @page {
-                    size: A4; margin: 40mm 16mm 28mm 16mm;
+                    size: A4; margin: 33mm 16mm 22mm 16mm;
                     @top-center { content: element(header); }
                     @bottom-center { content: element(footer); }
                   }
@@ -65,8 +65,8 @@ public class LetterheadPdf {
                   .rtl { direction: rtl; text-align: right; }
                   #header { position: running(header); }
                   #header td { vertical-align: middle; }
-                  #header .en { font-size: 14pt; font-weight: 700; color: %s; }
-                  #header .ar { font-size: 14pt; font-weight: 700; color: %s; }
+                  #header .en { font-size: 11.5pt; font-weight: 700; color: %s; white-space: nowrap; }
+                  #header .ar { font-size: 11.5pt; font-weight: 700; color: %s; }
                   #header .muted { font-size: 8pt; color: #5a6275; }
                   #header .rule { border-bottom: 3px solid %s; margin-top: 6px; }
                   #footer { position: running(footer); font-size: 7.5pt; color: #5a6275; border-top: 2px solid %s; padding-top: 5px; }
@@ -86,10 +86,10 @@ public class LetterheadPdf {
                       <td>
                         <div class="en">%s</div>
                         %s
-                        %s
                       </td>
-                      <td class="rtl" style="white-space:nowrap; width:32%%"><div class="ar">%s</div><div class="muted">%s</div>%s</td>
+                      <td class="rtl" style="white-space:nowrap; padding-left:14px"><div class="ar">%s</div><div class="muted">%s</div></td>
                     </tr></table>
+                    %s
                     <div class="rule"></div>
                   </div>
                   <div id="footer">
@@ -107,10 +107,9 @@ public class LetterheadPdf {
                 logoCell(org),
                 InvoicePdfService.esc(nz(org.getLegalNameEn())),
                 contact(org),
-                registrationLines(org),
                 InvoicePdfService.esc(nz(org.getLegalNameAr())),
                 InvoicePdfService.esc(nz(org.getCity())),
-                registrationAr(org),
+                registrationStrip(org),
                 // Arabic address and the numbers on separate lines, so right-to-left text and digits never mix.
                 "<span dir=\"rtl\">" + InvoicePdfService.esc(joined("، ", org.getStreet(), org.getDistrict(), org.getCity())) + "</span>",
                 InvoicePdfService.esc(joined(" · ",
@@ -187,7 +186,7 @@ public class LetterheadPdf {
                 <title>%s</title>
                 <style>
                   @page {
-                    size: A4; margin: 42mm 16mm 32mm 16mm;
+                    size: A4; margin: 36mm 16mm 26mm 16mm;
                     @top-center { content: element(header); }
                     @bottom-center { content: element(footer); }
                   }
@@ -197,9 +196,9 @@ public class LetterheadPdf {
                   .rtl { direction: rtl; text-align: right; }
                   #header { position: running(header); }
                   #header td { vertical-align: middle; }
-                  #header .en { font-size: 13.5pt; font-weight: 700; color: %s; }
+                  #header .en { font-size: 11.5pt; font-weight: 700; color: %s; white-space: nowrap; }
                   #header .tag { font-size: 7.5pt; color: %s; letter-spacing: 1px; margin-top: 1px; }
-                  #header .ar { font-size: 13.5pt; font-weight: 700; color: #1b2233; }
+                  #header .ar { font-size: 11.5pt; font-weight: 700; color: #1b2233; }
                   #header .muted { font-size: 8pt; color: #5a6275; }
                   #header .rule { border-bottom: 3px solid %s; margin-top: 6px; }
                   #header .rule2 { width: 96px; border-bottom: 3px solid %s; margin-top: -3px; }
@@ -225,10 +224,10 @@ public class LetterheadPdf {
                         <div class="en">%s</div>
                         <div class="tag">%s</div>
                         %s
-                        %s
                       </td>
-                      <td class="rtl" style="white-space:nowrap; width:34%%"><div class="ar">%s</div><div class="muted">%s</div>%s</td>
+                      <td class="rtl" style="white-space:nowrap; padding-left:14px"><div class="ar">%s</div><div class="muted">%s</div></td>
                     </tr></table>
+                    %s
                     <div class="rule"></div><div class="rule2"></div>
                   </div>
                   <div id="footer">
@@ -249,10 +248,9 @@ public class LetterheadPdf {
                 InvoicePdfService.esc(nz(org.getLegalNameEn())),
                 InvoicePdfService.esc(nz(org.getCity()) + (org.getCountryCode() == null ? "" : " · KSA")),
                 contact(org),
-                registrationLines(org),
                 InvoicePdfService.esc(nz(org.getLegalNameAr())),
                 InvoicePdfService.esc(nz(org.getCity())),
-                registrationAr(org),
+                registrationStrip(org),
                 addr, reg, contactLine,
                 watermark(org),
                 landmark(color),
@@ -361,7 +359,7 @@ public class LetterheadPdf {
     }
 
     private static String logoCell(Organization org) {
-        String img = PrintOptions.showLogo() ? img(org.getLogo(), org.getLogoContentType(), 70, 170) : null;
+        String img = PrintOptions.showLogo() ? img(org.getLogo(), org.getLogoContentType(), 52, 140) : null;
         return img == null ? "" : "<td style=\"width:1%; padding-right:10px\">" + img + "</td>";
     }
 
@@ -443,12 +441,24 @@ public class LetterheadPdf {
                 </td>""".formatted(padding, esc(heading), esc(nz(name)));
     }
 
-    /** "VAT No. … · CR No. …" for the header (English side); empty when neither is set. */
-    public static String registrationEn(Organization org) {
-        String s = joined(" · ",
-                org.getVatNumber() == null || org.getVatNumber().isBlank() ? null : "VAT No. " + org.getVatNumber(),
-                org.getOtherId() == null || org.getOtherId().isBlank() ? null : "CR No. " + org.getOtherId());
-        return s.isEmpty() ? "" : "<div style=\"font-size:8.5pt; font-weight:700; color:#1b2233; margin-top:1px\">" + InvoicePdfService.esc(s) + "</div>";
+    /**
+     * VAT and CR numbers for the header, each printed once with an English and an Arabic label: one full-width line
+     * under the company names (VAT on the left, CR on the right). Empty when neither is set.
+     */
+    public static String registrationStrip(Organization org) {
+        String vat = org.getVatNumber() == null || org.getVatNumber().isBlank() ? null : org.getVatNumber();
+        String cr = org.getOtherId() == null || org.getOtherId().isBlank() ? null : org.getOtherId();
+        if (vat == null && cr == null) return "";
+        return "<table style=\"width:100%; border-collapse:collapse; margin-top:3px\"><tr>"
+                + (vat == null ? "" : stripCell("left", "VAT No.", "الرقم الضريبي", vat))
+                + (cr == null ? "" : stripCell("right", "CR No.", "السجل التجاري", cr))
+                + "</tr></table>";
+    }
+
+    private static String stripCell(String align, String en, String ar, String number) {
+        return "<td style=\"font-size:8.5pt; color:#1b2233; padding:0; text-align:" + align + "\">"
+                + "<span style=\"color:#5a6275\">" + en + " / </span><span dir=\"rtl\" style=\"color:#5a6275\">" + ar + "</span>"
+                + "&#160;&#160;<b>" + InvoicePdfService.esc(number) + "</b></td>";
     }
 
     /** VAT and CR on two short lines, for narrow header columns. */
@@ -458,17 +468,6 @@ public class LetterheadPdf {
             b.append("<div style=\"font-size:8.5pt; font-weight:700; color:#1b2233; margin-top:2px\">VAT No. ").append(InvoicePdfService.esc(org.getVatNumber())).append("</div>");
         if (org.getOtherId() != null && !org.getOtherId().isBlank())
             b.append("<div style=\"font-size:8.5pt; font-weight:700; color:#1b2233\">CR No. ").append(InvoicePdfService.esc(org.getOtherId())).append("</div>");
-        return b.toString();
-    }
-
-    /** The same numbers with Arabic labels, for the right-hand (Arabic) side of the header. */
-    public static String registrationAr(Organization org) {
-        String vat = org.getVatNumber() == null || org.getVatNumber().isBlank() ? null : "الرقم الضريبي: " + org.getVatNumber();
-        String cr = org.getOtherId() == null || org.getOtherId().isBlank() ? null : "السجل التجاري: " + org.getOtherId();
-        if (vat == null && cr == null) return "";
-        StringBuilder b = new StringBuilder();
-        for (String line : new String[]{vat, cr})
-            if (line != null) b.append("<div dir=\"rtl\" style=\"font-size:8.5pt; font-weight:700; color:#1b2233\">").append(InvoicePdfService.esc(line)).append("</div>");
         return b.toString();
     }
 
