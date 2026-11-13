@@ -8,11 +8,13 @@ import { date } from "@/lib/format";
 import { Alert, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 /** Goods returns (SAP B1 "Goods Return"): stock sent back to the supplier from a goods receipt. */
 export default function GoodsReturnsPage() {
   const t = useT();
   const { data, error } = useSWR<GoodsReturn[]>("/goods-returns", fetcher);
+  const { toolbar, shown } = useListTools<GoodsReturn>(data, { filters: [{ label: "Supplier", get: (r) => r.supplierName }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.returnDate });
   return (
     <>
       <PageHeader title={t("Goods returns")} subtitle={t("Items sent back to a supplier. Open a goods receipt and choose “Return to supplier”.")} />
@@ -20,7 +22,9 @@ export default function GoodsReturnsPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No goods returned yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
@@ -30,7 +34,7 @@ export default function GoodsReturnsPage() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Credit memo")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {data.map((r) => (
+                {shown.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/goods-returns/${r.id}`}>{r.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(r.returnDate)}</td>

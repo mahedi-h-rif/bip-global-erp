@@ -9,6 +9,7 @@ import type { PurchaseOrder, Supplier, Warehouse } from "@/lib/types";
 import { money } from "@/lib/format";
 import { Alert, Button, Card, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { useListTools } from "@/components/list-tools";
 
 interface Suggestion { productId: number; number: string | null; name: string; unitCode: string; onHand: number; onOrder: number; threshold: number; suggested: number; lastCost: number }
 
@@ -16,6 +17,7 @@ export default function ReorderPage() {
   const t = useT();
   const router = useRouter();
   const { data, error } = useSWR<Suggestion[]>("/reorder", fetcher);
+  const { toolbar, shown } = useListTools<Suggestion>(data, { filters: [], date: undefined });
   const { data: suppliers } = useSWR<Supplier[]>("/suppliers", fetcher);
   const { data: warehouses } = useSWR<Warehouse[]>("/warehouses", fetcher);
   const [qty, setQty] = useState<Record<number, string>>({});
@@ -32,11 +34,13 @@ export default function ReorderPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("Nothing to reorder")}>{t("Set a low-stock alert on products to get suggestions.")}</Empty>}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <>
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2 text-start font-medium">{t("Item")}</th><th className="px-4 py-2 text-end font-medium">{t("On hand")}</th><th className="px-4 py-2 text-end font-medium">{t("On order")}</th><th className="px-4 py-2 text-end font-medium">{t("Alert at")}</th><th className="px-4 py-2 text-end font-medium">{t("Avg cost")}</th><th className="w-32 px-4 py-2 text-end font-medium">{t("Order qty")}</th></tr></thead>
-              <tbody className="divide-y divide-line">{data.map((s) => (
+              <tbody className="divide-y divide-line">{shown.map((s) => (
                 <tr key={s.productId}><td className="px-4 py-2" dir="auto">{s.name} <span className="text-xs text-muted">{s.number}</span></td>
                   <td className="tabular px-4 py-2 text-end font-semibold text-bad">{Number(s.onHand)}</td><td className="tabular px-4 py-2 text-end">{Number(s.onOrder)}</td>
                   <td className="tabular px-4 py-2 text-end">{Number(s.threshold)}</td><td className="tabular px-4 py-2 text-end">{money(s.lastCost)}</td>
@@ -50,7 +54,7 @@ export default function ReorderPage() {
                 setBusy(true); setProblem(null);
                 try {
                   const po = await api<PurchaseOrder>("POST", "/reorder/purchase-order", { supplierId: Number(supplierId), warehouseId: warehouseId ? Number(warehouseId) : null,
-                    lines: data.filter((s) => Number(q(s)) > 0).map((s) => ({ productId: s.productId, quantity: Number(q(s)) })) });
+                    lines: (data ?? []).filter((s) => Number(q(s)) > 0).map((s) => ({ productId: s.productId, quantity: Number(q(s)) })) });
                   router.push(`/purchase-orders/${po.id}`);
                 } catch (e) { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); setBusy(false); }
               }}><ShoppingCart className="size-4" aria-hidden /> {t("Create requisition")}</Button>

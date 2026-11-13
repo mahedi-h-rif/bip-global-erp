@@ -10,11 +10,13 @@ import { date, money } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 export default function SupplierInvoicesPage() {
   const t = useT();
   const [openOnly, setOpenOnly] = useState(false);
   const { data, error } = useSWR<SupplierInvoice[]>(`/supplier-invoices?openOnly=${openOnly}`, fetcher, { keepPreviousData: true });
+  const { toolbar, shown } = useListTools<SupplierInvoice>(data, { filters: [{ label: "Supplier", get: (r) => r.supplierName }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.invoiceDate });
   const due = (data ?? []).reduce((s, v) => s + Number(v.due), 0);
   return (
     <>
@@ -28,7 +30,9 @@ export default function SupplierInvoicesPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No supplier invoices")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
@@ -38,7 +42,7 @@ export default function SupplierInvoicesPage() {
                 <th className="px-4 py-2.5 text-end font-medium">{t("Overdue days")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {data.map((v) => (
+                {shown.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-50">
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/supplier-invoices/${v.id}`}>{v.number}</Link></td>
                     <td className="tabular px-4 py-3 text-muted">{v.supplierInvoiceNo ?? "—"}</td>

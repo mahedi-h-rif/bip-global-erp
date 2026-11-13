@@ -8,10 +8,12 @@ import type { Receipt } from "@/lib/types";
 import { date, money, paymentMethodLabel } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 export default function ReceiptsPage() {
   const t = useT();
   const { data, error } = useSWR<Receipt[]>("/receipts", fetcher);
+  const { toolbar, shown } = useListTools<Receipt>(data, { filters: [{ label: "Customer", get: (r) => r.customerName }, { label: "Method", get: (r) => r.method, format: statusText }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.receiptDate });
   return (
     <>
       <PageHeader
@@ -23,7 +25,9 @@ export default function ReceiptsPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No incoming payments yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -37,7 +41,7 @@ export default function ReceiptsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {data.map((r) => (
+                {shown.map((r) => (
                   <tr key={r.id} className={`hover:bg-slate-50 ${r.status === "CANCELLED" ? "text-muted line-through" : ""}`}>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/receipts/${r.id}`}>{r.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(r.receiptDate)}</td>

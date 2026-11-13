@@ -11,11 +11,13 @@ import { date } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, Empty, PageHeader, Select, Spinner } from "@/components/ui";
 import { fmtCur, poStatus, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 export default function PurchaseOrdersPage() {
   const t = useT();
   const [status, setStatus] = useState("");
   const { data, error } = useSWR<PurchaseOrder[]>(`/purchase-orders${status ? `?status=${status}` : ""}`, fetcher, { keepPreviousData: true });
+  const { toolbar, shown } = useListTools<PurchaseOrder>(data, { filters: [{ label: "Supplier", get: (r) => r.supplierName }, { label: "Warehouse", get: (r) => r.warehouseName }, { label: "Currency", get: (r) => r.currency }], date: (r) => r.orderDate });
   const router = useRouter();
   const [picked, setPicked] = useState<number[]>([]);
   const open = (p: PurchaseOrder) => p.status === "APPROVED" || p.status === "PARTIALLY_RECEIVED";
@@ -40,7 +42,9 @@ export default function PurchaseOrdersPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No purchase orders yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
@@ -50,7 +54,7 @@ export default function PurchaseOrdersPage() {
                 <th className="px-4 py-2.5 text-end font-medium">{t("Total")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {data.map((p) => (
+                {shown.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50">
                     <td className="px-3 py-3">{open(p) && <input type="checkbox" aria-label={t("Select {number}", { number: p.number })} checked={picked.includes(p.id)}
                       onChange={(e) => setPicked(e.target.checked ? [...picked, p.id] : picked.filter((x) => x !== p.id))} />}</td>

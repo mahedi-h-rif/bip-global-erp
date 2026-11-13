@@ -9,6 +9,7 @@ import { date, money, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { CountrySelect, SuggestInput } from "@/components/suggest";
+import { statusText, useListTools } from "@/components/list-tools";
 
 type Tab = "employees" | "leave" | "holidays" | "advances";
 const errText = (e: unknown, f: string) => (e instanceof ApiError ? (e.fields ? Object.values(e.fields).join(", ") : e.message) : f);
@@ -69,6 +70,7 @@ function EmployeesTab() {
   const t = useT();
   const [all, setAll] = useState(false);
   const { data, error, mutate } = useSWR<Employee[]>(`/hr/employees?all=${all}`, fetcher, { keepPreviousData: true });
+  const { toolbar, shown } = useListTools<Employee>(data, { filters: [{ label: "Department", get: (r) => r.department }, { label: "Job title", get: (r) => r.jobTitle }, { label: "Nationality", get: (r) => r.nationality }, { label: "Status", get: (r) => r.status, format: statusText }], date: undefined });
   const [editing, setEditing] = useState<Employee | null>(null);
   return (
     <>
@@ -81,7 +83,9 @@ function EmployeesTab() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No employees yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
@@ -90,7 +94,7 @@ function EmployeesTab() {
                 <th className="px-4 py-2.5 text-end font-medium">{t("Leave balance")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Advance due")}</th><th className="w-12" />
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {data.map((e) => (
+                {shown.map((e) => (
                   <tr key={e.id} className={e.status === "TERMINATED" ? "text-muted" : ""}>
                     <td className="px-4 py-3"><span className="font-medium" dir="auto">{e.name}</span> <span className="text-xs text-muted">{e.code} · {e.nationality}</span></td>
                     <td className="px-4 py-3">{[e.jobTitle, e.department].filter(Boolean).join(" · ") || "—"}</td>

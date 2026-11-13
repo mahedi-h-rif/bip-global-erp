@@ -12,6 +12,7 @@ import { Alert, Button, ButtonLink, Card, CardHeader, Empty, PageHeader, Select,
 import { deliveryStatusLabel } from "@/components/delivery-note-editor";
 import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from "@/components/invoice-quantities";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 const tone: Record<DeliveryNote["status"], string> = {
   DRAFT: "bg-amber-50 text-amber-700",
@@ -83,6 +84,7 @@ export default function DeliveryNotesPage() {
   const t = useT();
   const [status, setStatus] = useState("");
   const { data, error } = useSWR<DeliveryNote[]>(`/delivery-notes${status ? `?status=${status}` : ""}`, fetcher, { keepPreviousData: true });
+  const { toolbar, shown } = useListTools<DeliveryNote>(data, { filters: [{ label: "Customer", get: (r) => r.customerName ?? r.clientName }, { label: "Warehouse", get: (r) => r.warehouseName }], date: (r) => r.deliveryDate });
   return (
     <>
       <PageHeader
@@ -101,7 +103,9 @@ export default function DeliveryNotesPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No delivery notes yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -115,7 +119,7 @@ export default function DeliveryNotesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {data.map((n) => (
+                {shown.map((n) => (
                   <tr key={n.id} className="hover:bg-slate-50">
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/delivery-notes/${n.id}`}>{n.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(n.deliveryDate)}</td>

@@ -9,10 +9,12 @@ import { date, money } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 export default function GoodsReceiptsPage() {
   const t = useT();
   const { data, error } = useSWR<GoodsReceipt[]>("/goods-receipts", fetcher);
+  const { toolbar, shown } = useListTools<GoodsReceipt>(data, { filters: [{ label: "Supplier", get: (r) => r.supplierName }, { label: "Warehouse", get: (r) => r.warehouseName }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.receiptDate });
   return (
     <>
       <PageHeader title={t("Goods receipts")} subtitle={t("Stock comes in here, at its landed cost. Open a purchase order to receive against it.")}
@@ -21,7 +23,9 @@ export default function GoodsReceiptsPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No goods received yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
@@ -31,7 +35,7 @@ export default function GoodsReceiptsPage() {
                 <th className="px-4 py-2.5 text-end font-medium">{t("Total")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {data.map((g) => (
+                {shown.map((g) => (
                   <tr key={g.id} className="hover:bg-slate-50">
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/goods-receipts/${g.id}`}>{g.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(g.receiptDate)}</td>

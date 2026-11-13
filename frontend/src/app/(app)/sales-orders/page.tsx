@@ -11,11 +11,13 @@ import { date, money } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, Empty, PageHeader, Select, Spinner } from "@/components/ui";
 import { salesOrderStatusLabel, salesOrderStatusTone } from "@/components/sales-order-editor";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 export default function SalesOrdersPage() {
   const t = useT();
   const [status, setStatus] = useState("");
   const { data, error } = useSWR<SalesOrder[]>(`/sales-orders${status ? `?status=${status}` : ""}`, fetcher, { keepPreviousData: true });
+  const { toolbar, shown } = useListTools<SalesOrder>(data, { filters: [{ label: "Customer", get: (r) => r.customerName ?? r.clientName }], date: (r) => r.orderDate });
   const router = useRouter();
   const [picked, setPicked] = useState<number[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -51,7 +53,9 @@ export default function SalesOrdersPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No sales orders yet")}>{t("Open a quotation and use “Copy to sales order”, or start a new one.")}</Empty>}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -67,7 +71,7 @@ export default function SalesOrdersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {data.map((o) => (
+                {shown.map((o) => (
                   <tr key={o.id} className="hover:bg-slate-50">
                     <td className="px-3 py-3">{isOpen(o) && <input type="checkbox" aria-label={t("Select {number}", { number: o.number })} checked={picked.includes(o.id)}
                       onChange={(e) => setPicked(e.target.checked ? [...picked, o.id] : picked.filter((x) => x !== o.id))} />}</td>

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { FileDown, Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { FileDown, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { Quotation } from "@/lib/types";
 import { date, money } from "@/lib/format";
-import { Alert, ButtonLink, Card, Empty, Input, PageHeader, Spinner } from "@/components/ui";
+import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { quotationStatusLabel } from "@/components/quotation-editor";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
 
@@ -72,9 +73,7 @@ function Row({ q, onChanged }: { q: Quotation; onChanged: () => void }) {
 export default function QuotationsPage() {
   const t = useT();
   const { data, error, mutate } = useSWR<Quotation[]>("/quotations", fetcher);
-  const [q, setQ] = useState("");
-  const needle = q.trim().toLowerCase();
-  const shown = data?.filter((x) => !needle || [x.number, x.customerName, x.clientName].some((s) => s?.toLowerCase().includes(needle)));
+  const { toolbar, shown } = useListTools<Quotation>(data, { filters: [{ label: "Status", get: (r) => r.status, format: statusText }, { label: "Client", get: (r) => r.customerName ?? r.clientName }], date: (r) => r.issueDate });
 
   return (
     <>
@@ -84,12 +83,7 @@ export default function QuotationsPage() {
         actions={<ButtonLink href="/quotations/new"><Plus className="size-4" aria-hidden /> {t("New quotation")}</ButtonLink>}
       />
       <Card>
-        <div className="border-b border-line p-4">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-            <Input className="ps-9" placeholder={t("Search by number or client")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search quotations")} />
-          </div>
-        </div>
+        {data && data.length > 0 && toolbar}
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {shown && shown.length === 0 && <Empty title={t("No quotations yet")}>{t("Create one with “New quotation”.")}</Empty>}

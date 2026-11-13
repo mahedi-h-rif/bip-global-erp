@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
-import { FileDown, Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { FileDown, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { Agreement } from "@/lib/types";
 import { date } from "@/lib/format";
-import { Alert, ButtonLink, Card, Empty, Input, PageHeader, Spinner } from "@/components/ui";
+import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { agreementStatusLabel } from "@/components/agreement-editor";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
 
@@ -74,9 +75,7 @@ function Row({ a, onChanged }: { a: Agreement; onChanged: () => void }) {
 export default function AgreementsPage() {
   const t = useT();
   const { data, error, mutate } = useSWR<Agreement[]>("/agreements", fetcher);
-  const [q, setQ] = useState("");
-  const needle = q.trim().toLowerCase();
-  const shown = data?.filter((x) => !needle || [x.number, x.clientName, x.title].some((s) => s?.toLowerCase().includes(needle)));
+  const { toolbar, shown } = useListTools<Agreement>(data, { filters: [{ label: "Status", get: (r) => r.status, format: statusText }, { label: "Client", get: (r) => r.clientName }], date: (r) => r.agreementDate });
 
   return (
     <>
@@ -86,12 +85,7 @@ export default function AgreementsPage() {
         actions={<ButtonLink href="/agreements/new"><Plus className="size-4" aria-hidden /> {t("New agreement")}</ButtonLink>}
       />
       <Card>
-        <div className="border-b border-line p-4">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-            <Input className="ps-9" placeholder={t("Search by number, client or title")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search agreements")} />
-          </div>
-        </div>
+        {data && data.length > 0 && toolbar}
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {shown && shown.length === 0 && <Empty title={t("No agreements yet")}>{t("Create one with “New agreement”.")}</Empty>}

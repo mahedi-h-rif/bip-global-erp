@@ -1668,4 +1668,9 @@ export const ar: Record<string, string> = {
   "Receipt": "الإيصال",
   "Receipt file": "ملف الإيصال",
   "Attach receipt": "إرفاق إيصال",
+  "Search anything in this list…": "ابحث عن أي شيء في هذه القائمة…",
+  "All": "الكل",
+  "Clear": "مسح",
+  "{n} of {total}": "{n} من {total}",
+  "Job title": "المسمى الوظيفي",
 };

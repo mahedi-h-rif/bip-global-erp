@@ -9,11 +9,13 @@ import { date } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 /** Purchase requests (SAP B1 "Purchase Request"): a department asks for items; purchasing turns it into an order. */
 export default function PurchaseRequestsPage() {
   const t = useT();
   const { data, error } = useSWR<PurchaseRequest[]>("/purchase-requests", fetcher);
+  const { toolbar, shown } = useListTools<PurchaseRequest>(data, { filters: [{ label: "Status", get: (r) => r.status, format: statusText }, { label: "Department", get: (r) => r.department }, { label: "Requested by", get: (r) => r.requester }], date: (r) => r.requestDate });
   return (
     <>
       <PageHeader title={t("Purchase requests")} subtitle={t("Departments ask for items here; purchasing copies a request to a purchase order.")}
@@ -22,7 +24,9 @@ export default function PurchaseRequestsPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No purchase requests yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
@@ -32,7 +36,7 @@ export default function PurchaseRequestsPage() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Purchase order")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th><th className="w-12" />
               </tr></thead>
               <tbody className="divide-y divide-line">
-                {data.map((r) => (
+                {shown.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/purchase-requests/${r.id}`}>{r.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(r.requestDate)}</td>
