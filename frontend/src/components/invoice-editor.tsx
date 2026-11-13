@@ -113,7 +113,8 @@ function AddProductButton({ line, onCreated }: { line: Line; onCreated: (p: Prod
   );
 }
 
-export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
+/** {@code defaultCustomerId}: a new invoice started from a customer (their preview's "New invoice"). */
+export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: InvoiceDetail; defaultCustomerId?: number }) {
   const router = useRouter();
   const t = useT();
   const itemUnits = useItemUnits();
@@ -125,7 +126,8 @@ export function InvoiceEditor({ initial }: { initial?: InvoiceDetail }) {
   const [warehouseId, setWarehouseId] = useState<string>(initial?.warehouseId ? String(initial.warehouseId) : "");
 
   const [kind, setKind] = useState<InvoiceKind>(initial?.kind ?? "SIMPLIFIED");
-  const [customerId, setCustomerId] = useState<string>(initial?.customerId ? String(initial.customerId) : "");
+  const [customerId, setCustomerId] = useState<string>(
+    initial?.customerId ? String(initial.customerId) : defaultCustomerId ? String(defaultCustomerId) : "");
   const [supplyDate, setSupplyDate] = useState(initial?.supplyDate ?? todayKsa());
   const [paidNow, setPaidNow] = useState<PaidNow | null>(null);
   const [payment, setPayment] = useState(initial?.paymentMeans ?? "10");

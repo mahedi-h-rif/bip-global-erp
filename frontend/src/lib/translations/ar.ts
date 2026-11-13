@@ -1657,4 +1657,10 @@ export const ar: Record<string, string> = {
   "Back": "رجوع",
   "Close invoice {number}": "إغلاق الفاتورة {number}",
   "The unpaid {amount} is written off: no more dues or reminders. The invoice stays valid at ZATCA. You can reopen it.": "يشطب المبلغ غير المدفوع {amount}: لا مستحقات ولا تذكيرات بعد الآن. تبقى الفاتورة سارية لدى الهيئة. يمكنك إعادة فتحها.",
+  "Customer preview": "معاينة العميل",
+  "Customer credit": "رصيد العميل",
+  "{n} invoices · {q} quotations · {o} sales orders": "{n} فواتير · {q} عروض أسعار · {o} أوامر بيع",
+  "Latest invoices": "أحدث الفواتير",
+  "No invoices yet": "لا توجد فواتير بعد",
+  "Bldg": "مبنى",
 };

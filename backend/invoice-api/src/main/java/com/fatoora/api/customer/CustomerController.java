@@ -114,6 +114,62 @@ public class CustomerController {
         return repo.findByOrganizationId(CurrentUser.orgId(), Sort.by("nameEn")).stream().map(CustomerDto::of).toList();
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fatoora.api.payment.PaymentService payments;
+
+    /** One recent invoice in the customer preview. */
+    public record RecentInvoice(Long id, String number, java.time.Instant issuedAt, java.math.BigDecimal total,
+                                java.math.BigDecimal due, String status, String lifecycle) {}
+
+    /** The customer at a glance: details, what they were invoiced, paid and still owe, and their latest invoices. */
+    public record Overview(CustomerDto customer, long invoiceCount, java.math.BigDecimal invoiced, java.math.BigDecimal paid,
+                           java.math.BigDecimal due, java.math.BigDecimal credit, long quotations, long salesOrders,
+                           List<RecentInvoice> recent) {}
+
+    @GetMapping("/{id}/overview")
+    @Transactional(readOnly = true)
+    Overview overview(@PathVariable Long id) {
+        Customer c = load(id);
+        Long orgId = CurrentUser.orgId();
+        // An own-data login sees only the documents it created.
+        String owner = CurrentUser.owner();
+        List<java.util.Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT id, number, issued_at, total_incl_vat, status, cancelled_at, closed_at FROM invoice
+                WHERE organization_id = ? AND customer_id = ? AND doc_type = 'INVOICE' AND status NOT IN ('DRAFT','REJECTED')
+                  AND (?::text IS NULL OR lower(created_by) = lower(?::text))
+                ORDER BY issued_at DESC NULLS LAST, id DESC""", orgId, id, owner, owner);
+        List<Long> ids = rows.stream().map(r -> ((Number) r.get("id")).longValue()).toList();
+        var balances = payments.balancesFor(ids);
+        java.math.BigDecimal invoiced = java.math.BigDecimal.ZERO, paid = java.math.BigDecimal.ZERO,
+                due = java.math.BigDecimal.ZERO, credit = java.math.BigDecimal.ZERO;
+        for (var b : balances.values()) {
+            invoiced = invoiced.add(b.adjusted());
+            paid = paid.add(b.paid());
+            due = due.add(b.due());
+            credit = credit.add(b.overpaid());
+        }
+        List<RecentInvoice> recent = rows.stream().limit(8).map(r -> {
+            Long iid = ((Number) r.get("id")).longValue();
+            var b = balances.get(iid);
+            String lifecycle = r.get("cancelled_at") != null ? "CANCELLED" : r.get("closed_at") != null ? "CLOSED" : null;
+            Object at = r.get("issued_at");
+            java.time.Instant issued = at instanceof java.sql.Timestamp ts ? ts.toInstant()
+                    : at instanceof java.time.OffsetDateTime o ? o.toInstant() : null;
+            return new RecentInvoice(iid, (String) r.get("number"), issued, (java.math.BigDecimal) r.get("total_incl_vat"),
+                    b == null ? null : b.due(), (String) r.get("status"), lifecycle);
+        }).toList();
+        Long quotations = jdbc.queryForObject("""
+                SELECT count(*) FROM quotation WHERE organization_id = ? AND customer_id = ?
+                  AND (?::text IS NULL OR lower(created_by) = lower(?::text))""", Long.class, orgId, id, owner, owner);
+        Long orders = jdbc.queryForObject("""
+                SELECT count(*) FROM sales_order WHERE organization_id = ? AND customer_id = ?
+                  AND (?::text IS NULL OR lower(created_by) = lower(?::text))""", Long.class, orgId, id, owner, owner);
+        return new Overview(CustomerDto.of(c), rows.size(), invoiced, paid, due, credit,
+                quotations == null ? 0 : quotations, orders == null ? 0 : orders, recent);
+    }
+
     @GetMapping("/{id}")
     CustomerDto get(@PathVariable Long id) {
         return CustomerDto.of(load(id));

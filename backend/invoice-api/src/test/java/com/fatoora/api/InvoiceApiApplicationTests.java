@@ -343,6 +343,17 @@ class InvoiceApiApplicationTests {
         assertEquals(0, new java.math.BigDecimal("115.00").compareTo(open.get("dueAmount").decimalValue()));
     }
 
+    @Test
+    @Order(23)
+    void customerOverviewSumsTheirInvoices() throws Exception {
+        var o = body(call("GET", "/customers/" + customerId + "/overview", null), 200);
+        assertEquals(customerId, o.get("customer").get("id").asLong());
+        assertTrue(o.get("invoiceCount").asLong() >= 1, o.toString());
+        // "invoiced" is after credit notes (an earlier test credits this customer's invoice), so check the list instead.
+        assertTrue(o.get("recent").get(0).get("total").decimalValue().signum() > 0, o.toString());
+        assertTrue(o.get("recent").size() >= 1);
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {

@@ -11,6 +11,7 @@ import { SearchInput } from "@/components/voice";
 import { searchCustomers } from "@/lib/voice-parse";
 import { useT } from "@/lib/i18n";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { CustomerPreview } from "@/components/customer-preview";
 import { CityInput, CountrySelect, SuggestInput } from "@/components/suggest";
 
 const blank: Customer = { nameAr: "", nameEn: "", vatNumber: "", otherIdScheme: "CRN", countryCode: "SA", remindersEnabled: true };
@@ -133,6 +134,7 @@ function Customers() {
   const { data, error, mutate } = useSWR<Customer[]>("/customers", fetcher);
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const [editing, setEditing] = useState<Customer | null>(params.get("new") ? blank : null);
+  const [preview, setPreview] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // ?q= comes from a voice search ("find customer Al Noor").
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -174,7 +176,10 @@ function Customers() {
             {shown.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{c.nameEn || c.nameAr} <span className="ar font-normal text-muted" dir="rtl">{c.nameEn ? c.nameAr : ""}</span></p>
+                  <p className="truncate text-sm font-medium">
+                    <button type="button" className="font-medium text-brand hover:underline" onClick={() => setPreview(c.id!)}>{c.nameEn || c.nameAr}</button>{" "}
+                    <span className="ar font-normal text-muted" dir="rtl">{c.nameEn ? c.nameAr : ""}</span>
+                  </p>
                   <p className="text-xs text-muted">
                     {c.vatNumber ? `${t("VAT")} ${c.vatNumber}` : c.otherId ? [c.otherIdScheme, c.otherId].filter(Boolean).join(" ") : t("No tax ID")} · {c.city || t("No address")}
                     {c.phone && ` · ${c.phone}`}
@@ -199,6 +204,10 @@ function Customers() {
           </ul>
         )}
       </Card>
+      {preview != null && (
+        <CustomerPreview id={preview} canWrite={canWrite} onClose={() => setPreview(null)}
+          onEdit={(c) => { setPreview(null); setEditing(c); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+      )}
     </>
   );
 }
