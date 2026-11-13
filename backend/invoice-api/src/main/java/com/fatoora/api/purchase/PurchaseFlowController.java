@@ -107,6 +107,66 @@ public class PurchaseFlowController {
         return out;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fatoora.api.pdf.LetterheadPdf letterhead;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fatoora.api.organization.OrganizationRepository orgs;
+
+    private static final java.time.format.DateTimeFormatter PR_DATE = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    /** The purchase request on the company letterhead, to print, sign or send. */
+    @GetMapping("/purchase-requests/{id}/pdf")
+    @Transactional(readOnly = true)
+    org.springframework.http.ResponseEntity<byte[]> prPdf(@PathVariable Long id) {
+        Long orgId = CurrentUser.orgId();
+        PrDto d = pr(orgId, id);
+        var company = orgs.findById(orgId).orElseThrow();
+        byte[] pdf = letterhead.render(company, "Purchase request " + d.number(), prHtml(d, company));
+        return org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        org.springframework.http.ContentDisposition.inline().filename(d.number() + ".pdf").build().toString())
+                .body(pdf);
+    }
+
+    private static String prHtml(PrDto d, com.fatoora.api.organization.Organization org) {
+        String brand = org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor();
+        String meta = com.fatoora.api.pdf.LetterheadPdf.box("Request details", "تفاصيل الطلب", new String[][]{
+                {"Request no.", d.number()}, {"Request date", d.requestDate() == null ? null : PR_DATE.format(d.requestDate())},
+                {"Required by", d.requiredDate() == null ? null : PR_DATE.format(d.requiredDate())},
+                {"Status", d.status() == null ? null : d.status().charAt(0) + d.status().substring(1).toLowerCase().replace('_', ' ')}});
+        String who = com.fatoora.api.pdf.LetterheadPdf.box("Requested by", "مقدم الطلب", new String[][]{
+                {"Name", d.requester()}, {"Department", d.department()}, {"Deliver to", d.warehouseName()}});
+        String th = "background:%s; color:#fff; font-size:8pt; padding:5px 4px; text-align:center".formatted(brand);
+        String cell = "border-bottom:1px solid #e3e7ef; padding:6px 4px; text-align:";
+        StringBuilder rows = new StringBuilder();
+        int n = 1;
+        for (PrLine l : d.lines()) {
+            boolean rtl = com.fatoora.api.pdf.InvoicePdfService.startsRtl(l.name());
+            rows.append("<tr><td style=\"").append(cell).append("center\">").append(n++).append("</td>")
+                    .append("<td style=\"").append(cell).append(rtl ? "right; direction:rtl" : "left").append("\">")
+                    .append(com.fatoora.api.pdf.LetterheadPdf.esc(l.name())).append("</td>")
+                    .append("<td style=\"").append(cell).append("right\">").append(StockService.plainOf(l.quantity())).append("</td>")
+                    .append("<td style=\"").append(cell).append("center\">").append(com.fatoora.api.pdf.LetterheadPdf.esc(l.unitCode() == null ? "" : l.unitCode())).append("</td></tr>");
+        }
+        String sign = """
+                <td style="width:50%%; vertical-align:top; %s">
+                  <div style="font-weight:700">%s</div>
+                  <div style="height:70px"></div>
+                  <div style="border-top:1px solid #1b2233; padding-top:3px">Signature · التوقيع</div>
+                </td>""";
+        return """
+                <table><tr><td><h1>Purchase Request</h1></td><td class="rtl"><h1>طلب شراء</h1></td></tr></table>
+                <table style="margin-top:6px"><tr><td style="width:50%%; vertical-align:top; padding-right:6px">%s</td><td style="width:50%%; vertical-align:top">%s</td></tr></table>
+                <table style="margin-top:10px"><tr><th style="%s; width:6%%">#</th><th style="%s">Item<br/>الصنف</th>
+                <th style="%s; width:14%%">Qty<br/>الكمية</th><th style="%s; width:12%%">Unit<br/>الوحدة</th></tr>%s</table>
+                %s
+                <table style="margin-top:22px; page-break-inside:avoid"><tr>%s%s</tr></table>
+                """.formatted(meta, who, th, th, th, th, rows,
+                d.remarks() == null || d.remarks().isBlank() ? "" : "<h2>Remarks · ملاحظات</h2><p>" + com.fatoora.api.pdf.LetterheadPdf.text(d.remarks()) + "</p>",
+                sign.formatted("padding-right:14px", "Requested by · مقدم الطلب<br/><span style=\"font-weight:400\">" + com.fatoora.api.pdf.LetterheadPdf.esc(d.requester()) + "</span>"),
+                sign.formatted("padding-left:14px", "Approved by · المعتمد"));
+    }
+
     @GetMapping("/purchase-requests/{id}")
     PrDto getPr(@PathVariable Long id) {
         return pr(CurrentUser.orgId(), id);

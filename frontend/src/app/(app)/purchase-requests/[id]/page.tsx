@@ -4,8 +4,8 @@ import Link from "next/link";
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { ShoppingCart, XCircle } from "lucide-react";
-import { api, ApiError, fetcher } from "@/lib/api";
+import { FileDown, Printer, ShoppingCart, XCircle } from "lucide-react";
+import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { PurchaseRequest, Supplier } from "@/lib/types";
 import { date } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, PageHeader, Select, Spinner } from "@/components/ui";
@@ -28,7 +28,11 @@ export default function PurchaseRequestPage({ params }: { params: Promise<{ id: 
     <>
       <PageHeader title={t("Purchase request {number}", { number: r.number })}
         subtitle={<span className="flex items-center gap-2"><StatusPill status={r.status} /><span dir="auto">{r.requester}</span></span>}
-        actions={<RelationshipMapButton type="PURCHASE_REQUEST" id={r.id} />} />
+        actions={<span className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => printFile(`/purchase-requests/${r.id}/pdf`)}><Printer className="size-4" aria-hidden /> {t("Print")}</Button>
+          <Button variant="secondary" onClick={() => openFile(`/purchase-requests/${r.id}/pdf`)}><FileDown className="size-4" aria-hidden /> PDF</Button>
+          <RelationshipMapButton type="PURCHASE_REQUEST" id={r.id} />
+        </span>} />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}
       <Card className="mb-6">
         <dl className="grid gap-x-6 gap-y-3 p-5 text-sm md:grid-cols-4">

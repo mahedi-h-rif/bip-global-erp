@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import useSWR from "swr";
-import { Plus } from "lucide-react";
-import { fetcher } from "@/lib/api";
+import { FileDown, Plus } from "lucide-react";
+import { fetcher, openFile } from "@/lib/api";
 import type { PurchaseRequest } from "@/lib/types";
 import { date } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
@@ -29,7 +29,7 @@ export default function PurchaseRequestsPage() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Number")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Date")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Requested by")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Department")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Required by")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Lines")}</th>
-                <th className="px-4 py-2.5 text-start font-medium">{t("Purchase order")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
+                <th className="px-4 py-2.5 text-start font-medium">{t("Purchase order")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th><th className="w-12" />
               </tr></thead>
               <tbody className="divide-y divide-line">
                 {data.map((r) => (
@@ -42,6 +42,7 @@ export default function PurchaseRequestsPage() {
                     <td className="tabular px-4 py-3 text-end">{r.lines.length}</td>
                     <td className="tabular px-4 py-3">{r.purchaseOrders.map((p) => <Link key={p.id} className="text-brand hover:underline" href={`/purchase-orders/${p.id}`}>{p.number}</Link>)}{r.purchaseOrders.length === 0 && "—"}</td>
                     <td className="px-4 py-3"><StatusPill status={r.status} /></td>
+                    <td className="px-2 py-3 text-end"><button type="button" title={t("Download PDF")} aria-label={t("Download PDF")} onClick={() => openFile(`/purchase-requests/${r.id}/pdf`)} className="rounded-md p-1.5 text-muted hover:bg-canvas hover:text-ink"><FileDown className="size-4" /></button></td>
                   </tr>
                 ))}
               </tbody>
