@@ -9,7 +9,7 @@ import type { AccessOptions, AppUserRow, Me } from "@/lib/types";
 import { dateTime } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-import { statusText, useListTools } from "@/components/list-tools";
+import { useListTools } from "@/components/list-tools";
 
 export default function UsersPage() {
   const t = useT();
@@ -70,7 +70,7 @@ export default function UsersPage() {
                         {u.role === "ADMIN" || u.role === "OPERATOR" ? t(u.role === "OPERATOR" ? "Provider" : "Admin") : u.features ? (
                           <span className="text-xs">
                             <b className="text-sm font-medium">{t("{n} features", { n: String(u.features.length) })}</b>
-                            <span className="block text-muted">{(u.actions ?? []).map((x) => t(ACTION_LABELS[x] ?? x)).join(" · ")} · {u.ownDataOnly ? t("own data") : t("all data")}</span>
+                            <span className="block text-muted">{t("{n} with changes allowed", { n: String(Object.values(u.permissions ?? {}).filter((a) => a.length > 1).length) })} · {u.ownDataOnly ? t("own data") : t("all data")}</span>
                           </span>
                         ) : t("Full access (old role)")}
                       </td>
@@ -119,28 +119,43 @@ function UserForm({ user, onDone }: { user: AppUserRow | null; onDone: (message?
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [admin, setAdmin] = useState(user?.role === "ADMIN" || user?.role === "OPERATOR");
-  const [features, setFeatures] = useState<string[] | null>(user?.features ?? null);
-  const [actions, setActions] = useState<string[]>(
-    user?.actions ?? (user?.role === "VIEWER" ? ["view"] : ["view", "create", "update", "delete"]));
+  /** Feature → allowed actions; null until the admin changes something (then old users start from full access). */
+  const [perms, setPerms] = useState<Record<string, string[]> | null>(user?.permissions ?? null);
   const [ownDataOnly, setOwnDataOnly] = useState(user?.ownDataOnly || user?.role === "BRANCH");
   const [enabled, setEnabled] = useState(user?.enabled ?? true);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  // Users made before custom access start with every feature ticked, so nothing is taken away by accident.
-  const ticked = features ?? (user && !admin ? options?.features.map((f) => f.key) ?? [] : []);
+  const ALL = options?.actions ?? ["view", "create", "update", "delete"];
+  // Users made before custom access start with every feature and action ticked (View only for old viewers),
+  // so nothing is taken away by accident.
+  const current: Record<string, string[]> = perms ?? (user && !admin && options
+    ? Object.fromEntries(options.features.map((f) => [f.key, user.role === "VIEWER" ? ["view"] : [...ALL]]))
+    : {});
   const sections = options ? [...new Set(options.features.map((f) => f.section))] : [];
-  const toggle = (keys: string[], on: boolean) =>
-    setFeatures([...new Set(on ? [...ticked, ...keys] : ticked.filter((k) => !keys.includes(k)))]);
+  const has = (key: string, a: string) => (current[key] ?? []).includes(a);
+  /** Tick or untick one action on some features; ticking any action ticks View, unticking View drops the feature. */
+  const set = (keys: string[], a: string, on: boolean) => {
+    const next = { ...current };
+    for (const k of keys) {
+      const acts = new Set(next[k] ?? []);
+      if (on) { acts.add(a); acts.add("view"); }
+      else if (a === "view") acts.clear();
+      else acts.delete(a);
+      if (acts.size) next[k] = [...acts]; else delete next[k];
+    }
+    setPerms(next);
+  };
+  const ticked = Object.keys(current);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     const access = admin
-      ? { role: "ADMIN", features: null, actions: null, ownDataOnly: false }
-      : { role: "ACCOUNTANT", features: ticked, actions: [...new Set(["view", ...actions])], ownDataOnly };
+      ? { role: "ADMIN", permissions: null, ownDataOnly: false }
+      : { role: "ACCOUNTANT", permissions: current, ownDataOnly };
     try {
       if (user) {
         await api("PUT", `/users/${user.id}`, { fullName, enabled, ...access });
@@ -191,46 +206,49 @@ function UserForm({ user, onDone }: { user: AppUserRow | null; onDone: (message?
         {!admin && (
           <>
             <fieldset className="rounded-lg border border-line p-4 md:col-span-2">
-              <legend className="px-1 text-sm font-medium">{t("Features this user can open")}</legend>
+              <legend className="px-1 text-sm font-medium">{t("What this user can open and do")}</legend>
+              <p className="mb-3 text-xs text-muted">{t("Tick View to give a feature; then what the user may do there. Issuing, approving and cancelling count as Update.")}</p>
               {!options ? <Spinner /> : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {sections.map((sec) => {
-                    const keys = options.features.filter((f) => f.section === sec).map((f) => f.key);
-                    const all = keys.every((k) => ticked.includes(k));
-                    return (
-                      <div key={sec}>
-                        <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                          <input type="checkbox" checked={all} onChange={(e) => toggle(keys, e.target.checked)} className="size-4 accent-[var(--color-brand)]" />
-                          {t(sec)}
-                        </label>
-                        <div className="space-y-1 ps-6">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className="border-b border-line text-xs text-muted">
+                        <th className="py-2 text-start font-medium">{t("Feature")}</th>
+                        {ALL.map((a) => <th key={a} className="w-20 py-2 text-center font-medium">{t(ACTION_LABELS[a] ?? a)}</th>)}
+                      </tr>
+                    </thead>
+                    {sections.map((sec) => {
+                      const keys = options.features.filter((f) => f.section === sec).map((f) => f.key);
+                      return (
+                        <tbody key={sec} className="divide-y divide-line">
+                          <tr className="bg-canvas/60">
+                            <td className="py-1.5 ps-1 text-xs font-semibold uppercase tracking-wide text-muted">{t(sec)}</td>
+                            {ALL.map((a) => (
+                              <td key={a} className="text-center">
+                                <input type="checkbox" aria-label={`${t(sec)} · ${t(ACTION_LABELS[a] ?? a)} · ${t("All")}`} title={t("All in this section")}
+                                  checked={keys.every((k) => has(k, a))} onChange={(e) => set(keys, a, e.target.checked)}
+                                  className="size-4 accent-[var(--color-brand)]" />
+                              </td>
+                            ))}
+                          </tr>
                           {options.features.filter((f) => f.section === sec).map((f) => (
-                            <label key={f.key} className="flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={ticked.includes(f.key)} onChange={(e) => toggle([f.key], e.target.checked)} className="size-4 accent-[var(--color-brand)]" />
-                              {t(f.label)}
-                            </label>
+                            <tr key={f.key}>
+                              <td className="py-1.5 ps-4">{t(f.label)}</td>
+                              {ALL.map((a) => (
+                                <td key={a} className="text-center">
+                                  <input type="checkbox" aria-label={`${t(f.label)} · ${t(ACTION_LABELS[a] ?? a)}`}
+                                    checked={has(f.key, a)} onChange={(e) => set([f.key], a, e.target.checked)}
+                                    className="size-4 accent-[var(--color-brand)]" />
+                                </td>
+                              ))}
+                            </tr>
                           ))}
-                        </div>
-                      </div>
-                    );
-                  })}
+                        </tbody>
+                      );
+                    })}
+                  </table>
                 </div>
               )}
-            </fieldset>
-
-            <fieldset className="rounded-lg border border-line p-4">
-              <legend className="px-1 text-sm font-medium">{t("What this user can do")}</legend>
-              <div className="flex flex-wrap gap-4 text-sm">
-                {(options?.actions ?? ["view", "create", "update", "delete"]).map((a) => (
-                  <label key={a} className="inline-flex items-center gap-2">
-                    <input type="checkbox" disabled={a === "view"} checked={a === "view" || actions.includes(a)}
-                      onChange={(e) => setActions(e.target.checked ? [...actions, a] : actions.filter((x) => x !== a))}
-                      className="size-4 accent-[var(--color-brand)]" />
-                    {t(ACTION_LABELS[a] ?? a)}
-                  </label>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted">{t("View is always on. Issuing, approving and cancelling count as Update.")}</p>
             </fieldset>
 
             <fieldset className="rounded-lg border border-line p-4">

@@ -66,7 +66,7 @@ public class UserController {
     public record UserDto(Long id, String email, String fullName, String role, boolean enabled,
                           Instant lastLoginAt, Instant createdAt, long actionsThisMonth, Instant lastActiveAt,
                           /** Per-user access; null features = full access of the built-in role. */
-                          List<String> features, List<String> actions, boolean ownDataOnly) {
+                          List<String> features, Map<String, List<String>> permissions, boolean ownDataOnly) {
     }
 
     /** What the user form offers: every feature (grouped by section) and the actions. */
@@ -74,13 +74,17 @@ public class UserController {
     }
 
     /** {@code features} null keeps the built-in role's access; a list switches the user to per-user access. */
+    /**
+     * {@code permissions}: feature → actions (view, create, update, delete) for per-user access. Older clients may
+     * send {@code features} with one {@code actions} list for all of them instead.
+     */
     public record CreateUser(@NotBlank @Email String email, @NotBlank String fullName, @NotNull AppUser.Role role,
                              @NotBlank @Size(min = 10, max = 100) String password,
-                             List<String> features, List<String> actions, boolean ownDataOnly) {
+                             Map<String, List<String>> permissions, List<String> features, List<String> actions, boolean ownDataOnly) {
     }
 
     public record UpdateUser(@NotBlank String fullName, @NotNull AppUser.Role role, boolean enabled,
-                             List<String> features, List<String> actions, boolean ownDataOnly) {
+                             Map<String, List<String>> permissions, List<String> features, List<String> actions, boolean ownDataOnly) {
     }
 
     public record PasswordReset(@NotBlank @Size(min = 10, max = 100) String password) {
@@ -192,7 +196,7 @@ public class UserController {
         u.setEmail(email);
         u.setFullName(body.fullName().strip());
         u.setRole(body.role());
-        applyAccess(u, body.features(), body.actions(), body.ownDataOnly());
+        applyAccess(u, body.permissions(), body.features(), body.actions(), body.ownDataOnly());
         u.setPasswordHash(encoder.encode(body.password()));
         users.save(u);
         audit.record(u.getOrganizationId(), "USER_CREATED", "user", u.getId(), email + " · " + u.getRole());
@@ -225,7 +229,7 @@ public class UserController {
         u.setFullName(name);
         u.setRole(body.role());
         u.setEnabled(body.enabled());
-        applyAccess(u, body.features(), body.actions(), body.ownDataOnly());
+        applyAccess(u, body.permissions(), body.features(), body.actions(), body.ownDataOnly());
         if (!before.equals(accessText(u))) changes.add("access " + before + " -> " + accessText(u));
         if (!changes.isEmpty())
             audit.record(u.getOrganizationId(), body.enabled() ? "USER_UPDATED" : "USER_DISABLED", "user", u.getId(),
@@ -267,30 +271,34 @@ public class UserController {
      * Admins and the provider always have full access. Any other user given a feature list is on per-user access:
      * the role becomes Staff, "view" is always included, and the scope is all data or only their own.
      */
-    private static void applyAccess(AppUser u, List<String> features, List<String> actions, boolean ownDataOnly) {
-        if (u.getRole() == AppUser.Role.ADMIN || u.getRole() == AppUser.Role.OPERATOR || features == null) {
+    private static void applyAccess(AppUser u, Map<String, List<String>> permissions, List<String> features, List<String> actions,
+                                    boolean ownDataOnly) {
+        if (u.getRole() == AppUser.Role.ADMIN || u.getRole() == AppUser.Role.OPERATOR || (permissions == null && features == null)) {
             u.setFeatures(null);
             u.setActions(null);
             u.setOwnDataOnly(false);
             return;
         }
-        List<String> f = features.stream().filter(com.fatoora.api.settings.FeatureCatalog::isFeature).distinct().toList();
-        if (f.isEmpty()) throw new ApiException.Validation(Map.of("features", "Tick at least one feature for this user"));
-        java.util.Set<String> a = new java.util.TreeSet<>(actions == null ? List.of() : actions);
-        a.retainAll(com.fatoora.api.settings.FeatureCatalog.ACTIONS);
-        a.add("view");
+        Map<String, List<String>> asked = permissions;
+        if (asked == null) {
+            // Older form: the same actions for every ticked feature.
+            asked = new java.util.LinkedHashMap<>();
+            for (String f : features) asked.put(f, actions == null ? List.of() : actions);
+        }
+        var clean = com.fatoora.api.settings.AccessCodec.clean(asked);
+        if (clean.isEmpty()) throw new ApiException.Validation(Map.of("features", "Tick at least one feature for this user"));
         u.setRole(AppUser.Role.ACCOUNTANT);
-        u.setFeatures(String.join(",", f));
-        u.setActions(String.join(",", a));
+        u.setFeatures(com.fatoora.api.settings.AccessCodec.encode(clean));
+        u.setActions(null);
         u.setOwnDataOnly(ownDataOnly);
     }
 
     private static String accessText(AppUser u) {
-        return u.getFeatures() == null ? "full" : "[" + u.getFeatures() + "] [" + u.getActions() + "] " + (u.isOwnDataOnly() ? "own data" : "all data");
+        return u.getFeatures() == null ? "full" : "[" + u.getFeatures() + "] " + (u.isOwnDataOnly() ? "own data" : "all data");
     }
 
-    private static List<String> csv(String s) {
-        return s == null ? null : java.util.Arrays.stream(s.split(",")).filter(x -> !x.isBlank()).toList();
+    private static Map<String, java.util.Set<String>> access(AppUser u) {
+        return com.fatoora.api.settings.AccessCodec.parse(u.getFeatures(), u.getActions());
     }
 
     private static void changeable(AppUser u) {
@@ -309,7 +317,8 @@ public class UserController {
         Object[] a = act.get(u.getEmail().toLowerCase(Locale.ROOT));
         return new UserDto(u.getId(), u.getEmail(), u.getFullName(), u.getRole().name(), u.isEnabled(),
                 u.getLastLoginAt(), u.getCreatedAt(), a == null ? 0 : (Long) a[0], a == null ? null : (Instant) a[1],
-                csv(u.getFeatures()), csv(u.getActions()), u.isOwnDataOnly());
+                u.getFeatures() == null ? null : List.copyOf(access(u).keySet()),
+                u.getFeatures() == null ? null : com.fatoora.api.settings.AccessCodec.asLists(access(u)), u.isOwnDataOnly());
     }
 
     private static Instant monthStart() {

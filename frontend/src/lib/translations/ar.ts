@@ -1677,4 +1677,9 @@ export const ar: Record<string, string> = {
   "Vehicle": "المركبة",
   "Stage": "المرحلة",
   "Owner": "المسؤول",
+  "What this user can open and do": "ما يمكن لهذا المستخدم فتحه وفعله",
+  "Tick View to give a feature; then what the user may do there. Issuing, approving and cancelling count as Update.": "حدد «عرض» لمنح الميزة، ثم ما يمكن للمستخدم فعله فيها. الإصدار والاعتماد والإلغاء تُعد تعديلًا.",
+  "Feature": "الميزة",
+  "All in this section": "الكل في هذا القسم",
+  "{n} with changes allowed": "{n} مسموح فيها بالتغيير",
 };

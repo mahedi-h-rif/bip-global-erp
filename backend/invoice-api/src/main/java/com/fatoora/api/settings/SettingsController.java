@@ -123,7 +123,7 @@ public class SettingsController {
             out.put("restricted", true);
             out.put("custom", true);
             out.put("features", access.features());
-            out.put("actions", access.actions());
+            out.put("access", AccessCodec.asLists(access.permissions()));
             out.put("ownDataOnly", access.ownDataOnly());
             out.put("pages", FeatureCatalog.FEATURES.stream().filter(f -> access.features().contains(f.key()))
                     .flatMap(f -> f.pages().stream()).toList());

@@ -10,8 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /** Per-user access: only ticked features, only ticked actions; lookups and sign-in always work. */
 class PerUserAccessTest {
 
-    private static final PermissionInterceptor.Access SALES_VIEW_CREATE =
-            new PermissionInterceptor.Access(Set.of("invoices", "quotations"), Set.of("view", "create"), false);
+    /** Invoices: view and create; quotations: view and create (as the old single action list gave). */
+    private static final PermissionInterceptor.Access SALES_VIEW_CREATE = new PermissionInterceptor.Access(
+            AccessCodec.parse("invoices,quotations", "view,create"), false);
 
     private static String check(String method, String path) {
         return PermissionInterceptor.check(SALES_VIEW_CREATE, method, path.split("/"));
@@ -37,6 +38,22 @@ class PerUserAccessTest {
         assertNotNull(check("GET", "accounts"));
         assertNotNull(check("GET", "users"));
         assertNotNull(check("GET", "documents"), "paths outside the catalogue are refused");
+    }
+
+    @Test
+    void actionsAreControlledPerFeature() {
+        var access = new PermissionInterceptor.Access(AccessCodec.parse("invoices:view|create|update,quotations:view", null), false);
+        assertNull(PermissionInterceptor.check(access, "POST", "invoices/5/issue".split("/")), "update on invoices");
+        assertNotNull(PermissionInterceptor.check(access, "POST", "quotations".split("/")), "quotations are view-only");
+        assertNull(PermissionInterceptor.check(access, "GET", "quotations".split("/")));
+        assertNotNull(PermissionInterceptor.check(access, "DELETE", "invoices/5".split("/")), "no delete on invoices");
+    }
+
+    @Test
+    void codecRoundTripsAndAlwaysKeepsView() {
+        var p = AccessCodec.clean(java.util.Map.of("invoices", java.util.List.of("create"), "nonsense", java.util.List.of("view")));
+        org.junit.jupiter.api.Assertions.assertEquals("invoices:create|view", AccessCodec.encode(p));
+        org.junit.jupiter.api.Assertions.assertEquals(p, AccessCodec.parse(AccessCodec.encode(p), null));
     }
 
     @Test

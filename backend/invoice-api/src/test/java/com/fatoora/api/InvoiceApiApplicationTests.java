@@ -398,6 +398,38 @@ class InvoiceApiApplicationTests {
         }
     }
 
+    @Test
+    @Order(26)
+    void actionsAreSetPerFeature() throws Exception {
+        String email = "per-feature-" + System.nanoTime() + "@test.local";
+        var created = body(call("POST", "/users", Map.of("email", email, "fullName", "Per Feature", "role", "ACCOUNTANT",
+                "password", "per-feature-secret-1", "ownDataOnly", false,
+                "permissions", Map.of("invoices", java.util.List.of("view", "create"), "quotations", java.util.List.of("view")))), 200);
+        assertEquals("[create, view]", created.get("permissions").get("invoices").toString().replace("\"", "").replace(",", ", "));
+
+        var jar = new CookieManager();
+        var client = HttpClient.newBuilder().cookieHandler(jar).build();
+        client.send(HttpRequest.newBuilder(URI.create(base + "/auth/csrf")).build(), HttpResponse.BodyHandlers.ofString());
+        java.util.function.BiFunction<String, Object, HttpResponse<String>> as = (spec, payload) -> {
+            try {
+                String[] parts = spec.split(" ", 2);
+                String token = jar.getCookieStore().getCookies().stream()
+                        .filter(c -> c.getName().equals("XSRF-TOKEN")).map(HttpCookie::getValue).findFirst().orElseThrow();
+                var req = HttpRequest.newBuilder(URI.create(base + parts[1])).header("Content-Type", "application/json")
+                        .header("X-XSRF-TOKEN", token).method(parts[0], payload == null ? HttpRequest.BodyPublishers.noBody()
+                                : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)));
+                return client.send(req.build(), HttpResponse.BodyHandlers.ofString());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        };
+        assertEquals(200, as.apply("POST /auth/login", Map.of("email", email, "password", "per-feature-secret-1")).statusCode());
+        var line = new Object[]{Map.of("name", "Tape", "quantity", 1, "unitCode", "PCE", "unitPrice", 5)};
+        assertEquals(201, as.apply("POST /invoices", Map.of("kind", "SIMPLIFIED", "lines", line)).statusCode(), "create on invoices");
+        assertEquals(200, as.apply("GET /quotations", null).statusCode(), "view on quotations");
+        assertEquals(403, as.apply("POST /quotations", Map.of("clientName", "X", "lines", line)).statusCode(), "quotations are view-only");
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {

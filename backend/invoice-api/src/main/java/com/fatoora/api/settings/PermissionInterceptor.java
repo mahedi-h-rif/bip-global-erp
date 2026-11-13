@@ -74,7 +74,11 @@ public class PermissionInterceptor implements HandlerInterceptor, WebMvcConfigur
     }
 
     /** A user's admin-chosen access: ticked features, allowed actions. */
-    public record Access(Set<String> features, Set<String> actions, boolean ownDataOnly) {}
+    public record Access(Map<String, Set<String>> permissions, boolean ownDataOnly) {
+        public Set<String> features() {
+            return permissions.keySet();
+        }
+    }
 
     /** Null when the user is not on per-user access (admins, the provider, logins made before it existed). */
     public static Access accessOf(JdbcTemplate jdbc, Long userId) {
@@ -82,7 +86,7 @@ public class PermissionInterceptor implements HandlerInterceptor, WebMvcConfigur
         List<Access> a = jdbc.query("""
                 SELECT features, actions, own_data_only FROM app_user
                 WHERE id = ? AND features IS NOT NULL AND role NOT IN ('ADMIN','OPERATOR')""",
-                (rs, i) -> new Access(split(rs.getString(1)), split(rs.getString(2)), rs.getBoolean(3)), userId);
+                (rs, i) -> new Access(AccessCodec.parse(rs.getString(1), rs.getString(2)), rs.getBoolean(3)), userId);
         return a.isEmpty() ? null : a.getFirst();
     }
 
@@ -101,10 +105,10 @@ public class PermissionInterceptor implements HandlerInterceptor, WebMvcConfigur
         boolean read = Set.of("GET", "HEAD", "OPTIONS").contains(method);
         if (read && FeatureCatalog.LOOKUPS.contains(segment)) return null;
         String feature = FeatureCatalog.featureOf(segment);
-        if (feature == null || !access.features().contains(feature))
+        if (feature == null || !access.permissions().containsKey(feature))
             return "You don't have access to this part of the system.";
         String act = crud(method, parts);
-        if (!access.actions().contains(act))
+        if (!access.permissions().get(feature).contains(act))
             return "You don't have permission to " + act + " here.";
         return null;
     }

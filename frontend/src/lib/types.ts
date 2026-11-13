@@ -347,7 +347,8 @@ export interface AppUserRow {
   lastActiveAt: string | null;
   /** Custom access: ticked feature keys; null = the role's full access (admins). */
   features: string[] | null;
-  actions: string[] | null;
+  /** Custom access: feature → allowed actions (view, create, update, delete). */
+  permissions: Record<string, string[]> | null;
   ownDataOnly: boolean;
 }
 
