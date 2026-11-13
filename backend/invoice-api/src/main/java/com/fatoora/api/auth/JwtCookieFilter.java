@@ -38,11 +38,17 @@ public class JwtCookieFilter extends OncePerRequestFilter {
                     jwt.parse(c.getValue())
                             .flatMap(token -> users.findById(token.userId()))
                             .filter(AppUser::isEnabled)
-                            .map(u -> new CurrentUser(u.getId(), u.getOrganizationId(), u.getEmail(), u.getRole()))
-                            .ifPresent(user -> {
-                                var auth = new UsernamePasswordAuthenticationToken(user, null,
-                                        List.of(new SimpleGrantedAuthority("ROLE_" + user.role().name())));
-                                SecurityContextHolder.getContext().setAuthentication(auth);
+                            .ifPresent(u -> {
+                                var user = new CurrentUser(u.getId(), u.getOrganizationId(), u.getEmail(), u.getRole(),
+                                        u.hasCustomAccess() && u.isOwnDataOnly());
+                                // Per-user access: the ticked features and actions are enforced by PermissionInterceptor,
+                                // so the built-in role checks let the request through to it.
+                                var authorities = u.hasCustomAccess()
+                                        ? List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ROLE_ACCOUNTANT"),
+                                                  new SimpleGrantedAuthority("ROLE_BRANCH"), new SimpleGrantedAuthority("ROLE_VIEWER"))
+                                        : List.of(new SimpleGrantedAuthority("ROLE_" + user.role().name()));
+                                SecurityContextHolder.getContext().setAuthentication(
+                                        new UsernamePasswordAuthenticationToken(user, null, authorities));
                             });
                 }
             }

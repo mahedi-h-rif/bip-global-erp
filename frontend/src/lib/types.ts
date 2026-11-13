@@ -338,6 +338,16 @@ export interface AppUserRow {
   /** Audit-log entries this month. */
   actionsThisMonth: number;
   lastActiveAt: string | null;
+  /** Custom access: ticked feature keys; null = the role's full access (admins). */
+  features: string[] | null;
+  actions: string[] | null;
+  ownDataOnly: boolean;
+}
+
+/** What the user form offers (GET /users/access-options). */
+export interface AccessOptions {
+  features: { key: string; label: string; section: string; pages: string[]; api: string[] }[];
+  actions: string[];
 }
 
 /** One login's totals: records created by kind, and this month's invoices, value and quotations. */

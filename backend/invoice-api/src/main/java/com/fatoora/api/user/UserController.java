@@ -64,14 +64,23 @@ public class UserController {
     }
 
     public record UserDto(Long id, String email, String fullName, String role, boolean enabled,
-                          Instant lastLoginAt, Instant createdAt, long actionsThisMonth, Instant lastActiveAt) {
+                          Instant lastLoginAt, Instant createdAt, long actionsThisMonth, Instant lastActiveAt,
+                          /** Per-user access; null features = full access of the built-in role. */
+                          List<String> features, List<String> actions, boolean ownDataOnly) {
     }
 
+    /** What the user form offers: every feature (grouped by section) and the actions. */
+    public record AccessOptions(List<com.fatoora.api.settings.FeatureCatalog.Feature> features, List<String> actions) {
+    }
+
+    /** {@code features} null keeps the built-in role's access; a list switches the user to per-user access. */
     public record CreateUser(@NotBlank @Email String email, @NotBlank String fullName, @NotNull AppUser.Role role,
-                             @NotBlank @Size(min = 10, max = 100) String password) {
+                             @NotBlank @Size(min = 10, max = 100) String password,
+                             List<String> features, List<String> actions, boolean ownDataOnly) {
     }
 
-    public record UpdateUser(@NotBlank String fullName, @NotNull AppUser.Role role, boolean enabled) {
+    public record UpdateUser(@NotBlank String fullName, @NotNull AppUser.Role role, boolean enabled,
+                             List<String> features, List<String> actions, boolean ownDataOnly) {
     }
 
     public record PasswordReset(@NotBlank @Size(min = 10, max = 100) String password) {
@@ -165,10 +174,16 @@ public class UserController {
                 .toList();
     }
 
+    @GetMapping("/access-options")
+    public AccessOptions accessOptions() {
+        return new AccessOptions(com.fatoora.api.settings.FeatureCatalog.FEATURES, com.fatoora.api.settings.FeatureCatalog.ACTIONS);
+    }
+
     @PostMapping
     @Transactional
     public UserDto create(@Valid @RequestBody CreateUser body) {
         allowedRole(body.role());
+        noEscalation(body.role());
         String email = body.email().strip().toLowerCase(Locale.ROOT);
         if (users.findByEmailIgnoreCase(email).isPresent())
             throw new ApiException.Validation(Map.of("email", "A login with this email already exists"));
@@ -177,6 +192,7 @@ public class UserController {
         u.setEmail(email);
         u.setFullName(body.fullName().strip());
         u.setRole(body.role());
+        applyAccess(u, body.features(), body.actions(), body.ownDataOnly());
         u.setPasswordHash(encoder.encode(body.password()));
         users.save(u);
         audit.record(u.getOrganizationId(), "USER_CREATED", "user", u.getId(), email + " · " + u.getRole());
@@ -189,9 +205,13 @@ public class UserController {
         AppUser u = load(id);
         changeable(u);
         allowedRole(body.role());
+        noEscalation(body.role());
+        if (u.getRole() == AppUser.Role.ADMIN) noEscalation(AppUser.Role.ADMIN);
         boolean self = u.getId().equals(CurrentUser.get().userId());
         if (self && (!body.enabled() || body.role() != u.getRole()))
             throw new ApiException(HttpStatus.BAD_REQUEST, "self", "You cannot disable your own login or change your own role.");
+        if (self && u.hasCustomAccess())
+            throw new ApiException(HttpStatus.BAD_REQUEST, "self", "You cannot change your own access. Ask an admin.");
         boolean losesAdmin = u.getRole() == AppUser.Role.ADMIN && u.isEnabled()
                 && (body.role() != AppUser.Role.ADMIN || !body.enabled());
         if (losesAdmin && users.findByOrganizationIdAndRoleAndEnabledTrue(u.getOrganizationId(), AppUser.Role.ADMIN).size() <= 1)
@@ -201,9 +221,12 @@ public class UserController {
         if (!u.getFullName().equals(name)) changes.add("name " + u.getFullName() + " -> " + name);
         if (u.getRole() != body.role()) changes.add("role " + u.getRole() + " -> " + body.role());
         if (u.isEnabled() != body.enabled()) changes.add(body.enabled() ? "enabled" : "disabled");
+        String before = accessText(u);
         u.setFullName(name);
         u.setRole(body.role());
         u.setEnabled(body.enabled());
+        applyAccess(u, body.features(), body.actions(), body.ownDataOnly());
+        if (!before.equals(accessText(u))) changes.add("access " + before + " -> " + accessText(u));
         if (!changes.isEmpty())
             audit.record(u.getOrganizationId(), body.enabled() ? "USER_UPDATED" : "USER_DISABLED", "user", u.getId(),
                     u.getEmail() + ": " + String.join(", ", changes));
@@ -232,6 +255,44 @@ public class UserController {
             throw new ApiException(HttpStatus.FORBIDDEN, "provider_only", "Only your e-invoicing provider can manage provider logins.");
     }
 
+    /** Only a full admin may create admins or change an admin: a user given the Users feature can't raise anyone above themselves. */
+    private static void noEscalation(AppUser.Role role) {
+        if (role != AppUser.Role.ADMIN) return;
+        CurrentUser me = CurrentUser.get();
+        if (me.role() != AppUser.Role.ADMIN && !CurrentUser.isOperator())
+            throw new ApiException(HttpStatus.FORBIDDEN, "admin_only", "Only an admin can create or change admin logins.");
+    }
+
+    /**
+     * Admins and the provider always have full access. Any other user given a feature list is on per-user access:
+     * the role becomes Staff, "view" is always included, and the scope is all data or only their own.
+     */
+    private static void applyAccess(AppUser u, List<String> features, List<String> actions, boolean ownDataOnly) {
+        if (u.getRole() == AppUser.Role.ADMIN || u.getRole() == AppUser.Role.OPERATOR || features == null) {
+            u.setFeatures(null);
+            u.setActions(null);
+            u.setOwnDataOnly(false);
+            return;
+        }
+        List<String> f = features.stream().filter(com.fatoora.api.settings.FeatureCatalog::isFeature).distinct().toList();
+        if (f.isEmpty()) throw new ApiException.Validation(Map.of("features", "Tick at least one feature for this user"));
+        java.util.Set<String> a = new java.util.TreeSet<>(actions == null ? List.of() : actions);
+        a.retainAll(com.fatoora.api.settings.FeatureCatalog.ACTIONS);
+        a.add("view");
+        u.setRole(AppUser.Role.ACCOUNTANT);
+        u.setFeatures(String.join(",", f));
+        u.setActions(String.join(",", a));
+        u.setOwnDataOnly(ownDataOnly);
+    }
+
+    private static String accessText(AppUser u) {
+        return u.getFeatures() == null ? "full" : "[" + u.getFeatures() + "] [" + u.getActions() + "] " + (u.isOwnDataOnly() ? "own data" : "all data");
+    }
+
+    private static List<String> csv(String s) {
+        return s == null ? null : java.util.Arrays.stream(s.split(",")).filter(x -> !x.isBlank()).toList();
+    }
+
     private static void changeable(AppUser u) {
         if (u.getRole() == AppUser.Role.OPERATOR && !CurrentUser.isOperator())
             throw new ApiException(HttpStatus.FORBIDDEN, "provider_only", "Only your e-invoicing provider can manage provider logins.");
@@ -247,7 +308,8 @@ public class UserController {
     private static UserDto dto(AppUser u, Map<String, Object[]> act) {
         Object[] a = act.get(u.getEmail().toLowerCase(Locale.ROOT));
         return new UserDto(u.getId(), u.getEmail(), u.getFullName(), u.getRole().name(), u.isEnabled(),
-                u.getLastLoginAt(), u.getCreatedAt(), a == null ? 0 : (Long) a[0], a == null ? null : (Instant) a[1]);
+                u.getLastLoginAt(), u.getCreatedAt(), a == null ? 0 : (Long) a[0], a == null ? null : (Instant) a[1],
+                csv(u.getFeatures()), csv(u.getActions()), u.isOwnDataOnly());
     }
 
     private static Instant monthStart() {

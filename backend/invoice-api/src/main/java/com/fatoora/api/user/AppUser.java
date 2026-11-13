@@ -36,4 +36,15 @@ public class AppUser {
     private String totpSecretEnc;
     private Instant lastLoginAt;
     private Instant createdAt = Instant.now();
+    /** Per-user access: comma-separated feature keys (see FeatureCatalog); null when not on per-user access. */
+    private String features;
+    /** Per-user access: comma-separated actions (view, create, update, delete). */
+    private String actions;
+    /** Per-user access: sees and changes only the records this login created. */
+    private boolean ownDataOnly;
+
+    /** Admin-chosen access instead of a built-in role's: the features, actions and data scope above apply. */
+    public boolean hasCustomAccess() {
+        return features != null && role != Role.ADMIN && role != Role.OPERATOR;
+    }
 }

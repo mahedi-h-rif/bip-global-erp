@@ -52,6 +52,15 @@ public class PermissionInterceptor implements HandlerInterceptor, WebMvcConfigur
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !(auth.getPrincipal() instanceof CurrentUser user)) return true;
         String[] parts = req.getRequestURI().replaceFirst("^/api/v1/", "").split("/");
+        Access access = accessOf(jdbc, user.userId());
+        if (access != null) {
+            String denied = check(access, req.getMethod(), parts);
+            if (denied == null) return true;
+            res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            res.setContentType("application/json");
+            res.getWriter().write("{\"code\":\"forbidden\",\"message\":\"" + denied + "\",\"fields\":null}");
+            return false;
+        }
         String module = MODULE_BY_PREFIX.get(parts[0]);
         if (module == null) return true;
         Map<String, List<String>> perms = permissionsOf(jdbc, json, user.userId());
@@ -62,6 +71,56 @@ public class PermissionInterceptor implements HandlerInterceptor, WebMvcConfigur
         res.setContentType("application/json");
         res.getWriter().write("{\"code\":\"forbidden\",\"message\":\"Your role does not allow " + action + " in " + module + "\",\"fields\":null}");
         return false;
+    }
+
+    /** A user's admin-chosen access: ticked features, allowed actions. */
+    public record Access(Set<String> features, Set<String> actions, boolean ownDataOnly) {}
+
+    /** Null when the user is not on per-user access (admins, the provider, logins made before it existed). */
+    public static Access accessOf(JdbcTemplate jdbc, Long userId) {
+        if (userId == null) return null;
+        List<Access> a = jdbc.query("""
+                SELECT features, actions, own_data_only FROM app_user
+                WHERE id = ? AND features IS NOT NULL AND role NOT IN ('ADMIN','OPERATOR')""",
+                (rs, i) -> new Access(split(rs.getString(1)), split(rs.getString(2)), rs.getBoolean(3)), userId);
+        return a.isEmpty() ? null : a.getFirst();
+    }
+
+    static Set<String> split(String csv) {
+        if (csv == null || csv.isBlank()) return Set.of();
+        Set<String> out = new TreeSet<>();
+        for (String x : csv.split(",")) if (!x.isBlank()) out.add(x.trim());
+        return out;
+    }
+
+    /** Null when allowed; otherwise the message for the user. */
+    static String check(Access access, String method, String[] parts) {
+        String segment = parts[0];
+        if (FeatureCatalog.ALWAYS.contains(segment)) return null;
+        if ("settings".equals(segment) && parts.length > 1 && "my-permissions".equals(parts[1])) return null;
+        boolean read = Set.of("GET", "HEAD", "OPTIONS").contains(method);
+        if (read && FeatureCatalog.LOOKUPS.contains(segment)) return null;
+        String feature = FeatureCatalog.featureOf(segment);
+        if (feature == null || !access.features().contains(feature))
+            return "You don't have access to this part of the system.";
+        String act = crud(method, parts);
+        if (!access.actions().contains(act))
+            return "You don't have permission to " + act + " here.";
+        return null;
+    }
+
+    /** View, create, update or delete; issuing, approving, cancelling and paying change an existing record. */
+    static String crud(String method, String[] parts) {
+        String last = parts[parts.length - 1];
+        if ("POST".equals(method) && Set.of("approve", "cancel", "pay", "issue", "submit", "close", "deliver", "retry").contains(last))
+            return "update";
+        return switch (method) {
+            case "GET", "HEAD", "OPTIONS" -> "view";
+            case "POST" -> "create";
+            case "PUT", "PATCH" -> "update";
+            case "DELETE" -> "delete";
+            default -> "view";
+        };
     }
 
     static String action(String method, String[] parts) {

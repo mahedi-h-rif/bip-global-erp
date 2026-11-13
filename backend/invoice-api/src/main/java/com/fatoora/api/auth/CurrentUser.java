@@ -5,7 +5,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 /** The authenticated staff member, resolved from the session cookie on every request. */
-public record CurrentUser(Long userId, Long organizationId, String email, AppUser.Role role) implements java.security.Principal {
+public record CurrentUser(Long userId, Long organizationId, String email, AppUser.Role role, boolean ownDataOnly)
+        implements java.security.Principal {
+
+    public CurrentUser(Long userId, Long organizationId, String email, AppUser.Role role) {
+        this(userId, organizationId, email, role, false);
+    }
 
     /** The login email: what the audit log and "created by" record. */
     @Override
@@ -29,7 +34,7 @@ public record CurrentUser(Long userId, Long organizationId, String email, AppUse
      */
     public static String owner() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getPrincipal() instanceof CurrentUser u && u.role() == AppUser.Role.BRANCH ? u.email() : null;
+        return auth != null && auth.getPrincipal() instanceof CurrentUser u && (u.role() == AppUser.Role.BRANCH || u.ownDataOnly()) ? u.email() : null;
     }
 
     /** Whether the current user may see a record created by {@code createdBy}. */

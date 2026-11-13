@@ -137,7 +137,6 @@ const branchNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { href: "/settings", label: "Company", icon: Settings, exact: true },
   { href: "/settings/users", label: "Users", icon: UserCog },
-  { href: "/settings/roles", label: "Departments & permissions", icon: ShieldCheck },
   { href: "/settings/bank", label: "Bank details", icon: CreditCard },
   { href: "/settings/agreement", label: "Agreement template", icon: FileSignature },
   ...(WHATSAPP_ENABLED ? [{ href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle }] : []),
@@ -162,12 +161,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [meError]);
   const { data: org } = useSWR<Organization>(me ? "/organization" : null, fetcher);
   // Department roles: hide the modules the user's role does not grant (the API enforces the same rules).
-  const { data: perms } = useSWR<{ restricted: boolean; permissions: Record<string, string[]> }>(me ? "/settings/my-permissions" : null, fetcher);
+  const { data: perms } = useSWR<{ restricted: boolean; custom?: boolean; pages?: string[]; permissions: Record<string, string[]> }>(me ? "/settings/my-permissions" : null, fetcher);
   const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const loaded = !!me;
+
+  // Custom access: a page outside the ticked features (an old bookmark, the home page) sends the user to their first page.
+  useEffect(() => {
+    const customPages = perms?.custom ? perms.pages ?? [] : null;
+    if (!customPages || customPages.length === 0) return;
+    const ok = customPages.some((p) => p === pathname || (p !== "/" && p !== "/settings" && pathname.startsWith(p + "/")));
+    if (!ok) router.replace(customPages[0]);
+  }, [perms, pathname, router]);
 
   // The menu scrolls on its own, so keep the current page in view. The company name loading changes the
   // header's height, and with it how much of the menu shows, so this runs again then.
@@ -226,7 +233,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (["accounts", "dues", "erp-reports", "audit"].includes(p)) return "finance";
     return null;
   };
+  // Custom access: only the pages of the features ticked for this user.
+  const custom = perms?.custom === true;
+  const pageAllowed = (href: string) => (perms?.pages ?? []).some((p) =>
+    p === href || (p !== "/" && p !== "/settings" && href.startsWith(p + "/")));
   const allowed = (item: NavItem) => {
+    if (custom) return pageAllowed(item.href);
     const m = moduleOf(item.href);
     return !perms?.restricted || m == null || (perms.permissions[m] ?? []).includes("view");
   };
@@ -257,6 +269,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
   const name = org?.legalNameEn || org?.legalNameAr || t("SoudaCore ERP");
   const arabicName = org?.legalNameEn && org.legalNameAr ? org.legalNameAr : null;
+  // A menu section with its heading, left out when none of its pages is allowed.
+  const group = (title: string, items: NavItem[]) =>
+    items.some(allowed) ? <>{heading(title)}{items.map(link)}</> : null;
   const tools = !isBranch && (
     <>
       <VoiceAssistant className="shrink-0" />
@@ -325,32 +340,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         >
           {isBranch && branchNav.map(link)}
           {!isBranch && <>
-          {isAdmin && link(dashboardNav)}
+          {(isAdmin || custom) && link(dashboardNav)}
           {nav.map(link)}
-          {heading("Sales flow")}
-          {salesFlowNav.map(link)}
-          {heading("Purchasing")}
-          {purchasingNav.map(link)}
-          {heading("Logistics")}
-          {logisticsNav.map(link)}
-          {heading("Inventory")}
-          {inventoryNav.map(link)}
-          {heading("Due")}
-          {dueNav.map(link)}
-          {heading("Workforce")}
-          {workforceNav.map(link)}
-          {isAdmin && (
-            <>
-              {heading("Finance")}
-              {financeNav.map(link)}
-            </>
-          )}
-          {isAdmin && (
-            <>
-              {heading("Settings")}
-              {adminNav.map(link)}
-            </>
-          )}
+          {group("Sales flow", salesFlowNav)}
+          {group("Purchasing", purchasingNav)}
+          {group("Logistics", logisticsNav)}
+          {group("Inventory", inventoryNav)}
+          {group("Due", dueNav)}
+          {group("Workforce", workforceNav)}
+          {(isAdmin || custom) && group("Finance", financeNav)}
+          {(isAdmin || custom) && group("Settings", adminNav)}
           {me.role === "OPERATOR" && (
             <>
               {heading("Provider")}

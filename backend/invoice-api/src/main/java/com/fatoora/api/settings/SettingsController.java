@@ -116,8 +116,21 @@ public class SettingsController {
     /** What the signed-in user may do; the portal hides menus and buttons from it. Null permissions = unrestricted. */
     @GetMapping("/my-permissions")
     Map<String, Object> mine() {
-        Map<String, List<String>> p = PermissionInterceptor.permissionsOf(jdbc, json, CurrentUser.get().userId());
         Map<String, Object> out = new HashMap<>();
+        PermissionInterceptor.Access access = PermissionInterceptor.accessOf(jdbc, CurrentUser.get().userId());
+        if (access != null) {
+            // Per-user access: the portal shows only these features' menus and these actions' buttons.
+            out.put("restricted", true);
+            out.put("custom", true);
+            out.put("features", access.features());
+            out.put("actions", access.actions());
+            out.put("ownDataOnly", access.ownDataOnly());
+            out.put("pages", FeatureCatalog.FEATURES.stream().filter(f -> access.features().contains(f.key()))
+                    .flatMap(f -> f.pages().stream()).toList());
+            out.put("permissions", Map.of());
+            return out;
+        }
+        Map<String, List<String>> p = PermissionInterceptor.permissionsOf(jdbc, json, CurrentUser.get().userId());
         out.put("restricted", p != null);
         out.put("permissions", p == null ? Map.of() : p);
         return out;

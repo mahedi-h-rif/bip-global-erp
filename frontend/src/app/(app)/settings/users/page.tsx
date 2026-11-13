@@ -5,11 +5,10 @@ import { useState, type FormEvent } from "react";
 import useSWR from "swr";
 import { KeyRound, Pencil, Plus } from "lucide-react";
 import { ApiError, api, fetcher } from "@/lib/api";
-import type { AppUserRow, Me, UserRole } from "@/lib/types";
+import type { AccessOptions, AppUserRow, Me } from "@/lib/types";
 import { dateTime } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
-import { ROLES, roleLabel } from "@/lib/roles";
 
 export default function UsersPage() {
   const t = useT();
@@ -45,7 +44,7 @@ export default function UsersPage() {
               <thead>
                 <tr className="border-b border-line text-xs text-muted">
                   <th className="px-4 py-2.5 text-start font-medium">{t("Name")}</th>
-                  <th className="px-4 py-2.5 text-start font-medium">{t("Role")}</th>
+                  <th className="px-4 py-2.5 text-start font-medium">{t("Access")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Actions this month")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Last active")}</th>
@@ -62,7 +61,14 @@ export default function UsersPage() {
                         <Link href={`/settings/users/${u.id}`} className="font-medium text-brand hover:underline">{u.fullName}</Link>
                         <div className="text-xs text-muted" dir="ltr">{u.email}{u.id === me?.id ? ` · ${t("you")}` : ""}</div>
                       </td>
-                      <td className="px-4 py-2.5">{t(roleLabel(u.role))}</td>
+                      <td className="px-4 py-2.5">
+                        {u.role === "ADMIN" || u.role === "OPERATOR" ? t(u.role === "OPERATOR" ? "Provider" : "Admin") : u.features ? (
+                          <span className="text-xs">
+                            <b className="text-sm font-medium">{t("{n} features", { n: String(u.features.length) })}</b>
+                            <span className="block text-muted">{(u.actions ?? []).map((x) => t(ACTION_LABELS[x] ?? x)).join(" · ")} · {u.ownDataOnly ? t("own data") : t("all data")}</span>
+                          </span>
+                        ) : t("Full access (old role)")}
+                      </td>
                       <td className="px-4 py-2.5">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${u.enabled ? "bg-ok/10 text-ok" : "bg-bad/10 text-bad"}`}>
                           {u.enabled ? t("Active") : t("Disabled")}
@@ -94,31 +100,48 @@ export default function UsersPage() {
           </div>
         )}
       </Card>
-      <p className="mt-3 text-xs text-muted">{t("Admins see every user's invoices, quotations, agreements, cash book and history. Branch logins see only what they created.")}</p>
+      <p className="mt-3 text-xs text-muted">{t("Admins have every feature and see all data. Other users get only the features and actions ticked for them, and all data or only their own.")}</p>
     </>
   );
 }
 
+const ACTION_LABELS: Record<string, string> = { view: "View", create: "Create", update: "Update", delete: "Delete" };
+
+/** Admin (everything) or custom access: ticked features, ticked actions, all data or only their own. */
 function UserForm({ user, onDone }: { user: AppUserRow | null; onDone: (message?: string) => void }) {
   const t = useT();
+  const { data: options } = useSWR<AccessOptions>("/users/access-options", fetcher);
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
-  const [role, setRole] = useState<UserRole>(user?.role ?? "ACCOUNTANT");
+  const [admin, setAdmin] = useState(user?.role === "ADMIN" || user?.role === "OPERATOR");
+  const [features, setFeatures] = useState<string[] | null>(user?.features ?? null);
+  const [actions, setActions] = useState<string[]>(
+    user?.actions ?? (user?.role === "VIEWER" ? ["view"] : ["view", "create", "update", "delete"]));
+  const [ownDataOnly, setOwnDataOnly] = useState(user?.ownDataOnly || user?.role === "BRANCH");
   const [enabled, setEnabled] = useState(user?.enabled ?? true);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  // Users made before custom access start with every feature ticked, so nothing is taken away by accident.
+  const ticked = features ?? (user && !admin ? options?.features.map((f) => f.key) ?? [] : []);
+  const sections = options ? [...new Set(options.features.map((f) => f.section))] : [];
+  const toggle = (keys: string[], on: boolean) =>
+    setFeatures([...new Set(on ? [...ticked, ...keys] : ticked.filter((k) => !keys.includes(k)))]);
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    const access = admin
+      ? { role: "ADMIN", features: null, actions: null, ownDataOnly: false }
+      : { role: "ACCOUNTANT", features: ticked, actions: [...new Set(["view", ...actions])], ownDataOnly };
     try {
       if (user) {
-        await api("PUT", `/users/${user.id}`, { fullName, role, enabled });
+        await api("PUT", `/users/${user.id}`, { fullName, enabled, ...access });
         onDone(t("Saved."));
       } else {
-        await api("POST", "/users", { email, fullName, role, password });
+        await api("POST", "/users", { email, fullName, password, ...access });
         onDone(t("User added. They can sign in with this email and password."));
       }
     } catch (err) {
@@ -137,11 +160,6 @@ function UserForm({ user, onDone }: { user: AppUserRow | null; onDone: (message?
         <Field label={t("Email (sign-in)")} hint={user ? t("The sign-in email cannot be changed: records are kept under it.") : undefined}>
           <Input required type="email" dir="ltr" disabled={!!user} value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Field label={t("Role")} hint={t(ROLES.find((r) => r.value === role)?.hint ?? "")}>
-          <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
-            {ROLES.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}
-          </Select>
-        </Field>
         {user ? (
           <Field label={t("Status")} hint={t("A disabled user is signed out at once and cannot sign in. Their records stay.")}>
             <Select value={enabled ? "1" : "0"} onChange={(e) => setEnabled(e.target.value === "1")}>
@@ -154,8 +172,75 @@ function UserForm({ user, onDone }: { user: AppUserRow | null; onDone: (message?
             <Input required minLength={10} type="text" autoComplete="new-password" dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
         )}
+
+        <fieldset className="md:col-span-2">
+          <legend className="mb-2 text-sm font-medium">{t("Access")}</legend>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2"><input type="radio" name="kind" checked={admin} onChange={() => setAdmin(true)} className="accent-[var(--color-brand)]" />
+              <span><b>{t("Admin")}</b> <span className="text-muted">· {t("every feature, every action, all data")}</span></span></label>
+            <label className="inline-flex items-center gap-2"><input type="radio" name="kind" checked={!admin} onChange={() => setAdmin(false)} className="accent-[var(--color-brand)]" />
+              <span><b>{t("Custom access")}</b> <span className="text-muted">· {t("choose below")}</span></span></label>
+          </div>
+        </fieldset>
+
+        {!admin && (
+          <>
+            <fieldset className="rounded-lg border border-line p-4 md:col-span-2">
+              <legend className="px-1 text-sm font-medium">{t("Features this user can open")}</legend>
+              {!options ? <Spinner /> : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {sections.map((sec) => {
+                    const keys = options.features.filter((f) => f.section === sec).map((f) => f.key);
+                    const all = keys.every((k) => ticked.includes(k));
+                    return (
+                      <div key={sec}>
+                        <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                          <input type="checkbox" checked={all} onChange={(e) => toggle(keys, e.target.checked)} className="size-4 accent-[var(--color-brand)]" />
+                          {t(sec)}
+                        </label>
+                        <div className="space-y-1 ps-6">
+                          {options.features.filter((f) => f.section === sec).map((f) => (
+                            <label key={f.key} className="flex items-center gap-2 text-sm">
+                              <input type="checkbox" checked={ticked.includes(f.key)} onChange={(e) => toggle([f.key], e.target.checked)} className="size-4 accent-[var(--color-brand)]" />
+                              {t(f.label)}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </fieldset>
+
+            <fieldset className="rounded-lg border border-line p-4">
+              <legend className="px-1 text-sm font-medium">{t("What this user can do")}</legend>
+              <div className="flex flex-wrap gap-4 text-sm">
+                {(options?.actions ?? ["view", "create", "update", "delete"]).map((a) => (
+                  <label key={a} className="inline-flex items-center gap-2">
+                    <input type="checkbox" disabled={a === "view"} checked={a === "view" || actions.includes(a)}
+                      onChange={(e) => setActions(e.target.checked ? [...actions, a] : actions.filter((x) => x !== a))}
+                      className="size-4 accent-[var(--color-brand)]" />
+                    {t(ACTION_LABELS[a] ?? a)}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted">{t("View is always on. Issuing, approving and cancelling count as Update.")}</p>
+            </fieldset>
+
+            <fieldset className="rounded-lg border border-line p-4">
+              <legend className="px-1 text-sm font-medium">{t("Data this user can see")}</legend>
+              <div className="space-y-1.5 text-sm">
+                <label className="flex items-center gap-2"><input type="radio" name="scope" checked={!ownDataOnly} onChange={() => setOwnDataOnly(false)} className="accent-[var(--color-brand)]" />{t("Access all data")}</label>
+                <label className="flex items-center gap-2"><input type="radio" name="scope" checked={ownDataOnly} onChange={() => setOwnDataOnly(true)} className="accent-[var(--color-brand)]" />{t("Access only own data")}</label>
+              </div>
+              <p className="mt-2 text-xs text-muted">{t("Own data: only the invoices, quotations, orders, deliveries, agreements, payments and cash book entries this user created.")}</p>
+            </fieldset>
+          </>
+        )}
+
         <div className="flex gap-2 md:col-span-2">
-          <Button type="submit" loading={busy}>{user ? t("Save") : t("Add user")}</Button>
+          <Button type="submit" loading={busy} disabled={!admin && ticked.length === 0}>{user ? t("Save") : t("Add user")}</Button>
           <Button type="button" variant="secondary" onClick={() => onDone()}>{t("Cancel")}</Button>
         </div>
       </form>
