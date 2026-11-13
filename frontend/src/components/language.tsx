@@ -116,7 +116,6 @@ export function LanguagePrompt() {
           <h2 id="language-prompt-title" className="text-lg font-semibold">Choose your language</h2>
           {/* Every language's own wording, since the user hasn't chosen one yet. */}
           <p className="mt-1 text-sm text-muted">
-            <span lang="bn">আপনার ভাষা বেছে নিন</span> · <span lang="hi">अपनी भाषा चुनें</span> ·{" "}
             <span lang="ar" dir="rtl">اختر لغتك</span>
           </p>
         </div>

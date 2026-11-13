@@ -12,7 +12,7 @@
   --color-bad: #b42318;
 
   /* Latin first; Bangla, Devanagari and Arabic glyphs fall through to the script fonts. */
-  --font-sans: var(--font-inter), var(--font-noto-bengali), var(--font-noto-devanagari), var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
   --font-arabic: var(--font-plex-arabic), ui-sans-serif, sans-serif;
 }
 
@@ -22,8 +22,6 @@
   :focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
   [dir="rtl"], .ar { font-family: var(--font-arabic); }
   /* Script fonts first for Bangla and Hindi, so their text uses one matching font. */
-  html[lang="bn"] body, [lang="bn"] { font-family: var(--font-noto-bengali), var(--font-inter), ui-sans-serif, sans-serif; }
-  html[lang="hi"] body, [lang="hi"] { font-family: var(--font-noto-devanagari), var(--font-inter), ui-sans-serif, sans-serif; }
   [lang="en"] { font-family: var(--font-sans); }
   [lang="ar"] { font-family: var(--font-arabic); }
   input, select, textarea { font: inherit; }

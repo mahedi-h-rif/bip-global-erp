@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { useLanguage, type Lang } from "@/lib/i18n";
 
 /** The recognition locale for each portal language. */
-export const speechLocales: Record<Lang, string> = { en: "en-US", ar: "ar-SA", bn: "bn-BD", hi: "hi-IN" };
+export const speechLocales: Record<Lang, string> = { en: "en-US", ar: "ar-SA" };
 
 // The Web Speech API is not in TypeScript's DOM library yet: just the parts used here.
 type RecognitionResult = { isFinal: boolean; 0: { transcript: string } };
@@ -53,7 +53,7 @@ let memory: Lang | null = null;
 function readStored(): Lang | null {
   try {
     const v = window.localStorage.getItem(STORAGE_KEY);
-    return v === "en" || v === "bn" || v === "hi" || v === "ar" ? v : null;
+    return v === "en" || v === "ar" ? v : null;
   } catch {
     return memory;
   }

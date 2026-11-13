@@ -9,17 +9,15 @@
  * - The chosen language is saved per device in localStorage. No saved choice means "ask after login"
  *   (see LanguagePrompt), with English shown meanwhile.
  *
- * To add text: wrap it in t("...") and add the same English string as a key to the bn, hi and ar
- * dictionaries in src/lib/translations/.
+ * To add text: wrap it in t("...") and add the same English string as a key to the Arabic dictionary
+ * in src/lib/translations/ar.ts.
  */
 
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import type { FlagCode } from "@/components/flags";
 import { ar } from "@/lib/translations/ar";
-import { bn } from "@/lib/translations/bn";
-import { hi } from "@/lib/translations/hi";
 
-export type Lang = "en" | "bn" | "hi" | "ar";
+export type Lang = "en" | "ar";
 
 export type LanguageInfo = {
   code: Lang;
@@ -33,18 +31,16 @@ export type LanguageInfo = {
 
 export const languages: readonly LanguageInfo[] = [
   { code: "en", name: "English", english: "English", flags: ["gb"], dir: "ltr" },
-  { code: "bn", name: "বাংলা", english: "Bangla", flags: ["bd"], dir: "ltr" },
-  { code: "hi", name: "हिन्दी", english: "Hindi", flags: ["in", "pk"], dir: "ltr" },
   { code: "ar", name: "العربية", english: "Arabic", flags: ["sa"], dir: "rtl" },
 ];
 
-const dictionaries: Record<Lang, Record<string, string>> = { en: {}, bn, hi, ar };
+const dictionaries: Record<Lang, Record<string, string>> = { en: {}, ar };
 
 const STORAGE_KEY = "fatoora.language";
 const CHANGE_EVENT = "fatoora-language-change";
 
 function isLang(v: unknown): v is Lang {
-  return v === "en" || v === "bn" || v === "hi" || v === "ar";
+  return v === "en" || v === "ar";
 }
 
 /** The saved language on this device, or null when none was chosen yet (or storage is blocked). */

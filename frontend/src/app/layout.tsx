@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans_Arabic, Inter, Noto_Sans_Bengali, Noto_Sans_Devanagari } from "next/font/google";
+import { IBM_Plex_Sans_Arabic, Inter } from "next/font/google";
 import { LanguageProvider } from "@/lib/i18n";
 import "./globals.css";
 
@@ -9,9 +9,6 @@ const plexArabic = IBM_Plex_Sans_Arabic({
   weight: ["400", "500", "700"],
   variable: "--font-plex-arabic",
 });
-// Bangla and Hindi scripts. Not preloaded: the browser fetches them only when that script is on the page.
-const notoBengali = Noto_Sans_Bengali({ subsets: ["bengali"], variable: "--font-noto-bengali", preload: false });
-const notoDevanagari = Noto_Sans_Devanagari({ subsets: ["devanagari"], variable: "--font-noto-devanagari", preload: false });
 
 export const metadata: Metadata = {
   title: { default: "SoudaCore ERP", template: "%s · SoudaCore ERP" },
@@ -25,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${plexArabic.variable} ${notoBengali.variable} ${notoDevanagari.variable}`}
+      className={`${inter.variable} ${plexArabic.variable}`}
     >
       <body className="min-h-screen">
         <LanguageProvider>{children}</LanguageProvider>
