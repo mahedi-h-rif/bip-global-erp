@@ -88,7 +88,8 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
       const du = defaultUnit(itemUnits, p.id);
       setLine(i, { name: p.name, unitPrice: du?.price ?? p.unitPrice, productId: p.id, unitCode: du?.unitCode ?? p.unitCode ?? "PCE" });
     }
-    else setLine(i, { name, productId: p ? p.id : null });
+    // Picked from the list again ("code · name"): keep only the name, so the item code never reaches the document.
+    else setLine(i, { name: p ? p.name : name, productId: p ? p.id : null });
   }
 
   function payload() {

@@ -338,6 +338,15 @@ public class InvoiceService {
             if (l.productId() != null && products.findByIdAndOrganizationId(l.productId(), inv.getOrganizationId()).isEmpty())
                 throw ApiException.notFound("Product");
         inv.replaceLines(req.lines().stream().map(this::toEntity).toList());
+        // The item code is internal: a line picked as "code · name" keeps only the name on the invoice.
+        for (InvoiceLineEntity e : inv.getLines()) {
+            if (e.getProductId() == null || e.getName() == null) continue;
+            products.findByIdAndOrganizationId(e.getProductId(), inv.getOrganizationId()).ifPresent(p -> {
+                String code = p.getNumber();
+                if (code != null && !code.isBlank() && e.getName().startsWith(code + " · ") && e.getName().length() > code.length() + 3)
+                    e.setName(e.getName().substring(code.length() + 3).trim());
+            });
+        }
         recalc(inv);
     }
 
