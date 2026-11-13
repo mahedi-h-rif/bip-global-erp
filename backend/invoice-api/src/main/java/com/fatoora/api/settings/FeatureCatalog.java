@@ -53,7 +53,7 @@ public final class FeatureCatalog {
     public static final List<String> ACTIONS = List.of("view", "create", "update", "delete");
 
     /** Paths anyone signed in may call: sign-in, the public share links, cross-document lookups. */
-    static final Set<String> ALWAYS = Set.of("auth", "public", "health", "relations", "search");
+    static final Set<String> ALWAYS = Set.of("auth", "public", "health", "relations", "search", "suggest");
 
     /** Lists other pages need to fill their pickers (a customer on an invoice, a product on an order): read-only. */
     static final Set<String> LOOKUPS = Set.of("customers", "products", "warehouses", "stock", "suppliers", "organization", "agreement-template");

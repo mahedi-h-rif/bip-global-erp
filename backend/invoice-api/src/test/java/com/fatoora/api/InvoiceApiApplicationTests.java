@@ -247,6 +247,57 @@ class InvoiceApiApplicationTests {
         }
     }
 
+    @Test
+    @Order(20)
+    void customAccessUserGetsOnlyTickedFeaturesAndActions() throws Exception {
+        String email = "quotes-" + System.nanoTime() + "@test.local";
+        body(call("POST", "/users", Map.of("email", email, "fullName", "Quotes Only", "role", "ACCOUNTANT",
+                "password", "quotes-only-secret-1", "features", java.util.List.of("quotations"),
+                "actions", java.util.List.of("view", "create"), "ownDataOnly", true)), 200);
+
+        var jar = new CookieManager();
+        var client = HttpClient.newBuilder().cookieHandler(jar).build();
+        client.send(HttpRequest.newBuilder(URI.create(base + "/auth/csrf")).build(), HttpResponse.BodyHandlers.ofString());
+        java.util.function.BiFunction<String, Object, HttpResponse<String>> as = (spec, payload) -> {
+            try {
+                String[] parts = spec.split(" ", 2);
+                String token = jar.getCookieStore().getCookies().stream()
+                        .filter(c -> c.getName().equals("XSRF-TOKEN")).map(HttpCookie::getValue).findFirst().orElseThrow();
+                var req = HttpRequest.newBuilder(URI.create(base + parts[1])).header("Content-Type", "application/json")
+                        .header("X-XSRF-TOKEN", token)
+                        .method(parts[0], payload == null ? HttpRequest.BodyPublishers.noBody()
+                                : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)));
+                return client.send(req.build(), HttpResponse.BodyHandlers.ofString());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        };
+        assertEquals(200, as.apply("POST /auth/login", Map.of("email", email, "password", "quotes-only-secret-1")).statusCode());
+
+        var perms = json.readTree(as.apply("GET /settings/my-permissions", null).body());
+        assertTrue(perms.get("custom").asBoolean());
+        assertTrue(perms.get("pages").toString().contains("/quotations"));
+
+        assertEquals(200, as.apply("GET /quotations", null).statusCode(), "ticked feature");
+        assertEquals(200, as.apply("GET /customers", null).statusCode(), "pickers stay readable");
+        var created = as.apply("POST /quotations", Map.of("clientName", "Walk-in buyer",
+                "lines", new Object[]{Map.of("name", "Carton tape", "quantity", 1, "unitCode", "PCE", "unitPrice", 5, "vatRate", 15)}));
+        assertTrue(created.statusCode() == 200 || created.statusCode() == 201, created.body());
+        long qid = json.readTree(created.body()).get("id").asLong();
+
+        assertEquals(403, as.apply("DELETE /quotations/" + qid, null).statusCode(), "delete not ticked");
+        assertEquals(403, as.apply("GET /invoices", null).statusCode(), "invoices not ticked");
+        assertEquals(403, as.apply("GET /users", null).statusCode(), "users not ticked");
+        assertEquals(403, as.apply("POST /customers", Map.of("nameEn", "X")).statusCode(), "creating a customer needs Customers");
+
+        // Own data only: the quotations list holds only what this login created.
+        var list = json.readTree(as.apply("GET /quotations", null).body());
+        for (var q : list) assertEquals(qid, q.get("id").asLong(), "only own quotations");
+
+        var names = json.readTree(as.apply("GET /suggest?field=party&q=walk", null).body());
+        assertTrue(names.toString().contains("Walk-in buyer"), "suggests names already entered: " + names);
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {
