@@ -1639,4 +1639,5 @@ export const ar: Record<string, string> = {
   "all data": "كل البيانات",
   "Full access (old role)": "وصول كامل (دور قديم)",
   "Admins have every feature and see all data. Other users get only the features and actions ticked for them, and all data or only their own.": "للمسؤولين كل الميزات ويرون كل البيانات. يحصل المستخدمون الآخرون فقط على الميزات والإجراءات المحددة لهم، وكل البيانات أو بياناتهم فقط.",
+  "Select country…": "اختر الدولة…",
 };

@@ -11,6 +11,7 @@ import { money, todayKsa, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, RequiredMark, Select } from "@/components/ui";
 import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 const emptyLine = (): QuotationLine => ({ name: "", quantity: 1, unitCode: "PCE", unitPrice: "", vatRate: 15 });
 
@@ -195,7 +196,7 @@ export function QuotationEditor({ initial }: { initial?: Quotation }) {
           </Field>
           {!customerId && (
             <Field label={t("Client name")}>
-              <Input required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("Company or person")} />
+              <SuggestInput field="party" required value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder={t("Company or person")} />
             </Field>
           )}
           <div className="grid grid-cols-3 gap-4 md:col-span-2">

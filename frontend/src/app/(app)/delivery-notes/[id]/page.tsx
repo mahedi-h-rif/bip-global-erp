@@ -13,6 +13,7 @@ import { DeliveryNoteEditor, deliveryStatusLabel } from "@/components/delivery-n
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from "@/components/invoice-quantities";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 export default function DeliveryNotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -99,7 +100,7 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
             onSubmit={(e) => { e.preventDefault(); void act("deliver", () => api("POST", `/delivery-notes/${n.id}/deliver`, { receivedBy })); }}
           >
             <Field label={t("Received by")} className="min-w-64 flex-1">
-              <Input required dir="auto" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} placeholder={t("Name of the person who signed")} />
+              <SuggestInput field="person" required dir="auto" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} placeholder={t("Name of the person who signed")} />
             </Field>
             <Button type="submit" loading={busy === "deliver"}><CheckCircle2 className="size-4" aria-hidden /> {t("Delivered")}</Button>
           </form>

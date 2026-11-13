@@ -10,6 +10,7 @@ import { todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { AgreementTextForm, parseAgreement, serializeAgreement } from "@/components/agreement-form";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 export const agreementStatusLabel: Record<AgreementStatus, string> = {
   DRAFT: "Draft",
@@ -126,7 +127,7 @@ function Form({ initial, template, customers, router }: {
               {customers.map((c) => <option key={c.id} value={c.id}>{c.nameEn || c.nameAr}</option>)}
             </Select>
           </Field>
-          <Field label={t("Client name")}><Input required value={clientName} onChange={(e) => setClientName(e.target.value)} /></Field>
+          <Field label={t("Client name")}><SuggestInput field="party" required value={clientName} onChange={(e) => setClientName(e.target.value)} /></Field>
           <Field label={t("Client details")} optional hint={t("CR or ID, address, mobile. One per line.")} className="md:col-span-2">
             <textarea dir="auto" rows={3} className={textareaClass} value={clientDetails} onChange={(e) => setClientDetails(e.target.value)} />
           </Field>

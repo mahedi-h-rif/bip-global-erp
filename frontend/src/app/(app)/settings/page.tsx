@@ -6,6 +6,7 @@ import { api, ApiError, fetcher, uploadFile } from "@/lib/api";
 import type { Me, Organization } from "@/lib/types";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { CityInput, SuggestInput } from "@/components/suggest";
 
 export default function CompanySettingsPage() {
   const { data, mutate } = useSWR<Organization>("/organization", fetcher);
@@ -131,10 +132,10 @@ function CompanyForm({ initial, provider, onSaved }: {
           <CardHeader title={t("National address")} />
           <fieldset disabled={locked} className="grid gap-4 p-5 md:grid-cols-4">
             <Field label={t("Building no.")}><Input required maxLength={4} value={org.buildingNumber} onChange={set("buildingNumber")} /></Field>
-            <Field label={t("Street")} className="md:col-span-2"><Input required value={org.street} onChange={set("street")} /></Field>
+            <Field label={t("Street")} className="md:col-span-2"><SuggestInput field="street" required value={org.street} onChange={set("street")} /></Field>
             <Field label={t("Additional no.")} optional><Input maxLength={4} value={org.additionalNumber ?? ""} onChange={set("additionalNumber")} /></Field>
-            <Field label={t("District")}><Input required value={org.district} onChange={set("district")} /></Field>
-            <Field label={t("City")}><Input required value={org.city} onChange={set("city")} /></Field>
+            <Field label={t("District")}><SuggestInput field="district" required value={org.district} onChange={set("district")} /></Field>
+            <Field label={t("City")}><CityInput required value={org.city} onChange={set("city")} /></Field>
             <Field label={t("Postal code")}><Input required maxLength={5} value={org.postalCode} onChange={set("postalCode")} /></Field>
           </fieldset>
         </Card>

@@ -10,6 +10,7 @@ import { Alert, Button, Card, CardHeader, Empty, Field, Input, Select } from "@/
 import { MonthlyChart } from "@/components/worker-charts";
 import { DayPicker } from "@/components/worker-days";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 export const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -238,7 +239,7 @@ function IncomeForm({ initial, defaultDate, onDone, onCancel }: { initial?: Acco
         <span className="text-xs text-muted">{t("Optional — reads a ZATCA QR or the invoice text to fill the amount and date.")}</span>
       </div>
       <Field label={t("Date")}><Input type="date" required value={f.date} onChange={set("date")} /></Field>
-      <Field label={t("Customer name")} className="lg:col-span-2"><Input value={f.customerName} onChange={set("customerName")} dir="auto" /></Field>
+      <Field label={t("Customer name")} className="lg:col-span-2"><SuggestInput field="party" value={f.customerName} onChange={set("customerName")} dir="auto" /></Field>
       <Field label={t("Mobile")}><Input value={f.mobile} onChange={set("mobile")} inputMode="tel" dir="ltr" /></Field>
       <Field label={t("Total amount")}><Input type="number" min="0" step="0.01" required value={f.amount} onChange={set("amount")} className="text-end" /></Field>
       <Field label={t("Paid")}><Input type="number" min="0" step="0.01" value={f.paid} onChange={set("paid")} className="text-end" /></Field>

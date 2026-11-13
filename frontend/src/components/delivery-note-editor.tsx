@@ -10,6 +10,7 @@ import type { Customer, DeliveryLine, DeliveryNote, DeliveryNoteRequest, Product
 import { todayKsa, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 export const deliveryStatusLabel: Record<DeliveryNote["status"], string> = {
   DRAFT: "Draft",
@@ -70,13 +71,13 @@ export function DeliveryNoteEditor({ initial, invoiceNumber, orderNumber }: { in
               </Field>
               {!d.customerId && (
                 <Field label={t("Client name")}>
-                  <Input required dir="auto" value={d.clientName ?? ""} onChange={(e) => setD({ ...d, clientName: e.target.value })} />
+                  <SuggestInput field="party" required dir="auto" value={d.clientName ?? ""} onChange={(e) => setD({ ...d, clientName: e.target.value })} />
                 </Field>
               )}
             </>
           )}
           <Field label={t("Delivery address")} optional>
-            <Input dir="auto" value={d.deliveryAddress ?? ""} onChange={(e) => setD({ ...d, deliveryAddress: e.target.value })} />
+            <SuggestInput field="address" dir="auto" value={d.deliveryAddress ?? ""} onChange={(e) => setD({ ...d, deliveryAddress: e.target.value })} />
           </Field>
           <Field label={t("Delivery date")}>
             <Input type="date" value={d.deliveryDate ?? ""} onChange={(e) => setD({ ...d, deliveryDate: e.target.value })} />
@@ -90,7 +91,7 @@ export function DeliveryNoteEditor({ initial, invoiceNumber, orderNumber }: { in
             </Field>
           )}
           <Field label={t("Driver name")} optional>
-            <Input dir="auto" value={d.driverName ?? ""} onChange={(e) => setD({ ...d, driverName: e.target.value })} />
+            <SuggestInput field="person" dir="auto" value={d.driverName ?? ""} onChange={(e) => setD({ ...d, driverName: e.target.value })} />
           </Field>
           <Field label={t("Driver mobile")} optional>
             <Input dir="ltr" value={d.driverPhone ?? ""} onChange={(e) => setD({ ...d, driverPhone: e.target.value })} />

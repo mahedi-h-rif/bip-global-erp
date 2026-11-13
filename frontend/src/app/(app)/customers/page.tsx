@@ -11,6 +11,7 @@ import { SearchInput } from "@/components/voice";
 import { searchCustomers } from "@/lib/voice-parse";
 import { useT } from "@/lib/i18n";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { CityInput, CountrySelect, SuggestInput } from "@/components/suggest";
 
 const blank: Customer = { nameAr: "", nameEn: "", vatNumber: "", otherIdScheme: "CRN", countryCode: "SA", remindersEnabled: true };
 
@@ -51,8 +52,8 @@ function CustomerForm({ initial, onDone }: { initial: Customer; onDone: () => vo
         {error && <Alert tone="bad" title={t("Not saved")}>{error.fields ? t("Please correct the highlighted fields.") : error.message}</Alert>}
         <RequiredLegend />
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("Name (English)")} error={fe("nameEn")}><Input required value={c.nameEn} onChange={set("nameEn")} /></Field>
-          <Field label={t("Name (Arabic)")} optional><Input dir="rtl" value={c.nameAr ?? ""} onChange={set("nameAr")} /></Field>
+          <Field label={t("Name (English)")} error={fe("nameEn")}><SuggestInput field="party" required value={c.nameEn} onChange={set("nameEn")} /></Field>
+          <Field label={t("Name (Arabic)")} optional><SuggestInput field="party" dir="rtl" value={c.nameAr ?? ""} onChange={set("nameAr")} /></Field>
           <Field label={t("VAT number")} optional hint={t("15 digits, starts and ends with 3")} error={fe("vatNumber")}><Input inputMode="numeric" maxLength={15} value={c.vatNumber ?? ""} onChange={set("vatNumber")} /></Field>
           <div className="grid grid-cols-[8rem_1fr] gap-3">
             <Field label={t("Other ID type")}>
@@ -89,25 +90,14 @@ function CustomerForm({ initial, onDone }: { initial: Customer; onDone: () => vo
           </summary>
           <div className="grid gap-4 border-t border-line p-4 md:grid-cols-4">
             <Field label={t("Country")} error={fe("countryCode")}>
-              <Select value={(c.countryCode ?? "SA").toUpperCase()} onChange={set("countryCode")}>
-                <option value="SA">{t("Saudi Arabia")} (SA)</option>
-                <option value="AE">{t("United Arab Emirates")} (AE)</option>
-                <option value="BH">{t("Bahrain")} (BH)</option>
-                <option value="KW">{t("Kuwait")} (KW)</option>
-                <option value="OM">{t("Oman")} (OM)</option>
-                <option value="QA">{t("Qatar")} (QA)</option>
-                <option value="BD">{t("Bangladesh")} (BD)</option>
-                <option value="IN">{t("India")} (IN)</option>
-                <option value="PK">{t("Pakistan")} (PK)</option>
-                <option value="EG">{t("Egypt")} (EG)</option>
-              </Select>
+              <CountrySelect value={c.countryCode ?? "SA"} onChange={(v) => setC({ ...c, countryCode: v })} />
             </Field>
             <Field label={t("Building no.")} optional hint={ksa ? t("4 digits") : undefined} error={fe("buildingNumber")}>
               <Input inputMode={ksa ? "numeric" : "text"} maxLength={ksa ? 4 : 20} value={c.buildingNumber ?? ""} onChange={set("buildingNumber")} />
             </Field>
-            <Field label={t("Street")} optional className="md:col-span-2"><Input value={c.street ?? ""} onChange={set("street")} /></Field>
-            <Field label={t("District")} optional><Input value={c.district ?? ""} onChange={set("district")} /></Field>
-            <Field label={t("City")} optional><Input value={c.city ?? ""} onChange={set("city")} /></Field>
+            <Field label={t("Street")} optional className="md:col-span-2"><SuggestInput field="street" value={c.street ?? ""} onChange={set("street")} /></Field>
+            <Field label={t("District")} optional><SuggestInput field="district" value={c.district ?? ""} onChange={set("district")} /></Field>
+            <Field label={t("City")} optional><CityInput country={c.countryCode} value={c.city ?? ""} onChange={set("city")} /></Field>
             <Field label={t("Postal code")} optional hint={ksa ? t("5 digits") : undefined} error={fe("postalCode")}>
               <Input inputMode={ksa ? "numeric" : "text"} maxLength={ksa ? 5 : 10} value={c.postalCode ?? ""} onChange={set("postalCode")} />
             </Field>

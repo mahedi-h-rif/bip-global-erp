@@ -8,6 +8,7 @@ import type { Employee, Holiday, LeaveEntry, SalaryAdvance } from "@/lib/types";
 import { date, money, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { CountrySelect, SuggestInput } from "@/components/suggest";
 
 type Tab = "employees" | "leave" | "holidays" | "advances";
 const errText = (e: unknown, f: string) => (e instanceof ApiError ? (e.fields ? Object.values(e.fields).join(", ") : e.message) : f);
@@ -38,9 +39,9 @@ function EmployeeForm({ initial, onDone }: { initial: Employee; onDone: () => vo
         {error && <Alert tone="bad" title={t("Not saved")}>{error}</Alert>}
         <div className="grid gap-4 md:grid-cols-4">
           <Field label={t("Code")} optional><Input dir="ltr" value={e.code ?? ""} onChange={f("code")} placeholder="E0001" /></Field>
-          <Field label={t("Name")}><Input required dir="auto" value={e.name} onChange={f("name")} /></Field>
+          <Field label={t("Name")}><SuggestInput field="person" required dir="auto" value={e.name} onChange={f("name")} /></Field>
           <Field label={t("Arabic name")} optional><Input dir="rtl" value={e.nameAr ?? ""} onChange={f("nameAr")} /></Field>
-          <Field label={t("Nationality (2 letters)")}><Input dir="ltr" maxLength={2} value={e.nationality ?? "SA"} onChange={f("nationality")} /></Field>
+          <Field label={t("Nationality")}><CountrySelect value={e.nationality ?? "SA"} onChange={(v) => f("nationality")({ target: { value: v } })} /></Field>
           <Field label={t("Job title")} optional><Input dir="auto" value={e.jobTitle ?? ""} onChange={f("jobTitle")} /></Field>
           <Field label={t("Department")} optional><Input dir="auto" value={e.department ?? ""} onChange={f("department")} /></Field>
           <Field label={t("Join date")}><Input required type="date" value={e.joinDate} onChange={f("joinDate")} /></Field>

@@ -11,6 +11,7 @@ import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Selec
 import { currencies } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { RelationshipMapButton } from "@/components/relationship-map";
+import { CityInput, CountrySelect, SuggestInput } from "@/components/suggest";
 
 function SupplierForm({ initial, onDone }: { initial: Supplier; onDone: () => void }) {
   const t = useT();
@@ -41,16 +42,16 @@ function SupplierForm({ initial, onDone }: { initial: Supplier; onDone: () => vo
         {error && <Alert tone="bad" title={t("Not saved")}>{error}</Alert>}
         <div className="grid gap-4 md:grid-cols-3">
           <Field label={t("Code")} optional hint={t("Auto if left empty")}><Input dir="ltr" value={s.code ?? ""} onChange={f("code")} placeholder="V00001" /></Field>
-          <Field label={t("Name")}><Input required dir="auto" value={s.name} onChange={f("name")} /></Field>
+          <Field label={t("Name")}><SuggestInput field="party" required dir="auto" value={s.name} onChange={f("name")} /></Field>
           <Field label={t("Arabic name")} optional><Input dir="rtl" value={s.nameAr ?? ""} onChange={f("nameAr")} /></Field>
           <Field label={t("VAT number")} optional><Input dir="ltr" value={s.vatNumber ?? ""} onChange={f("vatNumber")} /></Field>
           <Field label={t("CR number")} optional><Input dir="ltr" value={s.crNumber ?? ""} onChange={f("crNumber")} /></Field>
-          <Field label={t("Contact person")} optional><Input dir="auto" value={s.contactPerson ?? ""} onChange={f("contactPerson")} /></Field>
+          <Field label={t("Contact person")} optional><SuggestInput field="person" dir="auto" value={s.contactPerson ?? ""} onChange={f("contactPerson")} /></Field>
           <Field label={t("Phone")} optional><Input dir="ltr" value={s.phone ?? ""} onChange={f("phone")} /></Field>
           <Field label={t("Email")} optional><Input type="email" dir="ltr" value={s.email ?? ""} onChange={f("email")} /></Field>
-          <Field label={t("City")} optional><Input dir="auto" value={s.city ?? ""} onChange={f("city")} /></Field>
-          <Field label={t("Address")} optional className="md:col-span-2"><Input dir="auto" value={s.address ?? ""} onChange={f("address")} /></Field>
-          <Field label={t("Country (2 letters)")}><Input dir="ltr" maxLength={2} value={s.country ?? "SA"} onChange={f("country")} /></Field>
+          <Field label={t("City")} optional><CityInput country={s.country} dir="auto" value={s.city ?? ""} onChange={f("city")} /></Field>
+          <Field label={t("Address")} optional className="md:col-span-2"><SuggestInput field="address" dir="auto" value={s.address ?? ""} onChange={f("address")} /></Field>
+          <Field label={t("Country")}><CountrySelect value={s.country ?? "SA"} onChange={(v) => f("country")({ target: { value: v } })} /></Field>
           <Field label={t("Currency")}>
             <Select value={s.currency ?? "SAR"} onChange={f("currency")}>{currencies.map((c) => <option key={c}>{c}</option>)}</Select>
           </Field>

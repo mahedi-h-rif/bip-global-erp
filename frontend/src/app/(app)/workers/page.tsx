@@ -29,6 +29,7 @@ import { DayPicker, WorkerDaily } from "@/components/worker-days";
 import { DailyAttendance } from "@/components/worker-attendance";
 import { WorkerLeaves } from "@/components/worker-leaves";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
@@ -95,10 +96,10 @@ function WorkerForm({ initial, defaultDaily, onDone, onCancel }: { initial?: Wor
   return (
     <form onSubmit={submit} className="grid gap-3 border-b border-line bg-canvas/60 p-4 sm:grid-cols-2 lg:grid-cols-6">
       <Field label={t("Worker name")} className="lg:col-span-2">
-        <Input required autoFocus value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
+        <SuggestInput field="person" required autoFocus value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
       </Field>
       <Field label={t("Mobile")}><Input value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} inputMode="tel" /></Field>
-      <Field label={t("Nationality")}><Input value={d.nationality} onChange={(e) => setD({ ...d, nationality: e.target.value })} /></Field>
+      <Field label={t("Nationality")}><SuggestInput field="nationality" value={d.nationality} onChange={(e) => setD({ ...d, nationality: e.target.value })} /></Field>
       <Field label={t("Status")}>
         <Select value={d.active ? "1" : "0"} onChange={(e) => setD({ ...d, active: e.target.value === "1" })}>
           <option value="1">{t("Active")}</option>

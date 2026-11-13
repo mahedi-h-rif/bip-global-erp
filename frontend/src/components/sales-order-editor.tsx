@@ -10,6 +10,7 @@ import { money, todayKsa, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea } from "@/components/ui";
 import { UnitSelect, defaultUnit, useItemUnits } from "@/components/units";
 import { useT } from "@/lib/i18n";
+import { SuggestInput } from "@/components/suggest";
 
 export const salesOrderStatusLabel: Record<SalesOrder["status"], string> = {
   OPEN: "Open",
@@ -94,7 +95,7 @@ export function SalesOrderEditor({ initial, quotationNumber }: { initial: SalesO
           </Field>
           {!o.customerId && (
             <Field label={t("Client name")}>
-              <Input required dir="auto" value={o.clientName ?? ""} onChange={(e) => setO({ ...o, clientName: e.target.value })} />
+              <SuggestInput field="party" required dir="auto" value={o.clientName ?? ""} onChange={(e) => setO({ ...o, clientName: e.target.value })} />
             </Field>
           )}
           <Field label={t("Customer PO no.")} optional hint={t("Printed on deliveries and invoices")}>
