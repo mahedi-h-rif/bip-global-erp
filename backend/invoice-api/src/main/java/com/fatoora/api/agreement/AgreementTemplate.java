@@ -20,6 +20,8 @@ public class AgreementTemplate {
     private Long organizationId;
     private String title;
     private String body;
+    private String titleAr;
+    private String bodyAr;
     private String updatedBy;
     private Instant updatedAt = Instant.now();
 

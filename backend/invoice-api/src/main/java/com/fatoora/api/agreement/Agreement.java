@@ -28,6 +28,9 @@ public class Agreement {
     private String clientDetails;
     private String title;
     private String body;
+    /** Arabic version; when empty the Arabic PDF uses the standard Arabic text. */
+    private String titleAr;
+    private String bodyAr;
     private LocalDate agreementDate;
 
     @Enumerated(EnumType.STRING)

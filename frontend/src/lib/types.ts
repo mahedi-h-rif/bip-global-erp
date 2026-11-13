@@ -433,6 +433,9 @@ export interface Agreement {
   clientDetails: string | null;
   title: string;
   body: string;
+  /** Arabic version, printed by the Arabic PDF. */
+  titleAr?: string | null;
+  bodyAr?: string | null;
   agreementDate: string;
   status: AgreementStatus;
   signedOn: string | null;
@@ -445,6 +448,8 @@ export interface Agreement {
 export interface AgreementTemplate {
   title: string;
   body: string;
+  titleAr?: string | null;
+  bodyAr?: string | null;
   standard: boolean;
   updatedBy: string | null;
   updatedAt: string | null;

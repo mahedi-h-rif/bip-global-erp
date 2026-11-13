@@ -382,6 +382,22 @@ class InvoiceApiApplicationTests {
         assertEquals(400, http.send(exe, HttpResponse.BodyHandlers.ofString()).statusCode(), "only photos and PDFs");
     }
 
+    @Test
+    @Order(25)
+    void agreementPrintsInEnglishAndArabic() throws Exception {
+        long id = body(call("POST", "/agreements", Map.of("clientName", "Al Noor Trading Est.")), 201).get("id").asLong();
+        for (String lang : new String[]{"en", "ar"}) {
+            var pdf = http.send(HttpRequest.newBuilder(URI.create(base + "/agreements/" + id + "/pdf?lang=" + lang)).build(),
+                    HttpResponse.BodyHandlers.ofByteArray());
+            assertEquals(200, pdf.statusCode());
+            try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf.body())) {
+                String text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+                assertTrue(lang.equals("en") ? text.contains("General Supply Agreement") : text.contains("Al Noor Trading Est."), lang);
+                if (lang.equals("ar")) assertTrue(text.codePoints().filter(c -> c >= 0x0600 && c <= 0x06FF).count() > 500, "Arabic text");
+            }
+        }
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {

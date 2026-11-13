@@ -44,8 +44,11 @@ function Row({ a, onChanged }: { a: Agreement; onChanged: () => void }) {
       <td className="px-4 py-3">
         <div className="flex flex-wrap justify-end gap-1.5">
           <Link href={`/agreements/${a.id}`} className={small}><Pencil className="size-3.5" aria-hidden /> {t("Edit")}</Link>
-          <button type="button" className={small} disabled={busy} onClick={() => run(() => openFile(`/agreements/${a.id}/pdf`))}>
-            <FileDown className="size-3.5" aria-hidden /> PDF
+          <button type="button" className={small} disabled={busy} onClick={() => run(() => openFile(`/agreements/${a.id}/pdf?lang=en`))}>
+            <FileDown className="size-3.5" aria-hidden /> PDF EN
+          </button>
+          <button type="button" className={small} disabled={busy} onClick={() => run(() => openFile(`/agreements/${a.id}/pdf?lang=ar`))}>
+            <FileDown className="size-3.5" aria-hidden /> PDF عربي
           </button>
           <button type="button" className={small} disabled={busy} onClick={() => run(() => printFile(`/agreements/${a.id}/pdf`))}>
             <Printer className="size-3.5" aria-hidden /> {t("Print")}

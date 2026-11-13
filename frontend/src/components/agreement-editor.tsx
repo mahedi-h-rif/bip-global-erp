@@ -43,6 +43,8 @@ function Form({ initial, template, customers, router }: {
   const [clientDetails, setClientDetails] = useState(initial?.clientDetails ?? "");
   const [title, setTitle] = useState(initial?.title ?? template?.title ?? "");
   const [text, setText] = useState(() => parseAgreement(initial?.body ?? template?.body ?? ""));
+  const [titleAr, setTitleAr] = useState(initial?.titleAr ?? template?.titleAr ?? "");
+  const [bodyAr, setBodyAr] = useState(initial?.bodyAr ?? template?.bodyAr ?? "");
   const [agreementDate, setAgreementDate] = useState(initial?.agreementDate ?? todayKsa());
   const [status, setStatus] = useState<AgreementStatus>(initial?.status ?? "DRAFT");
   const [signedOn, setSignedOn] = useState(initial?.signedOn ?? todayKsa());
@@ -80,6 +82,8 @@ function Form({ initial, template, customers, router }: {
       clientDetails: clientDetails.trim() || null,
       title: title.trim() || null,
       body: serializeAgreement(text),
+      titleAr: titleAr.trim() || "",
+      bodyAr: bodyAr.trim() ? bodyAr : "",
       agreementDate: agreementDate || null,
       status,
       signedOn: status === "SIGNED" ? signedOn || null : null,
@@ -96,11 +100,17 @@ function Form({ initial, template, customers, router }: {
 
       {initial && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" loading={busy === "pdf"} onClick={() => act("pdf", () => openFile(`/agreements/${initial.id}/pdf`))}>
-            <FileDown className="size-4" aria-hidden /> PDF
+          <Button variant="secondary" loading={busy === "pdf"} onClick={() => act("pdf", () => openFile(`/agreements/${initial.id}/pdf?lang=en`))}>
+            <FileDown className="size-4" aria-hidden /> PDF (English)
           </Button>
-          <Button variant="secondary" loading={busy === "print"} onClick={() => act("print", () => printFile(`/agreements/${initial.id}/pdf`))}>
-            <Printer className="size-4" aria-hidden /> {t("Print")}
+          <Button variant="secondary" loading={busy === "pdf-ar"} onClick={() => act("pdf-ar", () => openFile(`/agreements/${initial.id}/pdf?lang=ar`))}>
+            <FileDown className="size-4" aria-hidden /> PDF (العربية)
+          </Button>
+          <Button variant="secondary" loading={busy === "print"} onClick={() => act("print", () => printFile(`/agreements/${initial.id}/pdf?lang=en`))}>
+            <Printer className="size-4" aria-hidden /> {t("Print")} (EN)
+          </Button>
+          <Button variant="secondary" loading={busy === "print-ar"} onClick={() => act("print-ar", () => printFile(`/agreements/${initial.id}/pdf?lang=ar`))}>
+            <Printer className="size-4" aria-hidden /> {t("Print")} (AR)
           </Button>
           <span className="ms-auto" />
           {!confirmDelete ? (
@@ -151,6 +161,17 @@ function Form({ initial, template, customers, router }: {
       </Card>
 
       <AgreementTextForm value={text} onChange={setText} />
+
+      <Card>
+        <CardHeader title={t("Arabic version")} subtitle={t("Printed when you choose the Arabic PDF. Same format: \"## \" starts a clause heading, \"- \" a bullet, a blank line a new paragraph; {{placeholders}} are filled in.")} />
+        <div className="space-y-4 p-5">
+          <Field label={t("Arabic title")}><Input dir="rtl" value={titleAr} onChange={(e) => setTitleAr(e.target.value)} /></Field>
+          <Field label={t("Arabic text")}>
+            <textarea dir="rtl" rows={14} className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-brand"
+              value={bodyAr} onChange={(e) => setBodyAr(e.target.value)} />
+          </Field>
+        </div>
+      </Card>
 
       <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur md:-mx-8 md:px-8">
         <p className="me-auto text-xs text-muted">{t("Printed on the company letterhead with signature spaces for both parties, to sign on paper.")}</p>

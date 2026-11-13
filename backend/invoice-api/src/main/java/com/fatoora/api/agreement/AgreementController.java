@@ -38,7 +38,7 @@ public class AgreementController {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     public record TemplateDto(@NotBlank String title, @NotBlank String body, boolean standard, String updatedBy,
-                              Instant updatedAt) {}
+                              Instant updatedAt, String titleAr, String bodyAr) {}
 
     public record AgreementRequest(
             Long customerId,
@@ -48,17 +48,19 @@ public class AgreementController {
             String body,
             LocalDate agreementDate,
             Agreement.Status status,
-            LocalDate signedOn) {}
+            LocalDate signedOn,
+            String titleAr,
+            String bodyAr) {}
 
     public record AgreementDto(
             Long id, String number, Long customerId, String clientName, String clientDetails, String title, String body,
             LocalDate agreementDate, Agreement.Status status, LocalDate signedOn, String createdBy, Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt, String titleAr, String bodyAr) {
 
         static AgreementDto of(Agreement a) {
             return new AgreementDto(a.getId(), a.getNumber(), a.getCustomerId(), a.getClientName(), a.getClientDetails(),
                     a.getTitle(), a.getBody(), a.getAgreementDate(), a.getStatus(), a.getSignedOn(), a.getCreatedBy(),
-                    a.getCreatedAt(), a.getUpdatedAt());
+                    a.getCreatedAt(), a.getUpdatedAt(), a.getTitleAr(), a.getBodyAr());
         }
     }
 
@@ -85,8 +87,11 @@ public class AgreementController {
     @GetMapping("/agreement-template")
     TemplateDto template() {
         return templates.findByOrganizationId(CurrentUser.orgId())
-                .map(t -> new TemplateDto(t.getTitle(), t.getBody(), false, t.getUpdatedBy(), t.getUpdatedAt()))
-                .orElse(new TemplateDto(StandardAgreement.TITLE, StandardAgreement.BODY, true, null, null));
+                .map(t -> new TemplateDto(t.getTitle(), t.getBody(), false, t.getUpdatedBy(), t.getUpdatedAt(),
+                        blank(t.getTitleAr()) ? StandardAgreement.TITLE_AR : t.getTitleAr(),
+                        blank(t.getBodyAr()) ? StandardAgreement.BODY_AR : t.getBodyAr()))
+                .orElse(new TemplateDto(StandardAgreement.TITLE, StandardAgreement.BODY, true, null, null,
+                        StandardAgreement.TITLE_AR, StandardAgreement.BODY_AR));
     }
 
     @PutMapping("/agreement-template")
@@ -101,6 +106,8 @@ public class AgreementController {
         });
         t.setTitle(dto.title().strip());
         t.setBody(dto.body());
+        t.setTitleAr(blank(dto.titleAr()) ? null : dto.titleAr().strip());
+        t.setBodyAr(blank(dto.bodyAr()) ? null : dto.bodyAr());
         t.setUpdatedBy(CurrentUser.get().email());
         templates.save(t);
         audit.record(orgId, "AGREEMENT_TEMPLATE_UPDATED", "agreement_template", t.getId(), t.getTitle());
@@ -115,21 +122,22 @@ public class AgreementController {
         Long orgId = CurrentUser.orgId();
         templates.findByOrganizationId(orgId).ifPresent(templates::delete);
         audit.record(orgId, "AGREEMENT_TEMPLATE_RESET", "agreement_template", null, null);
-        return new TemplateDto(StandardAgreement.TITLE, StandardAgreement.BODY, true, null, null);
+        return new TemplateDto(StandardAgreement.TITLE, StandardAgreement.BODY, true, null, null,
+                StandardAgreement.TITLE_AR, StandardAgreement.BODY_AR);
     }
 
     /** The saved standard agreement on the letterhead, with sample client details: the "Sample agreement" button. */
     @GetMapping("/agreement-template/pdf")
-    ResponseEntity<byte[]> templatePdf() {
+    ResponseEntity<byte[]> templatePdf(@RequestParam(defaultValue = "en") String lang) {
         TemplateDto t = template();
-        return pdfResponse(sample(t.title(), t.body()), "agreement-sample.pdf");
+        return pdfResponse(sample(t.title(), t.body(), t.titleAr(), t.bodyAr(), lang), "agreement-sample.pdf");
     }
 
     /** The admin's unsaved edits as a sample PDF to download, before saving them. */
     @PostMapping("/agreement-template/pdf")
     @PreAuthorize("hasRole('ADMIN')")
-    ResponseEntity<byte[]> editedTemplatePdf(@Valid @RequestBody TemplateDto dto) {
-        byte[] pdf = sample(dto.title().strip(), dto.body());
+    ResponseEntity<byte[]> editedTemplatePdf(@Valid @RequestBody TemplateDto dto, @RequestParam(defaultValue = "en") String lang) {
+        byte[] pdf = sample(dto.title().strip(), dto.body(), dto.titleAr(), dto.bodyAr(), lang);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -137,15 +145,17 @@ public class AgreementController {
                 .body(pdf);
     }
 
-    private byte[] sample(String title, String body) {
+    private byte[] sample(String title, String body, String titleAr, String bodyAr, String lang) {
         Agreement sample = new Agreement();
         sample.setNumber("AGR-SAMPLE");
         sample.setClientName("Sample Client Trading Est.");
         sample.setClientDetails("CR 1010000000 · VAT 300000000000003\nRiyadh, Kingdom of Saudi Arabia\nMobile 0500000000 · client@example.com");
         sample.setTitle(title);
         sample.setBody(body);
+        sample.setTitleAr(titleAr);
+        sample.setBodyAr(bodyAr);
         sample.setAgreementDate(LocalDate.now(InvoiceApiApplication.KSA));
-        return render(sample, org(CurrentUser.orgId()));
+        return render(sample, org(CurrentUser.orgId()), "ar".equalsIgnoreCase(lang));
     }
 
     // --- agreements ---------------------------------------------------------------------------------
@@ -175,6 +185,8 @@ public class AgreementController {
         a.setNumber(nextNumber(orgId));
         a.setTitle(t.title());
         a.setBody(t.body());
+        a.setTitleAr(t.titleAr());
+        a.setBodyAr(t.bodyAr());
         apply(a, req);
         agreements.save(a);
         audit.record(orgId, "AGREEMENT_CREATED", "agreement", a.getId(), a.getNumber() + " · " + a.getClientName());
@@ -202,9 +214,10 @@ public class AgreementController {
     }
 
     @GetMapping("/agreements/{id}/pdf")
-    ResponseEntity<byte[]> pdf(@PathVariable Long id) {
+    ResponseEntity<byte[]> pdf(@PathVariable Long id, @RequestParam(defaultValue = "en") String lang) {
         Agreement a = load(id);
-        return pdfResponse(render(a, org(a.getOrganizationId())), a.getNumber() + ".pdf");
+        boolean ar = "ar".equalsIgnoreCase(lang);
+        return pdfResponse(render(a, org(a.getOrganizationId()), ar), a.getNumber() + (ar ? "-ar" : "") + ".pdf");
     }
 
     // --- helpers -----------------------------------------------------------------------------------
@@ -221,6 +234,8 @@ public class AgreementController {
         a.setClientDetails(blank(req.clientDetails()) ? (c == null ? null : clientDetails(c)) : req.clientDetails().strip());
         if (!blank(req.title())) a.setTitle(req.title().strip());
         if (!blank(req.body())) a.setBody(req.body());
+        if (req.titleAr() != null) a.setTitleAr(blank(req.titleAr()) ? null : req.titleAr().strip());
+        if (req.bodyAr() != null) a.setBodyAr(blank(req.bodyAr()) ? null : req.bodyAr());
         a.setAgreementDate(req.agreementDate() == null
                 ? (a.getAgreementDate() == null ? LocalDate.now(InvoiceApiApplication.KSA) : a.getAgreementDate())
                 : req.agreementDate());
@@ -250,9 +265,10 @@ public class AgreementController {
         return lines.isEmpty() ? null : String.join("\n", lines);
     }
 
-    private byte[] render(Agreement a, Organization org) {
+    /** The agreement on the letterhead, in English or (arabic) in Arabic, laid out right to left. */
+    private byte[] render(Agreement a, Organization org, boolean arabic) {
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("company_name", nz(org.displayName()));
+        values.put("company_name", arabic && !blank(org.getLegalNameAr()) ? org.getLegalNameAr() : nz(org.displayName()));
         // The Arabic name only next to an English one; never the same name twice, never empty brackets.
         values.put("company_name_ar", blank(org.getLegalNameEn()) ? "" : nz(org.getLegalNameAr()));
         values.put("company_vat", nz(org.getVatNumber()));
@@ -268,16 +284,21 @@ public class AgreementController {
         values.put("date", DATE.format(a.getAgreementDate()));
         values.put("agreement_number", nz(a.getNumber()));
 
-        String meta = "<p class=\"muted\" style=\"text-align:center\">Agreement no. " + LetterheadPdf.esc(a.getNumber()) + " · Date "
-                + DATE.format(a.getAgreementDate())
-                + (a.getStatus() == Agreement.Status.SIGNED && a.getSignedOn() != null ? " · Signed " + DATE.format(a.getSignedOn()) : "")
-                + "</p>";
-        String html = "<h1 style=\"text-align:center; text-transform:uppercase; letter-spacing:0.5px\">"
-                + LetterheadPdf.esc(a.getTitle()) + "</h1>" + meta
-                + "<div style=\"margin-top:8px\">" + body(withoutEmptyArabicName(a.getBody(), values), values) + "</div>"
+        boolean signed = a.getStatus() == Agreement.Status.SIGNED && a.getSignedOn() != null;
+        String meta = arabic
+                ? "<p class=\"muted\" dir=\"rtl\" style=\"text-align:center\">اتفاقية رقم " + LetterheadPdf.esc(a.getNumber()) + " · التاريخ "
+                        + DATE.format(a.getAgreementDate()) + (signed ? " · وُقّعت " + DATE.format(a.getSignedOn()) : "") + "</p>"
+                : "<p class=\"muted\" style=\"text-align:center\">Agreement no. " + LetterheadPdf.esc(a.getNumber()) + " · Date "
+                        + DATE.format(a.getAgreementDate()) + (signed ? " · Signed " + DATE.format(a.getSignedOn()) : "") + "</p>";
+        String title = arabic ? (blank(a.getTitleAr()) ? StandardAgreement.TITLE_AR : a.getTitleAr()) : a.getTitle();
+        String text = arabic ? (blank(a.getBodyAr()) ? StandardAgreement.BODY_AR : a.getBodyAr()) : withoutEmptyArabicName(a.getBody(), values);
+        String html = "<h1 " + (arabic ? "dir=\"rtl\" " : "") + "style=\"text-align:center; text-transform:uppercase; letter-spacing:0.5px\">"
+                + LetterheadPdf.esc(title) + "</h1>" + meta
+                + "<div style=\"margin-top:8px" + (arabic ? "; direction:rtl; text-align:right" : "") + "\"" + (arabic ? " dir=\"rtl\"" : "") + ">"
+                + body(text, values, arabic) + "</div>"
                 + com.fatoora.api.pdf.BankDetailsBlock.html(org)
                 + LetterheadPdf.signatures(org, a.getClientName());
-        return letterhead.render(org, a.getTitle() + " " + a.getNumber(), html);
+        return letterhead.render(org, title + " " + a.getNumber(), html);
     }
 
     /** Drops " ({{company_name_ar}})" when the company has no separate Arabic name, so no "()" is printed. */
@@ -292,6 +313,10 @@ public class AgreementController {
      * paragraph breaks; {{placeholders}} are replaced with the escaped values.
      */
     static String body(String text, Map<String, String> values) {
+        return body(text, values, false);
+    }
+
+    static String body(String text, Map<String, String> values, boolean rtl) {
         StringBuilder out = new StringBuilder();
         StringBuilder para = new StringBuilder();
         for (String raw : text.replace("\r\n", "\n").split("\n", -1)) {
@@ -303,7 +328,7 @@ public class AgreementController {
                 out.append("<h2>").append(fill(line.substring(3), values)).append("</h2>");
             } else if (line.startsWith("- ")) {
                 flush(out, para);
-                out.append("<p style=\"margin:0 0 3px 0; padding-left:14px\">• ").append(fill(line.substring(2), values)).append("</p>");
+                out.append("<p style=\"margin:0 0 3px 0; " + (rtl ? "padding-right" : "padding-left") + ":14px\">• ").append(fill(line.substring(2), values)).append("</p>");
             } else {
                 if (para.length() > 0) para.append("<br/>");
                 para.append(fill(line, values));
