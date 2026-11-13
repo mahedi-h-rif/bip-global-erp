@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import useSWR from "swr";
-import { XCircle } from "lucide-react";
-import { api, ApiError, fetcher } from "@/lib/api";
+import { Paperclip, XCircle } from "lucide-react";
+import { api, ApiError, fetcher, openFile, uploadFile } from "@/lib/api";
 import type { Receipt } from "@/lib/types";
 import { date, dateTime, money, paymentMethodLabel } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Spinner } from "@/components/ui";
@@ -15,6 +15,8 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const t = useT();
   const { data: r, error, mutate } = useSWR<Receipt>(`/receipts/${id}`, fetcher);
+  const { data: proofs, mutate: mutateProofs } = useSWR<{ fileName: string }[]>(`/receipts/${id}/proofs`, fetcher);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
@@ -40,10 +42,26 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
       <PageHeader
         title={t("Incoming payment {number}", { number: r.number })}
         subtitle={<span dir="auto">{r.customerName}</span>}
-        actions={<span className="flex gap-2"><RelationshipMapButton type="RECEIPT" id={r.id} />
+        actions={<span className="flex gap-2">
+          {proofs && proofs.length > 0 ? (
+            <Button variant="secondary" onClick={() => openFile(`/receipts/${r.id}/proof`)} title={proofs[0].fileName}><Paperclip className="size-4" aria-hidden /> {t("Receipt file")}</Button>
+          ) : (
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-3.5 py-2 text-sm font-medium hover:bg-canvas">
+              <Paperclip className="size-4" aria-hidden /> {t("Attach receipt")}
+              <input type="file" accept="image/*,application/pdf" className="sr-only" onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                setUploadError(null);
+                uploadFile(`/receipts/${r.id}/proof?name=${encodeURIComponent(f.name)}`, f)
+                  .then(() => mutateProofs()).catch((err) => setUploadError(err instanceof ApiError ? err.message : t("Could not reach the server")));
+              }} />
+            </label>
+          )}
+          <RelationshipMapButton type="RECEIPT" id={r.id} />
           {r.status === "POSTED" && !cancelling && <Button variant="ghost" onClick={() => setCancelling(true)}><XCircle className="size-4" aria-hidden /> {t("Cancel payment")}</Button>}</span>}
       />
       {problem && <div className="mb-4"><Alert tone="bad">{problem}</Alert></div>}
+      {uploadError && <div className="mb-4"><Alert tone="bad">{uploadError}</Alert></div>}
       {r.status === "CANCELLED" && (
         <div className="mb-4"><Alert tone="warn" title={t("Cancelled")}>{t("Cancelled by {by} on {at}: {reason}. Its amounts were taken off the invoices; post the payment again if needed.", { by: r.cancelledBy ?? "", at: dateTime(r.cancelledAt), reason: r.cancelReason ?? "" })}</Alert></div>
       )}

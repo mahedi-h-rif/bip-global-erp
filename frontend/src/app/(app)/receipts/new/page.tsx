@@ -4,7 +4,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { Save } from "lucide-react";
-import { api, ApiError, fetcher } from "@/lib/api";
+import { api, ApiError, fetcher, uploadFile } from "@/lib/api";
 import type { Customer, OpenInvoice, PaymentMethod, Receipt } from "@/lib/types";
 import { date, money, paymentMethodLabel, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
@@ -23,6 +23,8 @@ function ReceiptForm() {
   const [receiptDate, setReceiptDate] = useState(todayKsa());
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
+  /** Optional photo or PDF of the payment slip. */
+  const [proof, setProof] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -51,6 +53,7 @@ function ReceiptForm() {
         customerId: Number(customerId), receiptDate, method, reference: reference || null, note: note || null,
         allocations: Object.entries(alloc).filter(([, v]) => Number(v) > 0).map(([id, v]) => ({ invoiceId: Number(id), amount: Number(v) })),
       });
+      if (proof) await uploadFile(`/receipts/${r.id}/proof?name=${encodeURIComponent(proof.name)}`, proof);
       router.push(`/receipts/${r.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? (err.fields ? Object.values(err.fields).join(", ") : err.message) : t("Could not reach the server"));
@@ -80,6 +83,11 @@ function ReceiptForm() {
           </Field>
           <Field label={t("Reference")} optional><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t("Transfer / cheque no.")} /></Field>
           <Field label={t("Note")} optional><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          <Field label={t("Receipt (photo or PDF)")} optional hint={t("The bank slip, transfer screenshot or cash receipt. At most 10 MB.")}>
+            <input type="file" accept="image/*,application/pdf" capture="environment"
+              className="block w-full text-sm file:me-3 file:rounded-md file:border-0 file:bg-brand/10 file:px-3 file:py-1.5 file:text-brand"
+              onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
+          </Field>
         </div>
       </Card>
 

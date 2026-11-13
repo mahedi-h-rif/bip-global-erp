@@ -354,6 +354,34 @@ class InvoiceApiApplicationTests {
         assertTrue(o.get("recent").size() >= 1);
     }
 
+    @Test
+    @Order(24)
+    void paymentProofCanBeAttachedAndDownloaded() throws Exception {
+        var draft = body(call("POST", "/invoices", Map.of("kind", "SIMPLIFIED",
+                "lines", new Object[]{Map.of("name", "Brake pads", "quantity", 1, "unitCode", "PCE", "unitPrice", 80)})), 201);
+        long id = draft.get("id").asLong();
+        body(call("POST", "/invoices/" + id + "/issue", Map.of("sendMode", "NOW")), 200);
+        long paymentId = body(call("POST", "/invoices/" + id + "/payments",
+                Map.of("amount", 92, "paidOn", java.time.LocalDate.now().toString(), "method", "BANK_TRANSFER")), 201).get("id").asLong();
+
+        byte[] pdf = "%PDF-1.4 test slip".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var req = HttpRequest.newBuilder(URI.create(base + "/payments/" + paymentId + "/proof?name=slip.pdf"))
+                .header("Content-Type", "application/pdf").header("X-XSRF-TOKEN", xsrf().orElseThrow())
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(pdf)).build();
+        assertEquals(200, http.send(req, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        var list = body(call("GET", "/invoices/" + id + "/payment-proofs", null), 200);
+        assertEquals("slip.pdf", list.get(0).get("fileName").asString());
+        var file = http.send(HttpRequest.newBuilder(URI.create(base + "/payments/" + paymentId + "/proof")).build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, file.statusCode());
+        assertEquals(new String(pdf, java.nio.charset.StandardCharsets.UTF_8), new String(file.body(), java.nio.charset.StandardCharsets.UTF_8));
+
+        var exe = HttpRequest.newBuilder(URI.create(base + "/payments/" + paymentId + "/proof?name=x.exe"))
+                .header("Content-Type", "application/x-msdownload").header("X-XSRF-TOKEN", xsrf().orElseThrow())
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(new byte[]{1, 2})).build();
+        assertEquals(400, http.send(exe, HttpResponse.BodyHandlers.ofString()).statusCode(), "only photos and PDFs");
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {

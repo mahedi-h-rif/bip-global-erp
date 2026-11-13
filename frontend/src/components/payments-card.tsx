@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Banknote, CheckCircle2, Pencil, Plus, Trash2 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { Banknote, CheckCircle2, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
+import useSWR from "swr";
+import { api, ApiError, fetcher, openFile, uploadFile } from "@/lib/api";
 import type { InvoiceDetail, Payment, PaymentMethod } from "@/lib/types";
 import { date, dateTime, money, paymentMethodLabel, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Field, Input, PaymentBadge, RequiredLegend, Select } from "@/components/ui";
@@ -15,6 +16,8 @@ function PaymentForm({ inv, initial, onDone }: { inv: InvoiceDetail; initial: Dr
   const [p, setP] = useState<Draft>(initial);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Optional photo or PDF of the payment slip. */
+  const [proof, setProof] = useState<File | null>(null);
   const set = (k: keyof Draft) => (e: { target: { value: string } }) => setP({ ...p, [k]: e.target.value });
 
   async function submit(e: FormEvent) {
@@ -23,8 +26,8 @@ function PaymentForm({ inv, initial, onDone }: { inv: InvoiceDetail; initial: Dr
     setError(null);
     const body = { ...p, amount: Number(p.amount), paidOn: p.paidOn || null, reference: p.reference.trim() || null, note: p.note.trim() || null };
     try {
-      if (p.id) await api("PUT", `/payments/${p.id}`, body);
-      else await api("POST", `/invoices/${inv.id}/payments`, body);
+      const saved = p.id ? await api<Payment>("PUT", `/payments/${p.id}`, body) : await api<Payment>("POST", `/invoices/${inv.id}/payments`, body);
+      if (proof) await uploadFile(`/payments/${saved.id}/proof?name=${encodeURIComponent(proof.name)}`, proof);
       onDone(true);
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, "network", t("Could not reach the server")));
@@ -51,8 +54,13 @@ function PaymentForm({ inv, initial, onDone }: { inv: InvoiceDetail; initial: Dr
         <Field label={t("Reference")} optional hint={t("Transfer or cheque no.")}>
           <Input value={p.reference} onChange={set("reference")} />
         </Field>
-        <Field label={t("Note")} optional className="sm:col-span-2 lg:col-span-4">
+        <Field label={t("Note")} optional className="sm:col-span-2">
           <Input value={p.note} onChange={set("note")} />
+        </Field>
+        <Field label={t("Receipt (photo or PDF)")} optional hint={t("The bank slip, transfer screenshot or cash receipt. At most 10 MB.")} className="sm:col-span-2">
+          <input type="file" accept="image/*,application/pdf" capture="environment"
+            className="block w-full text-sm file:me-3 file:rounded-md file:border-0 file:bg-brand/10 file:px-3 file:py-1.5 file:text-brand"
+            onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
         </Field>
       </div>
       <div className="flex gap-2">
@@ -72,6 +80,9 @@ export function PaymentsCard({ inv, canWrite, onChange }: { inv: InvoiceDetail; 
   const [busy, setBusy] = useState<string | null>(null);
   const due = Number(inv.dueAmount ?? 0);
   const paid = Number(inv.paidAmount ?? 0);
+  const { data: proofs, mutate: mutateProofs } = useSWR<{ paymentId: number; fileName: string }[]>(
+    inv.payments.length > 0 ? `/invoices/${inv.id}/payment-proofs` : null, fetcher);
+  const proofOf = (id: number) => proofs?.find((x) => x.paymentId === id);
   const [amount, setAmount] = useState("");
 
   const pay = (value: number, note: string) =>
@@ -152,6 +163,12 @@ export function PaymentsCard({ inv, canWrite, onChange }: { inv: InvoiceDetail; 
                 <p className="truncate text-xs text-muted">{[p.reference, p.note, p.createdBy && t("Added by {name}", { name: p.createdBy }),
                   p.updatedBy && t("edited by {name} on {date}", { name: p.updatedBy, date: dateTime(p.updatedAt) })].filter(Boolean).join(" · ")}</p>
               </div>
+              {proofOf(p.id) && (
+                <button type="button" onClick={() => openFile(`/payments/${p.id}/proof`)} title={proofOf(p.id)!.fileName}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-brand hover:bg-canvas">
+                  <Paperclip className="size-3.5" aria-hidden /> {t("Receipt")}
+                </button>
+              )}
               {canWrite && (
                 <span className="inline-flex gap-1">
                   <Button variant="ghost" onClick={() => setEditing(fromPayment(p))} aria-label={t("Edit payment")}><Pencil className="size-4" aria-hidden /></Button>
@@ -171,7 +188,7 @@ export function PaymentsCard({ inv, canWrite, onChange }: { inv: InvoiceDetail; 
       )}
 
       {editing ? (
-        <PaymentForm key={editing.id ?? "new"} inv={inv} initial={editing} onDone={(saved) => { setEditing(null); if (saved) onChange(); }} />
+        <PaymentForm key={editing.id ?? "new"} inv={inv} initial={editing} onDone={(saved) => { setEditing(null); if (saved) { onChange(); void mutateProofs(); } }} />
       ) : (
         canWrite && due > 0 && (
           <div className="flex flex-wrap items-end gap-3 border-t border-line p-5">

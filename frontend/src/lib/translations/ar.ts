@@ -1663,4 +1663,9 @@ export const ar: Record<string, string> = {
   "Latest invoices": "أحدث الفواتير",
   "No invoices yet": "لا توجد فواتير بعد",
   "Bldg": "مبنى",
+  "Receipt (photo or PDF)": "الإيصال (صورة أو PDF)",
+  "The bank slip, transfer screenshot or cash receipt. At most 10 MB.": "إيصال البنك أو لقطة التحويل أو سند القبض. بحد أقصى 10 ميجابايت.",
+  "Receipt": "الإيصال",
+  "Receipt file": "ملف الإيصال",
+  "Attach receipt": "إرفاق إيصال",
 };
