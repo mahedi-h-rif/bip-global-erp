@@ -11,7 +11,6 @@ import {
   Cpu,
   FileSignature,
   FileText,
-  FolderLock,
   HardHat,
   Landmark,
   LayoutDashboard,
@@ -51,7 +50,6 @@ import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Organization } from "@/lib/types";
 import { Alert, Button, Spinner } from "@/components/ui";
 import { LanguagePrompt, LanguageSwitcher } from "@/components/language";
-import { NotificationBell } from "@/components/notification-bell";
 import { SoudaCoreCredit } from "@/components/souda-credit";
 import { WhatsAppBanner, WHATSAPP_ENABLED } from "@/components/whatsapp";
 import { VoiceAssistant } from "@/components/voice";
@@ -110,8 +108,6 @@ const workforceNav: NavItem[] = [
   { href: "/hr", label: "HR", icon: IdCard },
   { href: "/payroll", label: "Payroll", icon: Wallet2 },
   { href: "/workers", label: "Workers", icon: HardHat },
-  // Hidden for now; the /documents page still works. Uncomment to show it again.
-  // { href: "/documents", label: "Documents", icon: FolderLock },
 ];
 
 // Company money, partners' withdrawals and the business audit: admins only.
@@ -226,7 +222,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (["suppliers", "purchase-requests", "purchase-orders", "goods-receipts", "goods-returns", "supplier-invoices", "supplier-credit-notes",
          "supplier-payments", "reorder"].includes(p)) return "purchasing";
     if (["products", "inventory"].includes(p)) return "inventory";
-    if (["hr", "payroll", "workers", "documents"].includes(p)) return "hr";
+    if (["hr", "payroll", "workers"].includes(p)) return "hr";
     if (["accounts", "dues", "erp-reports", "audit"].includes(p)) return "finance";
     return null;
   };
@@ -264,7 +260,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const tools = !isBranch && (
     <>
       <VoiceAssistant className="shrink-0" />
-      <NotificationBell className="shrink-0" />
     </>
   );
 

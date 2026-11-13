@@ -36,13 +36,6 @@ const severityStyle: Record<AuditSeverity, { label: string; chip: string }> = {
   INFO: { label: "Note", chip: "bg-canvas text-muted" },
 };
 
-const docStatus: Record<string, { label: string; tone: string }> = {
-  VALID: { label: "Valid", tone: "text-ok" },
-  EXPIRING: { label: "Expiring", tone: "text-warn" },
-  EXPIRED: { label: "Expired", tone: "text-bad" },
-  MISSING: { label: "Not on file", tone: "text-bad" },
-};
-
 /** A finding in the current language: Arabic from the server, other languages through the dictionaries. */
 function findingText(f: AuditFinding, which: "text" | "action", lang: string, t: TFunction) {
   const fill = (s: string) => s.replace(/\{(\w+)\}/g, (m, k: string) => f.vars[k] ?? m);
@@ -285,23 +278,9 @@ export default function AuditPage() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <CardHeader title={t("Statutory documents and workforce")} />
-              <ul className="divide-y divide-line">
-                {r.documents.map((d) => (
-                  <li key={d.type} className="flex items-baseline justify-between gap-4 px-5 py-2.5 text-sm">
-                    <span>
-                      {ar ? d.labelAr : t(d.label)}
-                      {d.expiry && <span className="block text-xs text-muted">{d.number} · {t("Expires {date}", { date: date(d.expiry) })}</span>}
-                    </span>
-                    <span className={`shrink-0 font-semibold ${docStatus[d.status].tone}`}>{t(docStatus[d.status].label)}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="grid grid-cols-2 gap-3 border-t border-line p-5 sm:grid-cols-4">
+              <CardHeader title={t("Workforce")} />
+              <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
                 <Stat label={t("Active workers")} value={r.workforce.active} />
-                <Stat label={t("Iqama valid")} value={r.workforce.iqamaValid} />
-                <Stat label={t("Iqama expiring or expired")} value={r.workforce.iqamaExpiring + r.workforce.iqamaExpired} tone={r.workforce.iqamaExpired ? "text-bad" : ""} />
-                <Stat label={t("Iqama not on file")} value={r.workforce.iqamaMissing} />
               </div>
             </Card>
 

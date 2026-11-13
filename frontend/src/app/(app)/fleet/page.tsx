@@ -21,13 +21,6 @@ type Tab = "vehicles" | "logs" | "trips";
 const errText = (e: unknown, f: string) => (e instanceof ApiError ? (e.fields ? Object.values(e.fields).join(", ") : e.message) : f);
 const tripTone: Record<string, string> = { PLANNED: "bg-blue-50 text-blue-700", IN_TRANSIT: "bg-amber-50 text-amber-700", COMPLETED: "bg-emerald-50 text-emerald-700", CANCELLED: "bg-slate-100 text-slate-500" };
 
-function Expiry({ d }: { d: string | null | undefined }) {
-  const t = useT();
-  if (!d) return <span className="text-muted">—</span>;
-  const days = Math.round((Date.parse(d) - Date.parse(todayKsa())) / 86400000);
-  return <span className={days < 0 ? "font-semibold text-bad" : days <= 30 ? "font-semibold text-amber-700" : ""}>{date(d)}{days <= 30 && <span className="ms-1 text-[11px]">({days < 0 ? t("expired") : t("{n} d", { n: String(days) })})</span>}</span>;
-}
-
 function VehicleForm({ initial, drivers, onDone }: { initial: Vehicle; drivers: Employee[]; onDone: () => void }) {
   const t = useT();
   const [v, setV] = useState<Vehicle>(initial);
@@ -51,9 +44,6 @@ function VehicleForm({ initial, drivers, onDone }: { initial: Vehicle; drivers: 
           <Field label={t("Type")}><Select value={v.vehicleType ?? "TRUCK"} onChange={f("vehicleType")}>{["TRUCK", "VAN", "PICKUP", "CAR", "TRAILER", "FORKLIFT"].map((x) => <option key={x} value={x}>{t(x.charAt(0) + x.slice(1).toLowerCase())}</option>)}</Select></Field>
           <Field label={t("Capacity")} optional><Input value={v.capacity ?? ""} onChange={f("capacity")} placeholder="5 t" /></Field>
           <Field label={t("Driver")} optional><Select value={v.driverEmployeeId ?? ""} onChange={f("driverEmployeeId")}><option value="">—</option>{drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</Select></Field>
-          <Field label={t("Istimara expiry")} optional><Input type="date" value={v.istimaraExpiry ?? ""} onChange={f("istimaraExpiry")} /></Field>
-          <Field label={t("Insurance expiry")} optional><Input type="date" value={v.insuranceExpiry ?? ""} onChange={f("insuranceExpiry")} /></Field>
-          <Field label={t("Inspection (Fahas) expiry")} optional><Input type="date" value={v.mvpiExpiry ?? ""} onChange={f("mvpiExpiry")} /></Field>
           <Field label={t("Model year")} optional><Input type="number" value={v.modelYear ?? ""} onChange={f("modelYear")} /></Field>
           <Field label={t("Odometer (km)")} optional><Input type="number" step="any" value={v.odometer ?? ""} onChange={f("odometer")} /></Field>
         </div>
@@ -130,7 +120,7 @@ export default function FleetPage() {
   const tabs: { id: Tab; label: string; icon: typeof Truck }[] = [{ id: "vehicles", label: "Vehicles", icon: Truck }, { id: "logs", label: "Fuel & maintenance", icon: Fuel }, { id: "trips", label: "Trips", icon: Route }];
   return (
     <>
-      <PageHeader title={t("Fleet & trips")} subtitle={t("Vehicles, registration / insurance / inspection expiry, fuel and maintenance, and the profit of each trip.")} />
+      <PageHeader title={t("Fleet & trips")} subtitle={t("Vehicles, fuel and maintenance, and the profit of each trip.")} />
       <div className="mb-4 flex flex-wrap gap-2">{tabs.map((x) => <button key={x.id} onClick={() => setTab(x.id)} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium ${tab === x.id ? "border-brand bg-brand text-white" : "border-line bg-white"}`}><x.icon className="size-4" aria-hidden /> {t(x.label)}</button>)}</div>
       {error && <div className="mb-4"><Alert tone="bad">{error}</Alert></div>}
       {!vehicles ? <Spinner /> : tab === "vehicles" ? (
@@ -140,10 +130,9 @@ export default function FleetPage() {
             <CardHeader title={t("Vehicles")} action={!editing && <Button onClick={() => setEditing({ plate: "", name: "", vehicleType: "TRUCK" })}><Plus className="size-4" aria-hidden /> {t("New vehicle")}</Button>} />
             {vehicles.length === 0 ? <Empty title={t("No vehicles yet")} /> : (
               <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2 text-start font-medium">{t("Plate")}</th><th className="px-4 py-2 text-start font-medium">{t("Vehicle")}</th><th className="px-4 py-2 text-start font-medium">{t("Driver")}</th><th className="px-4 py-2 text-start font-medium">{t("Istimara")}</th><th className="px-4 py-2 text-start font-medium">{t("Insurance")}</th><th className="px-4 py-2 text-start font-medium">{t("Fahas")}</th><th className="px-4 py-2 text-end font-medium">{t("Km")}</th><th className="px-4 py-2 text-end font-medium">{t("Cost this month")}</th><th className="w-10" /></tr></thead>
+                <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2 text-start font-medium">{t("Plate")}</th><th className="px-4 py-2 text-start font-medium">{t("Vehicle")}</th><th className="px-4 py-2 text-start font-medium">{t("Driver")}</th><th className="px-4 py-2 text-end font-medium">{t("Km")}</th><th className="px-4 py-2 text-end font-medium">{t("Cost this month")}</th><th className="w-10" /></tr></thead>
                 <tbody className="divide-y divide-line">{vehicles.map((v) => (
                   <tr key={v.id} className={v.active ? "" : "text-muted"}><td className="tabular px-4 py-2 font-medium">{v.plate}</td><td className="px-4 py-2">{v.name} <span className="text-xs text-muted">{v.vehicleType} {v.capacity}</span></td><td className="px-4 py-2">{v.driverName ?? "—"}</td>
-                    <td className="px-4 py-2"><Expiry d={v.istimaraExpiry} /></td><td className="px-4 py-2"><Expiry d={v.insuranceExpiry} /></td><td className="px-4 py-2"><Expiry d={v.mvpiExpiry} /></td>
                     <td className="tabular px-4 py-2 text-end">{v.odometer ? Number(v.odometer).toLocaleString("en-US") : "—"}</td><td className="tabular px-4 py-2 text-end">{money(v.costThisMonth)}</td>
                     <td><Button variant="ghost" onClick={() => setEditing(v)} aria-label={t("Edit")}><Pencil className="size-4" aria-hidden /></Button></td></tr>
                 ))}</tbody></table></div>

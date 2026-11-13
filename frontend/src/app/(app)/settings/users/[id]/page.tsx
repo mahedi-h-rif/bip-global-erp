@@ -22,7 +22,6 @@ const KINDS: { key: string; label: string; href: string }[] = [
   { key: "income", label: "Cash book income", href: "/accounts" },
   { key: "expenses", label: "Cash book expenses", href: "/accounts" },
   { key: "withdrawals", label: "Partner withdrawals", href: "/accounts" },
-  { key: "documents", label: "Documents", href: "/documents" },
   { key: "workerDays", label: "Worker day entries", href: "/workers" },
   { key: "workerLeaves", label: "Worker leaves", href: "/workers" },
 ];

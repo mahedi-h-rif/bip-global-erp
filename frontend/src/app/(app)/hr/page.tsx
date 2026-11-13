@@ -12,14 +12,6 @@ import { useT } from "@/lib/i18n";
 type Tab = "employees" | "leave" | "holidays" | "advances";
 const errText = (e: unknown, f: string) => (e instanceof ApiError ? (e.fields ? Object.values(e.fields).join(", ") : e.message) : f);
 
-function ExpiryBadge({ days }: { days: number | null | undefined }) {
-  const t = useT();
-  if (days == null) return null;
-  if (days < 0) return <span className="ms-2 rounded bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-bad">{t("Expired")}</span>;
-  if (days <= 30) return <span className="ms-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">{t("{n} days left", { n: String(days) })}</span>;
-  return null;
-}
-
 function EmployeeForm({ initial, onDone }: { initial: Employee; onDone: () => void }) {
   const t = useT();
   const [e, setE] = useState<Employee>(initial);
@@ -49,10 +41,6 @@ function EmployeeForm({ initial, onDone }: { initial: Employee; onDone: () => vo
           <Field label={t("Name")}><Input required dir="auto" value={e.name} onChange={f("name")} /></Field>
           <Field label={t("Arabic name")} optional><Input dir="rtl" value={e.nameAr ?? ""} onChange={f("nameAr")} /></Field>
           <Field label={t("Nationality (2 letters)")}><Input dir="ltr" maxLength={2} value={e.nationality ?? "SA"} onChange={f("nationality")} /></Field>
-          <Field label={t("Iqama / ID no.")} optional><Input dir="ltr" value={e.idNumber ?? ""} onChange={f("idNumber")} /></Field>
-          <Field label={t("ID expiry")} optional><Input type="date" value={e.idExpiry ?? ""} onChange={f("idExpiry")} /></Field>
-          <Field label={t("Passport no.")} optional><Input dir="ltr" value={e.passportNumber ?? ""} onChange={f("passportNumber")} /></Field>
-          <Field label={t("Passport expiry")} optional><Input type="date" value={e.passportExpiry ?? ""} onChange={f("passportExpiry")} /></Field>
           <Field label={t("Job title")} optional><Input dir="auto" value={e.jobTitle ?? ""} onChange={f("jobTitle")} /></Field>
           <Field label={t("Department")} optional><Input dir="auto" value={e.department ?? ""} onChange={f("department")} /></Field>
           <Field label={t("Join date")}><Input required type="date" value={e.joinDate} onChange={f("joinDate")} /></Field>
@@ -97,7 +85,7 @@ function EmployeesTab() {
             <table className="w-full text-sm">
               <thead><tr className="border-b border-line text-xs text-muted">
                 <th className="px-4 py-2.5 text-start font-medium">{t("Employee")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Job")}</th>
-                <th className="px-4 py-2.5 text-start font-medium">{t("Iqama / ID")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Gross salary")}</th>
+                <th className="px-4 py-2.5 text-end font-medium">{t("Gross salary")}</th>
                 <th className="px-4 py-2.5 text-end font-medium">{t("Leave balance")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Advance due")}</th><th className="w-12" />
               </tr></thead>
               <tbody className="divide-y divide-line">
@@ -105,7 +93,6 @@ function EmployeesTab() {
                   <tr key={e.id} className={e.status === "TERMINATED" ? "text-muted" : ""}>
                     <td className="px-4 py-3"><span className="font-medium" dir="auto">{e.name}</span> <span className="text-xs text-muted">{e.code} · {e.nationality}</span></td>
                     <td className="px-4 py-3">{[e.jobTitle, e.department].filter(Boolean).join(" · ") || "—"}</td>
-                    <td className="px-4 py-3 text-xs">{e.idNumber ?? "—"}{e.idExpiry && <span className="text-muted"> · {date(e.idExpiry)}</span>}<ExpiryBadge days={e.idExpiresInDays} /><ExpiryBadge days={e.passportExpiresInDays} /></td>
                     <td className="tabular px-4 py-3 text-end">{money(e.grossSalary)}</td>
                     <td className="tabular px-4 py-3 text-end">{Number(e.leaveBalance ?? 0)}</td>
                     <td className="tabular px-4 py-3 text-end">{Number(e.advanceOutstanding) > 0 ? money(e.advanceOutstanding) : "—"}</td>

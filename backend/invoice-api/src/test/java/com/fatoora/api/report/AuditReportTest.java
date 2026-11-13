@@ -124,13 +124,10 @@ class AuditReportTest {
     @Test
     void documentsWorkforceCashAndControls() {
         var r = run();
-        assertEquals("EXPIRED", r.documents().getFirst().status());
-        assertEquals("MISSING", r.documents().get(1).status());
-        assertTrue(has(r, "DOC_EXPIRED"));
-        assertTrue(has(r, "DOC_MISSING"));
+        // Document tracking is not part of the system: no document list and no document or Iqama findings.
+        assertTrue(r.documents().isEmpty());
+        assertFalse(has(r, "DOC_EXPIRED") || has(r, "DOC_MISSING") || has(r, "IQAMA_EXPIRING") || has(r, "IQAMA_MISSING"));
         assertEquals(2, r.workforce().active());
-        assertEquals(1, r.workforce().iqamaExpiring());
-        assertEquals(1, r.workforce().iqamaMissing());
         eq("-500", r.cash().retained());
         assertTrue(has(r, "NEGATIVE_CASH"));
         assertTrue(has(r, "DELETIONS"));

@@ -98,7 +98,6 @@ function WorkerForm({ initial, defaultDaily, onDone, onCancel }: { initial?: Wor
         <Input required autoFocus value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
       </Field>
       <Field label={t("Mobile")}><Input value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} inputMode="tel" /></Field>
-      <Field label={t("Iqama number")}><Input value={d.iqamaNumber} onChange={(e) => setD({ ...d, iqamaNumber: e.target.value })} inputMode="numeric" /></Field>
       <Field label={t("Nationality")}><Input value={d.nationality} onChange={(e) => setD({ ...d, nationality: e.target.value })} /></Field>
       <Field label={t("Status")}>
         <Select value={d.active ? "1" : "0"} onChange={(e) => setD({ ...d, active: e.target.value === "1" })}>
@@ -236,7 +235,6 @@ function WorkerLine({ w, onEdit, onChanged, canDelete }: { w: WorkerRow; onEdit:
             <p className="mt-0.5 text-[11px] text-muted">{w.days ? `${w.days} ${t("days")} × ${money(w.dailyRate)}` : `${money(w.dailyRate)} / ${t("day")}`}</p>
           )}
         </td>
-        <td className="px-4 py-3 text-muted">{w.iqamaNumber ?? "—"}</td>
         <td className="px-4 py-3 text-muted">{w.phone ?? "—"}</td>
         <td className="tabular px-4 py-3 text-end">{money(w.work)}</td>
         <td className="tabular px-4 py-3 text-end text-ok">{money(w.paid)}</td>
@@ -253,7 +251,7 @@ function WorkerLine({ w, onEdit, onChanged, canDelete }: { w: WorkerRow; onEdit:
       </tr>
       {open && (
         <tr>
-          <td colSpan={8} className="bg-canvas/60 px-4 py-3">
+          <td colSpan={7} className="bg-canvas/60 px-4 py-3">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
               {w.months.map((m) => (
                 <div key={m.month} className="rounded-md border border-line bg-white p-2 text-xs">
@@ -533,7 +531,6 @@ export default function WorkersPage() {
                     <tr className="border-b border-line text-xs text-muted">
                       <th className="w-12 px-4 py-2.5 text-start font-medium">{t("No.")}</th>
                       <th className="px-4 py-2.5 text-start font-medium">{t("Worker")}</th>
-                      <th className="px-4 py-2.5 text-start font-medium">{t("Iqama number")}</th>
                       <th className="px-4 py-2.5 text-start font-medium">{t("Mobile")}</th>
                       <th className="px-4 py-2.5 text-end font-medium">{t("Total work")}</th>
                       <th className="px-4 py-2.5 text-end font-medium">{t("Total paid")}</th>
@@ -543,7 +540,7 @@ export default function WorkersPage() {
                   </thead>
                   <tbody className="divide-y divide-line">
                     {shown.map((w) => editing === w.id ? (
-                      <tr key={w.id}><td colSpan={8} className="p-0">
+                      <tr key={w.id}><td colSpan={7} className="p-0">
                         <WorkerForm initial={w} onDone={() => { setEditing(null); void mutate(); }} onCancel={() => setEditing(null)} />
                       </td></tr>
                     ) : (
@@ -553,7 +550,7 @@ export default function WorkersPage() {
                   <tfoot>
                     <tr className="border-t-2 border-line bg-canvas/60 font-semibold">
                       <td />
-                      <td className="px-4 py-2.5" colSpan={3}>{isDaily ? t("Daily-wage workers total") : t("Monthly workers total")}</td>
+                      <td className="px-4 py-2.5" colSpan={2}>{isDaily ? t("Daily-wage workers total") : t("Monthly workers total")}</td>
                       <td className="tabular px-4 py-2.5 text-end">{money(agg.work)}</td>
                       <td className="tabular px-4 py-2.5 text-end text-ok">{money(agg.paid)}</td>
                       <td className="px-4 py-2.5 text-end"><Balance value={agg.due} strong /></td>

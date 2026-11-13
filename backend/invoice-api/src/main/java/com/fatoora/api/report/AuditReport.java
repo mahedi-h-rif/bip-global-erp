@@ -124,8 +124,9 @@ public final class AuditReport {
         Einvoicing einv = einvoicing(in, findings);
         Receivables rec = receivables(in, findings);
         CashSummary cash = cash(in.cash(), findings);
-        List<DocStatus> docs = documents(in, findings);
-        Workforce staff = workforce(in, findings);
+        // Document tracking (CR, licences, Iqamas) is not part of this system: no document findings or renewal dates.
+        List<DocStatus> docs = List.of();
+        Workforce staff = workforce(in, new ArrayList<>());
         Controls controls = controls(in.activity(), findings);
         findings.sort(Comparator.comparing(Finding::severity));
         return new Result(in.company(), in.from(), in.to(), in.now(), in.preparedBy(), score(findings), findings, vat, einv, rec,

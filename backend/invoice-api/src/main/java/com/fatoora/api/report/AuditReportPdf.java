@@ -144,22 +144,9 @@ final class AuditReportPdf {
             s.append("</table>");
         }
 
-        // 6. Documents and workforce
-        s.append(heading("6. Statutory documents and workforce", "٦. المستندات النظامية والعمالة"));
-        s.append("<table style=\"font-size:8.5pt; page-break-inside:avoid\">")
-                .append(head(new String[]{"Document · المستند", "Number · الرقم", "Expiry · الانتهاء", "Status · الحالة"}, 9));
-        for (DocStatus d : r.documents()) {
-            String[] st = STATUS.get(d.status());
-            s.append("<tr>").append(td(esc(d.label()) + "<div class=\"rtl\" dir=\"rtl\">" + esc(d.labelAr()) + "</div>"))
-                    .append(td(esc(d.number() == null ? "–" : d.number()))).append(td(d.expiry() == null ? "–" : date(d.expiry())))
-                    .append(td("<b style=\"color:" + st[2] + "\">" + st[0] + "</b> · <span dir=\"rtl\">" + st[1] + "</span>")).append("</tr>");
-        }
-        s.append("</table>");
-        var w = r.workforce();
-        s.append(kpiRow(new String[][]{
-                {"Active workers · العمال", String.valueOf(w.active())}, {"Iqama valid · إقامة سارية", String.valueOf(w.iqamaValid())},
-                {"Expiring · قاربت", String.valueOf(w.iqamaExpiring())}, {"Expired · منتهية", String.valueOf(w.iqamaExpired())},
-                {"Not on file · غير محفوظة", String.valueOf(w.iqamaMissing())}}));
+        // 6. Workforce
+        s.append(heading("6. Workforce", "٦. العمالة"));
+        s.append(kpiRow(new String[][]{{"Active workers · العمال", String.valueOf(r.workforce().active())}}));
 
         // 7. Controls
         var ctl = r.controls();
