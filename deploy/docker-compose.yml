@@ -80,6 +80,23 @@ services:
     depends_on:
       - api-prod
 
+  # HTTPS for erp.bipgulf.com (production), with automatic Let's Encrypt certificates.
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web-prod
+
 volumes:
   pgdata:
   wa-auth:
+  caddy-data:
+  caddy-config:

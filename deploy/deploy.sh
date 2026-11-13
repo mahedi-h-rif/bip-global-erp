@@ -77,7 +77,11 @@ else
   check "$BASE" "$FATOORA_ADMIN_EMAIL" "$FATOORA_ADMIN_PASSWORD"
   if [ -n "${WEB_PORT_PROD:-}" ]; then
     PROD_PASSWORD=$(grep -E '^FATOORA_ADMIN_PASSWORD=' "$PROD_ENV" | cut -d= -f2-)
-    check "http://${HOST#*@}:$WEB_PORT_PROD" "$FATOORA_ADMIN_EMAIL" "$PROD_PASSWORD"
+    # Production is reached on its HTTPS address (secure cookies are not sent over plain http).
+    PROD_URL=$(grep -E '^FATOORA_PORTAL_URL=' "$PROD_ENV" | cut -d= -f2- | tr -d '"')
+    PROD_URL=${PROD_URL:-http://${HOST#*@}:$WEB_PORT_PROD}
+    for i in $(seq 1 30); do curl -fs -o /dev/null "$PROD_URL/login" && break; sleep 2; done
+    check "$PROD_URL" "$FATOORA_ADMIN_EMAIL" "$PROD_PASSWORD"
   fi
 fi
-echo "== deployed: UAT http://${HOST#*@}:$WEB_PORT${WEB_PORT_PROD:+ · PRODUCTION http://${HOST#*@}:$WEB_PORT_PROD}"
+echo "== deployed: UAT http://${HOST#*@}:$WEB_PORT${WEB_PORT_PROD:+ · PRODUCTION ${PROD_URL:-http://${HOST#*@}:$WEB_PORT_PROD}}"
