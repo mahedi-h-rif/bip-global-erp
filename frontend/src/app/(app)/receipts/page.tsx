@@ -9,6 +9,7 @@ import { date, money, paymentMethodLabel } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingCollections } from "@/components/pending-work";
 
 export default function ReceiptsPage() {
   const t = useT();
@@ -21,6 +22,7 @@ export default function ReceiptsPage() {
         subtitle={t("One payment from a customer, settled against one or more of their invoices.")}
         actions={<ButtonLink href="/receipts/new"><Plus className="size-4" aria-hidden /> {t("Receive payment")}</ButtonLink>}
       />
+      <PendingCollections />
       <Card>
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}

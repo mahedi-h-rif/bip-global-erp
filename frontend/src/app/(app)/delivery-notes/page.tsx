@@ -13,6 +13,7 @@ import { deliveryStatusLabel } from "@/components/delivery-note-editor";
 import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from "@/components/invoice-quantities";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingDeliveries } from "@/components/pending-work";
 
 const tone: Record<DeliveryNote["status"], string> = {
   DRAFT: "bg-amber-50 text-amber-700",
@@ -92,6 +93,7 @@ export default function DeliveryNotesPage() {
         subtitle={t("Create them from an issued invoice (open the invoice) or on their own.")}
         actions={<ButtonLink href="/delivery-notes/new"><Plus className="size-4" aria-hidden /> {t("New delivery note")}</ButtonLink>}
       />
+      <PendingDeliveries />
       <InvoiceDeliveries />
       <Card>
         <div className="border-b border-line p-4">

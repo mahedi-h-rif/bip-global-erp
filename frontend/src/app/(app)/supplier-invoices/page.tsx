@@ -11,6 +11,7 @@ import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/component
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingBilling } from "@/components/pending-work";
 
 export default function SupplierInvoicesPage() {
   const t = useT();
@@ -22,6 +23,7 @@ export default function SupplierInvoicesPage() {
     <>
       <PageHeader title={t("Supplier invoices")} subtitle={t("What we owe our suppliers. Make them from goods receipts.")}
                   actions={<span className="flex gap-2"><ButtonLink variant="secondary" href="/supplier-payments/new">{t("Pay supplier")}</ButtonLink><ButtonLink href="/supplier-invoices/new"><Plus className="size-4" aria-hidden /> {t("Direct invoice")}</ButtonLink></span>} />
+      <PendingBilling />
       <Card>
         <div className="flex items-center justify-between border-b border-line p-4 text-sm">
           <label className="inline-flex items-center gap-2 text-muted"><input type="checkbox" className="size-4 accent-[var(--color-brand)]" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> {t("Unpaid only")}</label>

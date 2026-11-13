@@ -12,6 +12,7 @@ import { countdown, dateTime, kindLabel, money, statusLabel, typeLabel } from "@
 import { Alert, Button, ButtonLink, Card, Empty, Input, PageHeader, PaymentBadge, Select, Spinner, StatusBadge } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { LifecycleBadge } from "@/components/invoice-lifecycle";
+import { PendingInvoicing } from "@/components/pending-work";
 
 const statuses = Object.keys(statusLabel) as InvoiceStatus[];
 
@@ -121,6 +122,7 @@ function InvoiceList() {
         subtitle={t("Tax invoices, simplified invoices, credit and debit notes")}
         actions={<ButtonLink href="/invoices/new"><Plus className="size-4" aria-hidden /> {t("New invoice")}</ButtonLink>}
       />
+      <PendingInvoicing />
       <Card>
         <div className="flex flex-wrap gap-3 border-b border-line p-4">
           <form

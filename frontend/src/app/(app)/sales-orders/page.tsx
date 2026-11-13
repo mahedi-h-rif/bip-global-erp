@@ -12,6 +12,7 @@ import { Alert, Button, ButtonLink, Card, Empty, PageHeader, Select, Spinner } f
 import { salesOrderStatusLabel, salesOrderStatusTone } from "@/components/sales-order-editor";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingQuotations } from "@/components/pending-work";
 
 export default function SalesOrdersPage() {
   const t = useT();
@@ -31,6 +32,7 @@ export default function SalesOrdersPage() {
         subtitle={t("Quotation → Sales order → Delivery → Invoice → Payment. Open an order to deliver it.")}
         actions={<ButtonLink href="/sales-orders/new"><Plus className="size-4" aria-hidden /> {t("New sales order")}</ButtonLink>}
       />
+      <PendingQuotations />
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
           {problem && <div className="w-full"><Alert tone="bad">{problem}</Alert></div>}

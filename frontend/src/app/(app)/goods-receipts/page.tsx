@@ -10,6 +10,7 @@ import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/component
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingReceiving } from "@/components/pending-work";
 
 export default function GoodsReceiptsPage() {
   const t = useT();
@@ -19,6 +20,7 @@ export default function GoodsReceiptsPage() {
     <>
       <PageHeader title={t("Goods receipts")} subtitle={t("Stock comes in here, at its landed cost. Open a purchase order to receive against it.")}
                   actions={<ButtonLink href="/goods-receipts/new"><Plus className="size-4" aria-hidden /> {t("Receive without PO")}</ButtonLink>} />
+      <PendingReceiving />
       <Card>
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}

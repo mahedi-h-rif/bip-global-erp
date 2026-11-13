@@ -12,6 +12,7 @@ import { Alert, Button, ButtonLink, Card, Empty, PageHeader, Select, Spinner } f
 import { fmtCur, poStatus, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingPurchaseRequests } from "@/components/pending-work";
 
 export default function PurchaseOrdersPage() {
   const t = useT();
@@ -27,6 +28,7 @@ export default function PurchaseOrdersPage() {
     <>
       <PageHeader title={t("Purchase orders")} subtitle={t("Requisition → approval → goods receipt → supplier invoice → payment.")}
                   actions={<ButtonLink href="/purchase-orders/new"><Plus className="size-4" aria-hidden /> {t("New requisition")}</ButtonLink>} />
+      <PendingPurchaseRequests />
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
           {chosen.length > 0 && (

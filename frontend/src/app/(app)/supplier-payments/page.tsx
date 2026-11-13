@@ -9,6 +9,7 @@ import { date, money, paymentMethodLabel } from "@/lib/format";
 import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PendingSupplierPayments } from "@/components/pending-work";
 
 export default function SupplierPaymentsPage() {
   const t = useT();
@@ -18,6 +19,7 @@ export default function SupplierPaymentsPage() {
     <>
       <PageHeader title={t("Supplier payments")} subtitle={t("Outgoing payments, each settling one or more supplier invoices.")}
                   actions={<ButtonLink href="/supplier-payments/new"><Plus className="size-4" aria-hidden /> {t("Pay supplier")}</ButtonLink>} />
+      <PendingSupplierPayments />
       <Card>
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
