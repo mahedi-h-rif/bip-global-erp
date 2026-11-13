@@ -430,6 +430,34 @@ class InvoiceApiApplicationTests {
         assertEquals(403, as.apply("POST /quotations", Map.of("clientName", "X", "lines", line)).statusCode(), "quotations are view-only");
     }
 
+    @Test
+    @Order(27)
+    void bankQrUploadAndQuotationWithoutBankDetails() throws Exception {
+        body(call("PUT", "/settings/bank", Map.of("bankName", "AL RAJHI BANK", "bankAccountName", "TEST CO",
+                "bankAccountNo", "123", "bankIban", "SA5680000450608010141252")), 200);
+        var img = new java.awt.image.BufferedImage(40, 40, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var png = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", png);
+        var put = HttpRequest.newBuilder(URI.create(base + "/settings/bank/qr")).header("Content-Type", "image/png")
+                .header("X-XSRF-TOKEN", xsrf().orElseThrow()).PUT(HttpRequest.BodyPublishers.ofByteArray(png.toByteArray())).build();
+        var saved = http.send(put, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertTrue(json.readTree(saved.body()).get("hasQr").asBoolean());
+        assertEquals(200, http.send(HttpRequest.newBuilder(URI.create(base + "/settings/bank/qr")).build(), HttpResponse.BodyHandlers.ofByteArray()).statusCode());
+
+        long q = body(call("POST", "/quotations", Map.of("clientName", "QR Client",
+                "lines", new Object[]{Map.of("name", "Tape", "quantity", 1, "unitCode", "PCE", "unitPrice", 5, "vatRate", 15)})), 201).get("id").asLong();
+        for (boolean proforma : new boolean[]{false, true}) {
+            var pdf = http.send(HttpRequest.newBuilder(URI.create(base + "/quotations/" + q + "/pdf?proforma=" + proforma)).build(), HttpResponse.BodyHandlers.ofByteArray());
+            try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf.body())) {
+                String text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+                assertEquals(proforma, text.contains("SA56 8000 0450 6080 1014 1252"), (proforma ? "proforma shows" : "quotation hides") + " the bank details");
+            }
+        }
+        var removed = body(call("DELETE", "/settings/bank/qr", null), 200);
+        assertFalse(removed.get("hasQr").asBoolean(), "QR removed");
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {

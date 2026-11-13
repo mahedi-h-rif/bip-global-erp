@@ -48,7 +48,8 @@ public final class BankDetailsBlock {
 
     /** The block as XHTML, or an empty string when no IBAN is saved. */
     public static String html(Organization org) {
-        if (org.getBankIban() == null || org.getBankIban().isBlank()) return "";
+        boolean uploadedQr = org.getBankQr() != null && !org.getBankQr().isBlank();
+        if ((org.getBankIban() == null || org.getBankIban().isBlank()) && !uploadedQr) return "";
         List<Row> rows = rows(org);
         StringBuilder t = new StringBuilder();
         String cell = "border:1px solid #1b2233; padding:4px 8px; ";
@@ -57,7 +58,9 @@ public final class BankDetailsBlock {
             t.append("<tr>");
             if (i == 0)
                 t.append("<td rowspan=\"").append(rows.size()).append("\" style=\"width:27mm; padding:0 4mm 0 0; vertical-align:middle\">")
-                        .append("<img src=\"").append(InvoicePdfService.qrDataUri(qrPayload(org)))
+                        .append("<img src=\"").append(uploadedQr
+                                ? "data:" + org.getBankQrContentType() + ";base64," + org.getBankQr()
+                                : InvoicePdfService.qrDataUri(qrPayload(org)))
                         .append("\" style=\"width:25mm; height:25mm\"/></td>");
             t.append("<td style=\"").append(cell).append("width:21%; text-align:right; font-size:8pt\">").append(r.en()).append("</td>")
                     .append("<td style=\"").append(cell).append("text-align:center; font-weight:700; font-size:9.5pt\">")

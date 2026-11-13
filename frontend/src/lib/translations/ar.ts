@@ -1699,4 +1699,13 @@ export const ar: Record<string, string> = {
   "Pay": "دفع",
   "Sales order": "أمر البيع",
   "Request": "الطلب",
+  "Payment QR code": "رمز QR للدفع",
+  "Upload your bank's QR code to print it next to the bank details on invoices, proforma invoices, sales orders and agreements. Without one, a QR made from the details above is printed.": "ارفع رمز QR الخاص بالبنك لطباعته بجانب البيانات البنكية في الفواتير والفواتير المبدئية وأوامر البيع والاتفاقيات. بدونه يُطبع رمز QR مُنشأ من البيانات أعلاه.",
+  "Your uploaded QR code is printed on documents.": "يُطبع رمز QR الذي رفعته على المستندات.",
+  "No QR uploaded: the QR is made from the bank details.": "لم يُرفع رمز QR: يُنشأ الرمز من البيانات البنكية.",
+  "Replace QR code": "استبدال رمز QR",
+  "Upload QR code": "رفع رمز QR",
+  "QR code saved. New PDFs show it.": "تم حفظ رمز QR. تظهره ملفات PDF الجديدة.",
+  "QR code removed.": "تمت إزالة رمز QR.",
+  "PNG or JPEG, up to 1 MB.": "PNG أو JPEG، حتى 1 ميجابايت.",
 };

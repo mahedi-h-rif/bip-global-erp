@@ -146,7 +146,7 @@ public class QuotationController {
     ResponseEntity<byte[]> pdf(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean proforma) {
         Quotation q = load(id);
         Organization org = orgs.findById(q.getOrganizationId()).orElseThrow();
-        String body = html(q, org);
+        String body = html(q, org, proforma);
         // Proforma invoice: the same document titled as a request for payment before supply (not a tax invoice).
         if (proforma) body = body.replace("<h1>Quotation</h1>", "<h1>Proforma Invoice</h1>").replace("<h1>عرض سعر</h1>", "<h1>فاتورة مبدئية</h1>")
                 .replace("Quotation for", "Bill to").replace("عرض سعر إلى", "فاتورة إلى").replace("Quotation details", "Proforma details")
@@ -211,7 +211,8 @@ public class QuotationController {
                 q.getCreatedBy(), q.getCreatedAt());
     }
 
-    private String html(Quotation q, Organization org) {
+    /** {@code proforma}: a request for payment, so it carries the bank details; a plain quotation does not. */
+    private String html(Quotation q, Organization org, boolean proforma) {
         Customer c = q.getCustomerId() == null ? null : customers.findById(q.getCustomerId()).orElse(null);
         String clientName = c == null ? q.getClientName() : displayName(c);
         String client = LetterheadPdf.box("Quotation for", "عرض سعر إلى", new String[][]{
@@ -282,7 +283,7 @@ public class QuotationController {
                 LetterheadPdf.money(q.getTotalInclVat()),
                 q.getNotes() == null ? "" : "<h2>Notes · ملاحظات</h2><p>" + LetterheadPdf.text(q.getNotes()) + "</p>",
                 q.getTerms() == null ? "" : "<h2>Terms &amp; conditions · الشروط والأحكام</h2><p>" + LetterheadPdf.text(q.getTerms()) + "</p>",
-                com.fatoora.api.pdf.BankDetailsBlock.html(org) + LetterheadPdf.signatures(org, clientName));
+                (proforma ? com.fatoora.api.pdf.BankDetailsBlock.html(org) : "") + LetterheadPdf.signatures(org, clientName));
     }
 
     private static String td(String content, String align) {

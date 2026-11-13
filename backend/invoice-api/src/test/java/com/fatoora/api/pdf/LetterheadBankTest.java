@@ -82,6 +82,18 @@ class LetterheadBankTest {
     }
 
     @Test
+    void uploadedQrReplacesTheGeneratedOne() throws Exception {
+        Organization o = org("CLASSIC");
+        var img = new java.awt.image.BufferedImage(20, 20, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var png = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", png);
+        String b64 = java.util.Base64.getEncoder().encodeToString(png.toByteArray());
+        o.setBankQr(b64);
+        o.setBankQrContentType("image/png");
+        assertTrue(BankDetailsBlock.html(o).contains("data:image/png;base64," + b64), "the uploaded QR is printed");
+    }
+
+    @Test
     void noBlockWithoutIban() {
         Organization o = org("CLASSIC");
         o.setBankIban(null);

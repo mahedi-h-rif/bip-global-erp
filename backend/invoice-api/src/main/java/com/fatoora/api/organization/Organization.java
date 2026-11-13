@@ -52,6 +52,9 @@ public class Organization {
     private String bankAccountName;
     private String bankAccountNo;
     private String bankIban;
+    /** Uploaded payment QR (base64), shown with the bank details instead of the generated one. */
+    private String bankQr;
+    private String bankQrContentType;
     private String invoiceFooter;
     private String signatoryTitle;
     private String logoContentType;

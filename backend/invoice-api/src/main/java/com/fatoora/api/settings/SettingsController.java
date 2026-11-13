@@ -25,7 +25,9 @@ public class SettingsController {
     public static final List<String> ACTIONS = List.of("view", "create", "edit", "delete", "approve");
 
     public record Bank(@Size(max = 150) String bankName, @Size(max = 200) String bankAccountName, @Size(max = 60) String bankAccountNo,
-                       @Size(max = 40) String bankIban, @Size(max = 1000) String invoiceFooter) {}
+                       @Size(max = 40) String bankIban, @Size(max = 1000) String invoiceFooter,
+                       /** Read-only: an uploaded payment QR code is shown with the bank details. */
+                       Boolean hasQr) {}
 
     public record Role(Long id, @NotBlank @Size(max = 100) String name, @Size(max = 500) String description,
                        Map<String, List<String>> permissions, List<String> users) {}
@@ -44,8 +46,8 @@ public class SettingsController {
 
     @GetMapping("/bank")
     Bank bank() {
-        return jdbc.queryForObject("SELECT bank_name, bank_account_name, bank_account_no, bank_iban, invoice_footer FROM organization WHERE id = ?",
-                (rs, i) -> new Bank(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)), CurrentUser.orgId());
+        return jdbc.queryForObject("SELECT bank_name, bank_account_name, bank_account_no, bank_iban, invoice_footer, bank_qr IS NOT NULL FROM organization WHERE id = ?",
+                (rs, i) -> new Bank(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getBoolean(6)), CurrentUser.orgId());
     }
 
     @PutMapping("/bank")
@@ -56,6 +58,46 @@ public class SettingsController {
                 n(b.bankName()), n(b.bankAccountName()), n(b.bankAccountNo()), n(b.bankIban() == null ? null : b.bankIban().replace(" ", "").toUpperCase()),
                 n(b.invoiceFooter()), CurrentUser.orgId());
         audit.record(CurrentUser.orgId(), "BANK_DETAILS_UPDATED", "organization", CurrentUser.orgId(), b.bankName());
+        return bank();
+    }
+
+    private static final int MAX_QR_BYTES = 1024 * 1024;
+
+    /** The uploaded payment QR code, shown with the bank details on documents. */
+    @GetMapping("/bank/qr")
+    org.springframework.http.ResponseEntity<byte[]> bankQr() {
+        var rows = jdbc.queryForList("SELECT bank_qr, bank_qr_content_type FROM organization WHERE id = ? AND bank_qr IS NOT NULL", CurrentUser.orgId());
+        if (rows.isEmpty()) throw ApiException.notFound("Bank QR code");
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType((String) rows.getFirst().get("bank_qr_content_type")))
+                .body(java.util.Base64.getDecoder().decode((String) rows.getFirst().get("bank_qr")));
+    }
+
+    @PutMapping(value = "/bank/qr", consumes = {org.springframework.http.MediaType.IMAGE_PNG_VALUE, org.springframework.http.MediaType.IMAGE_JPEG_VALUE})
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    Bank uploadBankQr(@RequestBody byte[] image, @RequestHeader(org.springframework.http.HttpHeaders.CONTENT_TYPE) String contentType) {
+        if (image.length == 0 || image.length > MAX_QR_BYTES)
+            throw new ApiException.Validation(Map.of("qr", "PNG or JPEG up to 1 MB"));
+        try {
+            if (javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(image)) == null)
+                throw new ApiException.Validation(Map.of("qr", "This file is not a readable image"));
+        } catch (java.io.IOException e) {
+            throw new ApiException.Validation(Map.of("qr", "This file is not a readable image"));
+        }
+        String type = org.springframework.http.MediaType.parseMediaType(contentType).getSubtype().equals("png") ? "image/png" : "image/jpeg";
+        jdbc.update("UPDATE organization SET bank_qr = ?, bank_qr_content_type = ? WHERE id = ?",
+                java.util.Base64.getEncoder().encodeToString(image), type, CurrentUser.orgId());
+        audit.record(CurrentUser.orgId(), "BANK_QR_UPLOADED", "organization", CurrentUser.orgId(), null);
+        return bank();
+    }
+
+    @DeleteMapping("/bank/qr")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    Bank removeBankQr() {
+        jdbc.update("UPDATE organization SET bank_qr = NULL, bank_qr_content_type = NULL WHERE id = ?", CurrentUser.orgId());
+        audit.record(CurrentUser.orgId(), "BANK_QR_REMOVED", "organization", CurrentUser.orgId(), null);
         return bank();
     }
 
