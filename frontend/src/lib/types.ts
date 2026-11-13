@@ -11,7 +11,7 @@ export type InvoiceStatus =
   | "REPORTED_WITH_WARNINGS"
   | "REJECTED";
 export type ZatcaEnvironment = "SANDBOX" | "SIMULATION" | "PRODUCTION";
-export type PaymentStatus = "UNPAID" | "PARTIAL" | "PAID";
+export type PaymentStatus = "UNPAID" | "PARTIAL" | "PAID" | "CLOSED";
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CARD" | "CHEQUE" | "OTHER";
 
 export interface Me {
@@ -64,6 +64,7 @@ export interface InvoiceSummary {
   downloadable: boolean;
   /** Signed by a sandbox or simulation device: not a legal invoice, so it can be deleted. */
   test: boolean;
+  lifecycle?: "CANCELLED" | "CLOSED" | null;
 }
 
 export interface Submission {
@@ -122,6 +123,12 @@ export interface InvoiceDetail {
   payments: Payment[];
   /** Signed by a sandbox or simulation device: not a legal invoice, so it can be deleted. */
   test: boolean;
+  /** CANCELLED (full credit note issued) or CLOSED (unpaid rest written off). */
+  lifecycle?: "CANCELLED" | "CLOSED" | null;
+  lifecycleReason?: string | null;
+  lifecycleAt?: string | null;
+  cancelNoteId?: number | null;
+  cancelNoteNumber?: string | null;
 }
 
 export interface Payment {

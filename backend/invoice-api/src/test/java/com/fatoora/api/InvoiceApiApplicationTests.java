@@ -97,7 +97,7 @@ class InvoiceApiApplicationTests {
                 new Object[]{Map.of("email", "admin@test.local", "password", "correct-horse-battery")}).statusCode());
         assertEquals("ADMIN", json.readTree(as.apply("GET /auth/me", new Object[0]).body()).get("role").asString());
 
-        assertEquals(403, as.apply("GET /egs-units", new Object[0]).statusCode(), "device list is provider-only");
+        assertEquals(200, as.apply("GET /egs-units", new Object[0]).statusCode(), "admins may see the devices (read-only)");
         assertEquals(403, as.apply("POST /egs-units", new Object[]{Map.of("name", "X", "branch", "B",
                 "location", "L", "industry", "I", "invoiceTypes", "1100")}).statusCode(), "onboarding is provider-only");
 
@@ -296,6 +296,51 @@ class InvoiceApiApplicationTests {
 
         var names = json.readTree(as.apply("GET /suggest?field=party&q=walk", null).body());
         assertTrue(names.toString().contains("Walk-in buyer"), "suggests names already entered: " + names);
+    }
+
+    @Test
+    @Order(21)
+    void cancelIssuesFullCreditNoteAndRefundsWhenTicked() throws Exception {
+        var draft = body(call("POST", "/invoices", Map.of("kind", "SIMPLIFIED",
+                "lines", new Object[]{Map.of("name", "Engine oil", "quantity", 2, "unitCode", "PCE", "unitPrice", 50)})), 201);
+        long id = draft.get("id").asLong();
+        body(call("POST", "/invoices/" + id + "/issue", Map.of("sendMode", "NOW")), 200);
+        body(call("POST", "/invoices/" + id + "/payments", Map.of("amount", 40, "paidOn", java.time.LocalDate.now().toString(), "method", "CASH")), 201);
+
+        var cancelled = body(call("POST", "/invoices/" + id + "/cancel-invoice",
+                Map.of("reason", "Customer called off the order", "goodsReturned", false, "paymentRefunded", true)), 200);
+        assertEquals("CANCELLED", cancelled.get("lifecycle").asString(), cancelled.toString());
+        assertFalse(cancelled.get("cancelNoteNumber").isNull(), "the full credit note is issued");
+        assertEquals(0, cancelled.get("paidAmount").decimalValue().signum(), "refund nets out what was paid: " + cancelled);
+
+        var note = body(call("GET", "/invoices/" + cancelled.get("cancelNoteId").asLong(), null), 200);
+        assertEquals("CREDIT_NOTE", note.get("type").asString());
+        assertEquals(0, new java.math.BigDecimal("115.00").compareTo(note.get("totalInclVat").decimalValue()), "full amount credited");
+
+        assertEquals(409, call("POST", "/invoices/" + id + "/cancel-invoice",
+                Map.of("reason", "again", "goodsReturned", false, "paymentRefunded", false)).statusCode(), "cancel only once");
+        assertEquals(409, call("POST", "/invoices/" + id + "/payments",
+                Map.of("amount", 1, "paidOn", java.time.LocalDate.now().toString(), "method", "CASH")).statusCode(), "no payments after cancel");
+    }
+
+    @Test
+    @Order(22)
+    void closeWritesOffTheRestAndReopenUndoesIt() throws Exception {
+        var draft = body(call("POST", "/invoices", Map.of("kind", "SIMPLIFIED",
+                "lines", new Object[]{Map.of("name", "Filter", "quantity", 1, "unitCode", "PCE", "unitPrice", 100)})), 201);
+        long id = draft.get("id").asLong();
+        body(call("POST", "/invoices/" + id + "/issue", Map.of("sendMode", "NOW")), 200);
+
+        var closed = body(call("POST", "/invoices/" + id + "/close", Map.of("reason", "Customer will not pay the rest")), 200);
+        assertEquals("CLOSED", closed.get("lifecycle").asString());
+        assertEquals(0, closed.get("dueAmount").decimalValue().signum(), "nothing due on a closed invoice");
+        assertEquals("CLOSED", closed.get("paymentStatus").asString());
+        assertEquals(409, call("POST", "/invoices/" + id + "/payments",
+                Map.of("amount", 10, "paidOn", java.time.LocalDate.now().toString(), "method", "CASH")).statusCode());
+
+        var open = body(call("POST", "/invoices/" + id + "/reopen", null), 200);
+        assertTrue(open.get("lifecycle").isNull());
+        assertEquals(0, new java.math.BigDecimal("115.00").compareTo(open.get("dueAmount").decimalValue()));
     }
 
     // --- helpers ---------------------------------------------------------------------------------

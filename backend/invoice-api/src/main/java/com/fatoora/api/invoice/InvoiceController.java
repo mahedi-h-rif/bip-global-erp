@@ -94,6 +94,43 @@ public class InvoiceController {
         return service.detail(CurrentUser.orgId(), note.getId());
     }
 
+    /**
+     * Cancel an issued invoice: a full credit note is created and issued to ZATCA; only when it is accepted is the
+     * invoice marked cancelled. Goods go back to stock and the payment is refunded only when ticked.
+     */
+    @PostMapping("/{id}/cancel-invoice")
+    @PreAuthorize(WRITE)
+    InvoiceDetail cancelInvoice(@PathVariable Long id, @Valid @RequestBody InvoiceDtos.CancelRequest req) {
+        Long orgId = CurrentUser.orgId();
+        String user = CurrentUser.get().email();
+        service.requireCancellable(orgId, id);
+        var note = service.createNote(orgId, user, id, new NoteRequest(com.fatoora.zatca.model.DocumentType.CREDIT_NOTE,
+                "Cancellation: " + req.reason()));
+        service.setStockReturn(orgId, note.getId(), req.goodsReturned());
+        service.issue(orgId, note.getId(), com.fatoora.api.invoice.SendMode.NOW);
+        var issued = service.detail(orgId, note.getId());
+        if (!issued.status().billable())
+            throw com.fatoora.api.common.ApiException.conflict("cancel_not_accepted",
+                    "ZATCA did not accept the cancelling credit note (" + issued.status() + "). The invoice is not cancelled; "
+                            + "open the draft credit note " + (issued.number() == null ? "" : issued.number()) + " to see why.");
+        service.completeCancel(orgId, user, id, note.getId(), req.reason(), req.paymentRefunded());
+        return service.detail(orgId, id);
+    }
+
+    @PostMapping("/{id}/close")
+    @PreAuthorize(WRITE)
+    InvoiceDetail close(@PathVariable Long id, @Valid @RequestBody(required = false) InvoiceDtos.CloseRequest req) {
+        service.close(CurrentUser.orgId(), id, req == null ? null : req.reason());
+        return service.detail(CurrentUser.orgId(), id);
+    }
+
+    @PostMapping("/{id}/reopen")
+    @PreAuthorize(WRITE)
+    InvoiceDetail reopen(@PathVariable Long id) {
+        service.reopen(CurrentUser.orgId(), id);
+        return service.detail(CurrentUser.orgId(), id);
+    }
+
     @PostMapping("/{id}/duplicate")
     @PreAuthorize(WRITE)
     @ResponseStatus(HttpStatus.CREATED)

@@ -273,7 +273,7 @@ public class ErpReportsController {
                                    WHERE n.original_invoice_id = i.id AND n.status NOT IN ('DRAFT','REJECTED')), 0)
                        - COALESCE((SELECT sum(p.amount) FROM invoice_payment p WHERE p.invoice_id = i.id), 0) AS open
                 FROM invoice i LEFT JOIN customer c ON c.id = i.customer_id
-                WHERE i.organization_id = ? AND i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED')""", orgId)
+                WHERE i.organization_id = ? AND i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED') AND i.closed_at IS NULL""", orgId)
                 : jdbc.queryForList("""
                 SELECT s.name AS party, v.number, COALESCE(v.due_date, v.invoice_date) AS due,
                        v.total_sar - COALESCE((SELECT sum(a.amount) FROM supplier_payment_allocation a JOIN supplier_payment p ON p.id = a.supplier_payment_id

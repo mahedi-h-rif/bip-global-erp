@@ -72,6 +72,7 @@ export const paymentStatusLabel: Record<PaymentStatus, string> = {
   UNPAID: "Unpaid",
   PARTIAL: "Partly paid",
   PAID: "Paid",
+  CLOSED: "Closed",
 };
 
 export const paymentMethodLabel: Record<PaymentMethod, string> = {

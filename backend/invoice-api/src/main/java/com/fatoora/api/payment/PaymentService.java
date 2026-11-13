@@ -143,6 +143,10 @@ public class PaymentService {
             throw ApiException.badRequest("not_invoice", "Record payments against the invoice, not against a credit or debit note");
         if (!inv.getStatus().billable())
             throw ApiException.conflict("not_issued", "Payments can only be recorded against an issued invoice");
+        if (inv.getCancelledAt() != null)
+            throw ApiException.conflict("cancelled", "This invoice is cancelled; payments can no longer be changed");
+        if (inv.getClosedAt() != null)
+            throw ApiException.conflict("closed", "This invoice is closed. Reopen it to record or change payments");
         return inv;
     }
 
@@ -174,5 +178,21 @@ public class PaymentService {
 
     private static String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s.strip();
+    }
+
+    /** A refund of what was paid on a cancelled invoice: a negative payment, so every "paid" total nets it out. */
+    @Transactional
+    public void recordRefund(Long orgId, String user, Long invoiceId, BigDecimal amount, String note) {
+        List<InvoicePayment> earlier = payments.findByInvoiceIdOrderByPaidOnAscIdAsc(invoiceId);
+        InvoicePayment p = new InvoicePayment();
+        p.setOrganizationId(orgId);
+        p.setInvoiceId(invoiceId);
+        p.setCreatedBy(user);
+        p.setAmount(amount.negate());
+        p.setPaidOn(java.time.LocalDate.now(com.fatoora.api.InvoiceApiApplication.KSA));
+        p.setMethod(earlier.isEmpty() ? InvoicePayment.Method.CASH : earlier.getLast().getMethod());
+        p.setNote(note.length() > 500 ? note.substring(0, 500) : note);
+        payments.save(p);
+        audit.record(orgId, "PAYMENT_REFUNDED", "invoice", invoiceId, amount.toPlainString());
     }
 }

@@ -53,6 +53,15 @@ public class Invoice {
     /** The customer's PO number, printed on the invoice. */
     private String customerRef;
     private String salesEmployee;
+    /** Cancelled: a full credit note ({@code cancelNoteId}) was issued against it. */
+    private java.time.Instant cancelledAt;
+    private String cancelReason;
+    private Long cancelNoteId;
+    /** Closed: the unpaid rest is written off; no dues or reminders. */
+    private java.time.Instant closedAt;
+    private String closeReason;
+    /** On a credit note: the goods were not returned, so issuing it does not put them back in stock. */
+    private boolean noStockReturn;
     private String billingReference;
     private String reason;
     private String internalNote;

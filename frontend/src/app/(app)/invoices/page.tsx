@@ -11,6 +11,7 @@ import type { InvoiceStatus, InvoiceSummary, Me, Page } from "@/lib/types";
 import { countdown, dateTime, kindLabel, money, statusLabel, typeLabel } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, Empty, Input, PageHeader, PaymentBadge, Select, Spinner, StatusBadge } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { LifecycleBadge } from "@/components/invoice-lifecycle";
 
 const statuses = Object.keys(statusLabel) as InvoiceStatus[];
 
@@ -186,6 +187,7 @@ function InvoiceList() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={i.status} />
+                      <LifecycleBadge lifecycle={i.lifecycle} />
                       <DeadlineNote invoice={i} />
                     </td>
                     <td className="px-4 py-3">

@@ -28,7 +28,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long>, JpaSpec
     List<Long> findDueForSubmission(Instant now);
 
     String FIGURES = "select new com.fatoora.api.invoice.InvoiceFigures(i.id, i.number, i.kind, i.type, i.status, "
-            + "i.customerId, i.originalInvoiceId, i.totalInclVat, i.vatTotal, i.issuedAt, i.dueDate) from Invoice i ";
+            + "i.customerId, i.originalInvoiceId, i.totalInclVat, i.vatTotal, i.issuedAt, i.dueDate, i.closedAt) from Invoice i ";
 
     /** Every issued document of the organization (drafts and rejected ones excluded). */
     @Query(FIGURES + "where i.organizationId = :orgId and i.status <> com.fatoora.api.invoice.InvoiceStatus.DRAFT "
@@ -42,6 +42,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long>, JpaSpec
     boolean existsByCustomerId(Long customerId);
 
     boolean existsByOriginalInvoiceId(Long originalInvoiceId);
+
+    boolean existsByOriginalInvoiceIdAndTypeAndStatusNot(Long originalInvoiceId, com.fatoora.zatca.model.DocumentType type, InvoiceStatus status);
 
     long countByOrganizationIdAndStatus(Long organizationId, InvoiceStatus status);
 

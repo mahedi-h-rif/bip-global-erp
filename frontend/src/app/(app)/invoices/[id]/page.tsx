@@ -16,6 +16,7 @@ import { RelationshipMapButton } from "@/components/relationship-map";
 import { GrossProfitCard } from "@/components/gross-profit";
 import { ReturnItems } from "@/components/return-items";
 import { useT } from "@/lib/i18n";
+import { InvoiceLifecycle } from "@/components/invoice-lifecycle";
 
 type ZatcaMessage = { code?: string; message?: string; category?: string };
 
@@ -146,6 +147,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
 
       <div className="space-y-4">
         {actionError && <Alert tone="bad">{actionError}</Alert>}
+        <InvoiceLifecycle inv={inv} canWrite={canWrite} onChanged={() => mutate()} />
         {paymentFailed && Number(inv.paidAmount ?? 0) === 0 && (
           <Alert tone="warn" title={t("Payment not recorded")}>{t("The invoice was issued, but the payment you entered wasn't saved. Record it again under Payments below.")}</Alert>
         )}

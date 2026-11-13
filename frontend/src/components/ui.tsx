@@ -181,6 +181,7 @@ const paymentStyle: Record<PaymentStatus, string> = {
   UNPAID: "bg-red-50 text-red-700",
   PARTIAL: "bg-amber-50 text-amber-800",
   PAID: "bg-emerald-50 text-emerald-800",
+  CLOSED: "bg-slate-100 text-slate-600",
 };
 
 export function PaymentBadge({ status }: { status: PaymentStatus | null | undefined }) {

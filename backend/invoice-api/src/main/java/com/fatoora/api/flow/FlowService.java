@@ -177,7 +177,7 @@ public class FlowService {
                          + COALESCE((SELECT sum(CASE n.doc_type WHEN 'DEBIT_NOTE' THEN n.total_incl_vat ELSE -n.total_incl_vat END) FROM invoice n
                                      WHERE n.original_invoice_id = i.id AND n.status NOT IN ('DRAFT','REJECTED')), 0)
                          - COALESCE((SELECT sum(p.amount) FROM invoice_payment p WHERE p.invoice_id = i.id), 0) AS open
-                  FROM invoice i WHERE i.customer_id = ? AND i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED')) x""",
+                  FROM invoice i WHERE i.customer_id = ? AND i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED') AND i.closed_at IS NULL) x""",
                 BigDecimal.class, customerId);
     }
 

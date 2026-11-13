@@ -118,6 +118,8 @@ public class StockService {
         inv.setWarehouseId(warehouseId);
 
         boolean credit = inv.getType() == DocumentType.CREDIT_NOTE;
+        // A cancellation where the customer kept the goods: the credit note moves no stock.
+        if (credit && inv.isNoStockReturn()) return;
         Long wh = warehouseId;
         List<Move> moves = byProduct.entrySet().stream().map(e -> new Move(e.getKey(), wh,
                 credit ? e.getValue() : e.getValue().negate(), credit ? Kind.RETURN : Kind.SALE,

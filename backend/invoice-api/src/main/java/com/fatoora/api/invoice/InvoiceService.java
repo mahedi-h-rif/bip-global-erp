@@ -247,7 +247,10 @@ public class InvoiceService {
                 i.getStatus() == InvoiceStatus.DRAFT, i.getDueDate(),
                 b == null ? null : b.notes(), b == null ? null : b.adjusted(), b == null ? null : b.paid(),
                 b == null ? null : b.due(), b == null ? null : b.overpaid(), b == null ? null : b.status(), paid,
-                isTestDocument(i), i.getWarehouseId(), i.getCustomerRef(), i.getSalesEmployee());
+                isTestDocument(i), i.getWarehouseId(), i.getCustomerRef(), i.getSalesEmployee(),
+                lifecycle(i), i.getCancelledAt() != null ? i.getCancelReason() : i.getCloseReason(),
+                i.getCancelledAt() != null ? i.getCancelledAt() : i.getClosedAt(), i.getCancelNoteId(),
+                i.getCancelNoteId() == null ? null : invoices.findById(i.getCancelNoteId()).map(Invoice::getNumber).orElse(null));
     }
 
     @Transactional(readOnly = true)
@@ -411,10 +414,78 @@ public class InvoiceService {
                 i.getCustomerId() == null ? null : names.get(i.getCustomerId()), i.getTotalInclVat(), i.getVatTotal(),
                 i.getIssuedAt(), i.getReportDeadlineAt(), i.getCreatedAt(), i.getDueDate(),
                 b == null ? null : b.paid(), b == null ? null : b.due(), b == null ? null : b.status(), downloadable(i),
-                i.getEgsUnitId() != null && testUnits.contains(i.getEgsUnitId()));
+                i.getEgsUnitId() != null && testUnits.contains(i.getEgsUnitId()), lifecycle(i));
     }
 
     private static String emptyToNull(String s) {
         return s == null || s.isBlank() ? null : s;
+    }
+
+    // --- cancel and close ---------------------------------------------------------------------------
+
+    static String lifecycle(Invoice i) {
+        return i.getCancelledAt() != null ? "CANCELLED" : i.getClosedAt() != null ? "CLOSED" : null;
+    }
+
+    /** Checks an invoice can be cancelled, before anything is created. */
+    @Transactional(readOnly = true)
+    public void requireCancellable(Long orgId, Long id) {
+        Invoice inv = load(orgId, id);
+        if (inv.getType() != DocumentType.INVOICE || !inv.getStatus().accepted())
+            throw ApiException.conflict("not_cancellable", "Only an invoice ZATCA has accepted can be cancelled");
+        if (inv.getCancelledAt() != null) throw ApiException.conflict("already_cancelled", "This invoice is already cancelled");
+        boolean hasCredit = invoices.existsByOriginalInvoiceIdAndTypeAndStatusNot(id, DocumentType.CREDIT_NOTE, InvoiceStatus.REJECTED);
+        if (hasCredit)
+            throw ApiException.conflict("has_credit_note",
+                    "This invoice already has a credit note. Delete the draft note, or credit the rest from the credit note screen");
+    }
+
+    /** Marks the credit note made for a cancellation: whether issuing it puts the goods back in stock. */
+    @Transactional
+    public void setStockReturn(Long orgId, Long noteId, boolean goodsReturned) {
+        Invoice note = load(orgId, noteId);
+        note.setNoStockReturn(!goodsReturned);
+    }
+
+    /**
+     * After the full credit note is accepted: the invoice shows as cancelled, and when the customer was refunded,
+     * a refund of everything paid is recorded (a negative payment) so nothing shows as paid or overpaid.
+     */
+    @Transactional
+    public void completeCancel(Long orgId, String user, Long id, Long noteId, String reason, boolean refunded) {
+        Invoice inv = load(orgId, id);
+        inv.setCancelledAt(java.time.Instant.now());
+        inv.setCancelReason(reason);
+        inv.setCancelNoteId(noteId);
+        inv.setClosedAt(null);
+        inv.setCloseReason(null);
+        if (refunded) {
+            var paid = payments.balance(id);
+            java.math.BigDecimal amount = paid == null ? java.math.BigDecimal.ZERO : paid.paid();
+            if (amount.signum() > 0) payments.recordRefund(orgId, user, id, amount, "Refund on cancellation: " + reason);
+        }
+        audit.record(orgId, "INVOICE_CANCELLED", "invoice", id, inv.getNumber() + " · " + reason
+                + (refunded ? " · payment refunded" : "") );
+    }
+
+    /** Close: the unpaid rest is written off; no more dues or reminders. Reopen undoes it. */
+    @Transactional
+    public void close(Long orgId, Long id, String reason) {
+        Invoice inv = load(orgId, id);
+        if (inv.getType() != DocumentType.INVOICE || !inv.getStatus().billable())
+            throw ApiException.conflict("not_closable", "Only an issued invoice can be closed");
+        if (inv.getCancelledAt() != null) throw ApiException.conflict("cancelled", "This invoice is cancelled");
+        inv.setClosedAt(java.time.Instant.now());
+        inv.setCloseReason(emptyToNull(reason));
+        audit.record(orgId, "INVOICE_CLOSED", "invoice", id, inv.getNumber() + (reason == null ? "" : " · " + reason));
+    }
+
+    @Transactional
+    public void reopen(Long orgId, Long id) {
+        Invoice inv = load(orgId, id);
+        if (inv.getClosedAt() == null) throw ApiException.conflict("not_closed", "This invoice is not closed");
+        inv.setClosedAt(null);
+        inv.setCloseReason(null);
+        audit.record(orgId, "INVOICE_REOPENED", "invoice", id, inv.getNumber());
     }
 }

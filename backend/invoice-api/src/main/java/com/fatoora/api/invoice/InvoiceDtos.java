@@ -72,7 +72,16 @@ public final class InvoiceDtos {
             LocalDate dueDate, BigDecimal paidAmount, BigDecimal dueAmount, PaymentStatus paymentStatus,
             boolean downloadable,
             // Signed by a sandbox or simulation device: not a legal invoice, so it may be deleted.
-            boolean test) {}
+            boolean test,
+            /** CANCELLED, CLOSED or null. */
+            String lifecycle) {}
+
+    /** Cancel an issued invoice: a full credit note is issued; goods and payments are reversed only when ticked. */
+    public record CancelRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 500) String reason,
+                                boolean goodsReturned, boolean paymentRefunded) {}
+
+    /** Close an invoice: the unpaid rest is written off. */
+    public record CloseRequest(@jakarta.validation.constraints.Size(max = 500) String reason) {}
 
     public record InvoiceDetail(
             Long id, String number, UUID uuid, InvoiceKind kind, DocumentType type, InvoiceStatus status,
@@ -92,7 +101,8 @@ public final class InvoiceDtos {
             boolean test,
             Long warehouseId,
             String customerRef,
-            String salesEmployee) {}
+            String salesEmployee,
+            String lifecycle, String lifecycleReason, java.time.Instant lifecycleAt, Long cancelNoteId, String cancelNoteNumber) {}
 
     public record Dashboard(
             long drafts, long awaitingSubmission, long rejected, BigDecimal issuedThisMonth,

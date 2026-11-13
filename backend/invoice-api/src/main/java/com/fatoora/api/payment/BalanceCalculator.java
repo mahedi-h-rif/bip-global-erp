@@ -15,7 +15,7 @@ import java.util.Map;
  */
 public final class BalanceCalculator {
 
-    public enum PaymentStatus { UNPAID, PARTIAL, PAID }
+    public enum PaymentStatus { UNPAID, PARTIAL, PAID, CLOSED }
 
     /**
      * @param total    the invoice's own total including VAT
@@ -41,8 +41,12 @@ public final class BalanceCalculator {
         Map<Long, Balance> result = new LinkedHashMap<>();
         for (InvoiceFigures d : documents) {
             if (!d.counts() || d.type() != DocumentType.INVOICE) continue;
-            result.put(d.id(), balance(d.id(), d.totalInclVat(), notes.getOrDefault(d.id(), BigDecimal.ZERO),
-                    paidByInvoice.getOrDefault(d.id(), BigDecimal.ZERO)));
+            Balance b = balance(d.id(), d.totalInclVat(), notes.getOrDefault(d.id(), BigDecimal.ZERO),
+                    paidByInvoice.getOrDefault(d.id(), BigDecimal.ZERO));
+            // Closed: the unpaid rest is written off, so nothing is due any more.
+            if (d.closedAt() != null && b.due().signum() > 0)
+                b = new Balance(b.invoiceId(), b.total(), b.notes(), b.adjusted(), b.paid(), BigDecimal.ZERO, b.overpaid(), PaymentStatus.CLOSED);
+            result.put(d.id(), b);
         }
         return result;
     }

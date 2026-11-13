@@ -216,7 +216,7 @@ public class DocumentGraph {
                     SELECT COALESCE(i.number, 'Draft') AS number, COALESCE((i.issued_at AT TIME ZONE 'Asia/Riyadh')::date, i.created_at::date) AS d,
                            COALESCE(c.name_en, c.name_ar) AS party, i.customer_ref AS ref, i.total_incl_vat AS total,
                            i.doc_type || ':' || i.status AS status,
-                           i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED')
+                           i.doc_type = 'INVOICE' AND i.status NOT IN ('DRAFT','REJECTED') AND i.closed_at IS NULL
                              AND i.total_incl_vat > COALESCE((SELECT sum(p.amount) FROM invoice_payment p WHERE p.invoice_id = i.id), 0)
                              - COALESCE((SELECT sum(n.total_incl_vat) FROM invoice n WHERE n.original_invoice_id = i.id AND n.doc_type = 'CREDIT_NOTE'
                                          AND n.status NOT IN ('DRAFT','REJECTED')), 0) AS open
