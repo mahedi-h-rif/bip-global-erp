@@ -1673,4 +1673,8 @@ export const ar: Record<string, string> = {
   "Clear": "مسح",
   "{n} of {total}": "{n} من {total}",
   "Job title": "المسمى الوظيفي",
+  "Driver": "السائق",
+  "Vehicle": "المركبة",
+  "Stage": "المرحلة",
+  "Owner": "المسؤول",
 };

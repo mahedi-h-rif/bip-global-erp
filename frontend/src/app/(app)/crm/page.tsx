@@ -9,6 +9,7 @@ import type { Customer } from "@/lib/types";
 import { date, money, todayKsa } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 interface Lead { id?: number; title: string; company?: string | null; contactName?: string | null; phone?: string | null; email?: string | null; source?: string | null;
   stage?: string; expectedValue?: number | string | null; expectedClose?: string | null; owner?: string; notes?: string | null; lostReason?: string | null; customerId?: number | null; customerName?: string | null }
@@ -23,6 +24,7 @@ const errText = (e: unknown, f: string) => (e instanceof ApiError ? (e.fields ? 
 function Pipeline() {
   const t = useT();
   const { data, mutate } = useSWR<Lead[]>("/crm/leads", fetcher);
+  const { toolbar, shown } = useListTools<Lead>(data, { filters: [{ label: "Stage", get: (r) => r.stage, format: statusText }, { label: "Owner", get: (r) => r.owner }] });
   const [l, setL] = useState<Lead>({ title: "" });
   const [error, setError] = useState<string | null>(null);
   const save = async (x: Lead) => { setError(null); try { if (x.id) await api("PUT", `/crm/leads/${x.id}`, x); else await api("POST", "/crm/leads", x); mutate(); return true; } catch (e) { setError(errText(e, t("Could not reach the server"))); return false; } };
@@ -39,12 +41,13 @@ function Pipeline() {
         <Button type="submit"><Plus className="size-4" aria-hidden /> {t("Add lead")}</Button>
       </form></Card>
       {error && <div className="mb-4"><Alert tone="bad">{error}</Alert></div>}
+      {data && data.length > 0 && <div className="mb-3 rounded-xl border border-line bg-white">{toolbar}</div>}
       {!data ? <Spinner /> : (
         <div className="grid gap-3 lg:grid-cols-5">
           {STAGES.map((s) => (
             <div key={s} className="rounded-xl border border-line bg-slate-50 p-2">
               <p className="mb-2 flex justify-between px-1 text-xs font-semibold uppercase text-muted"><span>{t(s.charAt(0) + s.slice(1).toLowerCase())}</span><span className="tabular">{money(total(s))}</span></p>
-              {data.filter((x) => x.stage === s).map((x) => (
+              {(shown ?? []).filter((x) => x.stage === s).map((x) => (
                 <div key={x.id} className="mb-2 rounded-lg border border-line bg-white p-2 text-sm">
                   <p className="font-medium" dir="auto">{x.title}</p>
                   <p className="text-xs text-muted">{[x.company, x.contactName, x.phone].filter(Boolean).join(" · ")}</p>

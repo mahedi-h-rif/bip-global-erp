@@ -9,11 +9,15 @@ import type { AccessOptions, AppUserRow, Me } from "@/lib/types";
 import { dateTime } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 export default function UsersPage() {
   const t = useT();
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const { data, error, mutate } = useSWR<AppUserRow[]>("/users", fetcher);
+  const { toolbar, shown } = useListTools<AppUserRow>(data, { filters: [
+    { label: "Access", get: (r) => (r.role === "ADMIN" || r.role === "OPERATOR" ? "Admin" : r.features ? "Custom access" : "Full access (old role)") },
+    { label: "Status", get: (r) => (r.enabled ? "Active" : "Disabled") }] });
   const [editing, setEditing] = useState<AppUserRow | "new" | null>(null);
   const [resetting, setResetting] = useState<AppUserRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -38,7 +42,8 @@ export default function UsersPage() {
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && <Empty title={t("No users yet")} />}
-        {data && data.length > 0 && (
+        {data && data.length > 0 && toolbar}
+        {shown && shown.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -53,7 +58,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {data.map((u) => {
+                {shown.map((u) => {
                   const provider = u.role === "OPERATOR" && me?.role !== "OPERATOR";
                   return (
                     <tr key={u.id} className={u.enabled ? "" : "opacity-60"}>

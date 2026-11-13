@@ -8,6 +8,7 @@ import type { DeliveryNote, Employee } from "@/lib/types";
 import { date, money, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { statusText, useListTools } from "@/components/list-tools";
 
 interface Vehicle { id?: number; plate: string; name: string; vehicleType?: string; capacity?: string | null; modelYear?: number | null; driverEmployeeId?: number | null; driverName?: string | null;
   istimaraExpiry?: string | null; insuranceExpiry?: string | null; mvpiExpiry?: string | null; odometer?: number | string | null; active?: boolean; notes?: string | null; nextExpiryDays?: number | null; costThisMonth?: number }
@@ -113,6 +114,9 @@ export default function FleetPage() {
   const { data: drivers } = useSWR<Employee[]>("/hr/employees", fetcher);
   const { data: logs, mutate: mutateLogs } = useSWR<Log[]>(tab === "logs" ? "/fleet/logs" : null, fetcher);
   const { data: trips, mutate: mutateTrips } = useSWR<Trip[]>(tab === "trips" ? "/fleet/trips" : null, fetcher);
+  const vehicleList = useListTools<Vehicle>(vehicles, { filters: [{ label: "Type", get: (r) => r.vehicleType }, { label: "Driver", get: (r) => r.driverName }] });
+  const logList = useListTools<Log>(logs, { filters: [{ label: "Vehicle", get: (r) => r.plate }, { label: "Kind", get: (r) => r.kind, format: statusText }], date: (r) => r.date });
+  const tripList = useListTools<Trip>(trips, { filters: [{ label: "Vehicle", get: (r) => r.plate }, { label: "Driver", get: (r) => r.driverName }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.tripDate });
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [log, setLog] = useState({ vehicleId: "", kind: "FUEL", amount: "", liters: "", odometer: "", description: "", date: todayKsa() });
   const [trip, setTrip] = useState({ vehicleId: "", origin: "", destination: "", tripDate: todayKsa() });
@@ -128,10 +132,11 @@ export default function FleetPage() {
           {editing && drivers && <VehicleForm key={editing.id ?? "new"} initial={editing} drivers={drivers} onDone={() => { setEditing(null); mutate(); }} />}
           <Card>
             <CardHeader title={t("Vehicles")} action={!editing && <Button onClick={() => setEditing({ plate: "", name: "", vehicleType: "TRUCK" })}><Plus className="size-4" aria-hidden /> {t("New vehicle")}</Button>} />
+            {vehicles.length > 0 && vehicleList.toolbar}
             {vehicles.length === 0 ? <Empty title={t("No vehicles yet")} /> : (
               <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2 text-start font-medium">{t("Plate")}</th><th className="px-4 py-2 text-start font-medium">{t("Vehicle")}</th><th className="px-4 py-2 text-start font-medium">{t("Driver")}</th><th className="px-4 py-2 text-end font-medium">{t("Km")}</th><th className="px-4 py-2 text-end font-medium">{t("Cost this month")}</th><th className="w-10" /></tr></thead>
-                <tbody className="divide-y divide-line">{vehicles.map((v) => (
+                <tbody className="divide-y divide-line">{(vehicleList.shown ?? []).map((v) => (
                   <tr key={v.id} className={v.active ? "" : "text-muted"}><td className="tabular px-4 py-2 font-medium">{v.plate}</td><td className="px-4 py-2">{v.name} <span className="text-xs text-muted">{v.vehicleType} {v.capacity}</span></td><td className="px-4 py-2">{v.driverName ?? "—"}</td>
                     <td className="tabular px-4 py-2 text-end">{v.odometer ? Number(v.odometer).toLocaleString("en-US") : "—"}</td><td className="tabular px-4 py-2 text-end">{money(v.costThisMonth)}</td>
                     <td><Button variant="ghost" onClick={() => setEditing(v)} aria-label={t("Edit")}><Pencil className="size-4" aria-hidden /></Button></td></tr>
@@ -155,8 +160,8 @@ export default function FleetPage() {
             <Field label={t("Note")} optional><Input value={log.description} onChange={(e) => setLog({ ...log, description: e.target.value })} /></Field>
             <Button type="submit">{t("Save")}</Button>
           </form></Card>
-          <Card>{!logs ? <Spinner /> : logs.length === 0 ? <Empty title={t("Nothing logged yet")} /> : (
-            <table className="w-full text-sm"><tbody className="divide-y divide-line">{logs.map((l) => (
+          <Card>{logs && logs.length > 0 && logList.toolbar}{!logs ? <Spinner /> : logs.length === 0 ? <Empty title={t("Nothing logged yet")} /> : (
+            <table className="w-full text-sm"><tbody className="divide-y divide-line">{(logList.shown ?? []).map((l) => (
               <tr key={l.id}><td className="tabular px-4 py-2">{date(l.date)}</td><td className="tabular px-4 py-2 font-medium">{l.plate}</td><td className="px-4 py-2">{t(l.kind.charAt(0) + l.kind.slice(1).toLowerCase())}{l.liters && ` · ${Number(l.liters)} L`}</td>
                 <td className="px-4 py-2 text-muted">{l.description}</td><td className="tabular px-4 py-2 text-end">{l.odometer ? `${Number(l.odometer)} km` : ""}</td><td className="tabular px-4 py-2 text-end">{money(l.amount)}</td></tr>
             ))}</tbody></table>
@@ -175,7 +180,10 @@ export default function FleetPage() {
             <Field label={t("To")} optional><Input value={trip.destination} onChange={(e) => setTrip({ ...trip, destination: e.target.value })} /></Field>
             <Button type="submit"><Plus className="size-4" aria-hidden /> {t("Plan trip")}</Button>
           </form></Card>
-          {!trips ? <Spinner /> : trips.length === 0 ? <Card><Empty title={t("No trips yet")} /></Card> : trips.map((x) => <TripCard key={x.id} trip={x} onChange={() => mutateTrips()} />)}
+          {!trips ? <Spinner /> : trips.length === 0 ? <Card><Empty title={t("No trips yet")} /></Card> : <>
+            <Card className="mb-4">{tripList.toolbar}</Card>
+            {(tripList.shown ?? []).map((x) => <TripCard key={x.id} trip={x} onChange={() => mutateTrips()} />)}
+          </>}
         </>
       )}
     </>
