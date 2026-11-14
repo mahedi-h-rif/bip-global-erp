@@ -57,6 +57,10 @@ public class InvoicePdfService {
     private final OrganizationRepository orgs;
     private final JsonMapper json;
 
+    /** Optional so tests can build the service without it; used for the buyer's name in the other language. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.customer.CustomerRepository customers;
+
     public InvoicePdfService(OrganizationRepository orgs, JsonMapper json) {
         this.orgs = orgs;
         this.json = json;
@@ -262,7 +266,7 @@ public class InvoicePdfService {
                 skyline ? SkylineLetterhead.chrome(org) : classicHead(org, seller, brandEn),
                 title[1], title[0],
                 meta,
-                parties(seller, org.getLegalNameEn(), buyer, qrDataUri(inv.getQrCode()), stamp),
+                parties(seller, org.getLegalNameEn(), buyer, buyerOtherName(inv, buyer), qrDataUri(inv.getQrCode()), stamp),
                 rows,
                 money(totals.taxExclusive()), cur,
                 money(totals.vatTotal()), cur,
@@ -275,7 +279,20 @@ public class InvoicePdfService {
      * Seller and buyer boxes side by side, then the ZATCA QR code and status. The boxes are table cells of one row,
      * so they always share the same height; each shows only the fields that are filled in.
      */
-    private static String parties(Party seller, String sellerNameEn, Party buyer, String qr, String[] stamp) {
+    /**
+     * The buyer's name in the other language (the invoice carries the Arabic name when there is one): from the
+     * customer record, so the PDF shows the buyer in both English and Arabic.
+     */
+    private String buyerOtherName(Invoice inv, Party buyer) {
+        if (buyer == null || customers == null || inv.getCustomerId() == null) return null;
+        return customers.findByIdAndOrganizationId(inv.getCustomerId(), inv.getOrganizationId()).map(c -> {
+            String en = c.getNameEn(), ar = c.getNameAr();
+            if (en == null || en.isBlank() || ar == null || ar.isBlank()) return null;
+            return buyer.name().equals(ar) ? en : buyer.name().equals(en) ? ar : null;
+        }).orElse(null);
+    }
+
+    private static String parties(Party seller, String sellerNameEn, Party buyer, String buyerOther, String qr, String[] stamp) {
         String box = "<td style=\"width:37%%; vertical-align:top; padding:0; border:1px solid #e3e7ef; background:#f6f8fb\">"
                 + "<table><tr><td class=\"hd\" style=\"background:#e9edf4; padding:5px 8px; font-weight:700\">%s</td>"
                 + "<td class=\"hd rtl\" style=\"background:#e9edf4; padding:5px 8px; font-weight:700\">%s</td></tr></table>"
@@ -286,7 +303,7 @@ public class InvoicePdfService {
                 + (stamp[0].isEmpty() ? "" : "<div class=\"stamp\" style=\"margin-top:3px\">" + stamp[0] + "</div>")
                 + (stamp[1].isEmpty() ? "" : "<div class=\"stamp\" dir=\"rtl\" style=\"margin-top:0\">" + stamp[1] + "</div>")
                 + "</td>";
-        String buyerCell = buyer == null ? "<td style=\"width:37%; padding:0\"></td>" : box.formatted("Buyer", "المشتري", partyRows(buyer, null));
+        String buyerCell = buyer == null ? "<td style=\"width:37%; padding:0\"></td>" : box.formatted("Buyer", "المشتري", partyRows(buyer, buyerOther));
         return "<table style=\"margin-top:10px; page-break-inside:avoid\"><tr>"
                 + box.formatted("Seller", "البائع", partyRows(seller, sellerNameEn)) + gap + buyerCell + gap + qrCell
                 + "</tr></table>";
@@ -295,8 +312,11 @@ public class InvoicePdfService {
     /** "English label | value | Arabic label" rows for one party, leaving out whatever is not filled in. */
     private static String partyRows(Party p, String nameEn) {
         StringBuilder kv = new StringBuilder().append(row("Name", esc(p.name()), "الاسم"));
-        if (nameEn != null && !nameEn.isBlank() && !nameEn.equals(p.name()))
-            kv.append(row("Name (English)", esc(nameEn), "الاسم بالإنجليزية"));
+        if (nameEn != null && !nameEn.isBlank() && !nameEn.equals(p.name())) {
+            // The second name is labelled by its own language: English under an Arabic name, or the other way round.
+            boolean arabic = nameEn.codePoints().anyMatch(ch -> Character.UnicodeBlock.of(ch) == Character.UnicodeBlock.ARABIC);
+            kv.append(arabic ? row("Name (Arabic)", esc(nameEn), "الاسم بالعربية") : row("Name (English)", esc(nameEn), "الاسم بالإنجليزية"));
+        }
         if (p.hasVat()) kv.append(row("VAT number", esc(p.vatNumber()), "الرقم الضريبي"));
         if (!blank(p.otherId())) {
             String[] label = schemeLabel(p.otherIdScheme());

@@ -481,6 +481,20 @@ class InvoiceApiApplicationTests {
         assertTrue(body(call("DELETE", "/vat/returns/" + year + "/1", null), 200).get("filing").isNull());
     }
 
+    @Test
+    @Order(29)
+    void invoicePdfShowsBuyerInEnglishAndArabic() throws Exception {
+        var pdf = http.send(HttpRequest.newBuilder(URI.create(base + "/invoices/" + standardId + "/pdf")).build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, pdf.statusCode());
+        java.nio.file.Files.write(java.nio.file.Path.of("build", "buyer-names.pdf"), pdf.body());
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf.body())) {
+            String text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+            assertTrue(text.contains("Client Trading Co."), "English buyer name");
+            // Seller and buyer each show a second-language name row ("Name (English)", wrapped over two lines).
+            assertEquals(2, text.split("\(English\)", -1).length - 1, "both parties show their English name");
+        }
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {
