@@ -24,7 +24,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The classic invoice: pattern header (English · logo · Arabic) and seller/buyer on aligned rows beside the QR. */
+/** The classic invoice: pattern header (English · logo · Arabic), invoice details beside the QR, seller/buyer full width. */
 class ClassicInvoiceTest {
 
     @Test

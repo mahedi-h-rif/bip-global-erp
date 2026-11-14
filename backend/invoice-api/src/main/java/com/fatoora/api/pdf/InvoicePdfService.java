@@ -175,13 +175,6 @@ public class InvoicePdfService {
 
         String brandEn = org.getLegalNameEn() == null || org.getLegalNameEn().isBlank() ? nz(seller.name()) : org.getLegalNameEn();
 
-        String[] stamp = switch (inv.getStatus()) {
-            case CLEARED, CLEARED_WITH_WARNINGS -> new String[]{"Cleared by ZATCA", "معتمدة من هيئة الزكاة والضريبة والجمارك"};
-            case REPORTED, REPORTED_WITH_WARNINGS -> new String[]{"Reported to ZATCA", "تم الإبلاغ لهيئة الزكاة والضريبة والجمارك"};
-            case SIGNED -> new String[]{"", ""}; // valid for the customer already; no "pending" note on their copy
-            default -> new String[]{esc(inv.getStatus().name()), ""};
-        };
-
         return """
                 <!DOCTYPE html>
                 <html><head><meta charset="UTF-8"/>
@@ -197,7 +190,8 @@ public class InvoicePdfService {
                   .brand-ar { font-size: 11.5pt; font-weight: 700; color: %s; }
                   .muted { color: #5a6275; }
                   .title { margin: 12px 0 10px; border-top: 3px solid %s; border-bottom: 1px solid #e3e7ef; }
-                  .title td { font-size: 15pt; font-weight: 700; color: %s; padding: 8px 0; }
+                  .title td { padding: 8px 0; }
+                  .title td.t { font-size: 15pt; font-weight: 700; color: %s; width: 1%%; white-space: nowrap; padding-right: 10px; }
                   .kv td { padding: 3px 6px; }
                   .kv td.en { color: #5a6275; width: 30%%; }
                   .kv td.v { font-weight: 700; }
@@ -220,18 +214,18 @@ public class InvoicePdfService {
                   .sum td { padding: 5px 8px; }
                   .sum td.v { text-align: right; font-weight: 700; white-space: nowrap; }
                   .sum tr.total td { background: %s; color: #fff; font-size: 10.5pt; }
-                  .stamp { margin-top: 6px; font-size: 8.5pt; color: #1b6b05; font-weight: 700; }
-                  .foot { margin-top: 18px; font-size: 7pt; color: #8a91a3; }
                 </style></head>
                 <body>
                   %s
 
                   <table class="title"><tr>
-                    <td>%s</td>
-                    <td class="rtl">%s</td>
+                    <td class="t">%s</td>
+                    <td class="t">/</td>
+                    <td class="t rtl">%s</td>
+                    <td></td>
                   </tr></table>
 
-                  <table class="kv">%s</table>
+                  %s
 
                   %s
 
@@ -256,7 +250,6 @@ public class InvoicePdfService {
                   </tr></table>
 
                   %s
-                  <div class="foot">UUID %s · ICV %d · Invoice hash %s</div>
                 </body></html>
                 """.formatted(
                 esc(inv.getNumber()),
@@ -265,20 +258,15 @@ public class InvoicePdfService {
                 color, color, color, color, color, color,
                 skyline ? SkylineLetterhead.chrome(org) : classicHead(org, seller, brandEn),
                 title[1], title[0],
-                meta,
-                parties(seller, org.getLegalNameEn(), buyer, buyerOtherName(inv, buyer), qrDataUri(inv.getQrCode()), stamp),
+                metaAndQr(meta.toString(), qrDataUri(inv.getQrCode())),
+                parties(seller, org.getLegalNameEn(), buyer, buyerOtherName(inv, buyer)),
                 rows,
                 money(totals.taxExclusive()), cur,
                 money(totals.vatTotal()), cur,
                 money(totals.taxInclusive()), cur,
-                extras(inv, org, totals.taxInclusive()),
-                inv.getUuid(), inv.getIcv(), esc(inv.getInvoiceHash()));
+                extras(inv, org, totals.taxInclusive()));
     }
 
-    /**
-     * Seller and buyer boxes side by side, then the ZATCA QR code and status. The boxes are table cells of one row,
-     * so they always share the same height; each shows only the fields that are filled in.
-     */
     /**
      * The buyer's name in the other language (the invoice carries the Arabic name when there is one): from the
      * customer record, so the PDF shows the buyer in both English and Arabic.
@@ -292,20 +280,29 @@ public class InvoicePdfService {
         }).orElse(null);
     }
 
-    private static String parties(Party seller, String sellerNameEn, Party buyer, String buyerOther, String qr, String[] stamp) {
-        String box = "<td style=\"width:37%%; vertical-align:top; padding:0; border:1px solid #e3e7ef; background:#f6f8fb\">"
+    /** The invoice details (number, dates, references) on the left, the ZATCA QR code on the right. */
+    private static String metaAndQr(String meta, String qr) {
+        return "<table style=\"page-break-inside:avoid\"><tr>"
+                + "<td style=\"width:75%; vertical-align:top; padding:0\"><table class=\"kv\">" + meta + "</table></td>"
+                + "<td style=\"width:2%; padding:0\"></td>"
+                + "<td style=\"width:23%; vertical-align:top; text-align:center; padding:0\">"
+                + "<img src=\"" + qr + "\" style=\"width:118px;height:118px\"/>"
+                + "</td></tr></table>";
+    }
+
+    /**
+     * Seller and buyer boxes side by side across the full width. The boxes are table cells of one row, so they
+     * always share the same height; each shows only the fields that are filled in.
+     */
+    private static String parties(Party seller, String sellerNameEn, Party buyer, String buyerOther) {
+        String box = "<td style=\"width:49.25%%; vertical-align:top; padding:0; border:1px solid #e3e7ef; background:#f6f8fb\">"
                 + "<table><tr><td class=\"hd\" style=\"background:#e9edf4; padding:5px 8px; font-weight:700\">%s</td>"
                 + "<td class=\"hd rtl\" style=\"background:#e9edf4; padding:5px 8px; font-weight:700\">%s</td></tr></table>"
                 + "<table class=\"kv pk\">%s</table></td>";
         String gap = "<td style=\"width:1.5%; padding:0\"></td>";
-        String qrCell = "<td style=\"width:23%; vertical-align:top; text-align:center; padding:0\">"
-                + "<img src=\"" + qr + "\" style=\"width:118px;height:118px\"/>"
-                + (stamp[0].isEmpty() ? "" : "<div class=\"stamp\" style=\"margin-top:3px\">" + stamp[0] + "</div>")
-                + (stamp[1].isEmpty() ? "" : "<div class=\"stamp\" dir=\"rtl\" style=\"margin-top:0\">" + stamp[1] + "</div>")
-                + "</td>";
-        String buyerCell = buyer == null ? "<td style=\"width:37%; padding:0\"></td>" : box.formatted("Buyer", "المشتري", partyRows(buyer, buyerOther));
+        String buyerCell = buyer == null ? "<td style=\"width:49.25%; padding:0\"></td>" : box.formatted("Buyer", "المشتري", partyRows(buyer, buyerOther));
         return "<table style=\"margin-top:10px; page-break-inside:avoid\"><tr>"
-                + box.formatted("Seller", "البائع", partyRows(seller, sellerNameEn)) + gap + buyerCell + gap + qrCell
+                + box.formatted("Seller", "البائع", partyRows(seller, sellerNameEn)) + gap + buyerCell
                 + "</tr></table>";
     }
 

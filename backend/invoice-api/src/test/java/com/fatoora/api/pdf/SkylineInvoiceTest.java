@@ -48,7 +48,7 @@ class SkylineInvoiceTest {
                     assertTrue(text.contains("asthacompany.com") && text.contains("7054876219"), "page " + p);
                 }
                 String all = new PDFTextStripper().getText(doc);
-                assertTrue(all.contains("Tax Invoice") && all.contains("INV-0042") && all.contains("Invoice hash"));
+                assertTrue(all.contains("Tax Invoice") && all.contains("INV-0042") && !all.contains("Invoice hash"));
             }
         }
     }
