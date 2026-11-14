@@ -14,7 +14,7 @@ export default function CompanySettingsPage() {
   if (!data || !me) return <Spinner />;
   return (
     <>
-      <CompanyForm key={data.id} initial={data} provider={me.role === "OPERATOR"} onSaved={(o) => mutate(o, false)} />
+      <CompanyForm key={data.id} initial={data} provider={me.role === "OPERATOR"} admin={me.role === "ADMIN" || me.role === "OPERATOR"} onSaved={(o) => mutate(o, false)} />
       <LogoCard org={data} onSaved={(o) => mutate(o, false)} />
     </>
   );
@@ -78,10 +78,12 @@ function LogoCard({ org, onSaved }: { org: Organization; onSaved: (o: Organizati
   );
 }
 
-function CompanyForm({ initial, provider, onSaved }: {
+function CompanyForm({ initial, provider, admin, onSaved }: {
   initial: Organization;
-  /** The e-invoicing provider may change legal identity and the ZATCA environment; client admins may not. */
+  /** Only the e-invoicing provider may change the ZATCA environment. */
   provider: boolean;
+  /** Admins (and the provider) edit the legal details, address and API limits. */
+  admin: boolean;
   onSaved: (o: Organization) => void;
 }) {
   const t = useT();
@@ -89,7 +91,8 @@ function CompanyForm({ initial, provider, onSaved }: {
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof Organization) => (e: { target: { value: string } }) => setOrg({ ...org, [k]: e.target.value });
-  const locked = !provider;
+  const locked = !admin;
+  const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -112,13 +115,8 @@ function CompanyForm({ initial, provider, onSaved }: {
       <form onSubmit={submit} className="space-y-6">
         {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
         <RequiredLegend />
-        {locked && (
-          <Alert tone="info">
-            {t("Your legal name, VAT number, CR number and address are registered for e-invoicing and managed by your e-invoicing provider. Contact them if any of these change.")}
-          </Alert>
-        )}
         <Card>
-          <CardHeader title={t("Legal identity")} subtitle={provider ? t("Must match the VAT registration certificate exactly") : undefined} />
+          <CardHeader title={t("Legal identity")} subtitle={t("Must match the VAT registration certificate exactly. A new VAT number also needs a ZATCA device onboarded for it.")} />
           <fieldset disabled={locked} className="grid gap-4 p-5 md:grid-cols-2">
             <Field label={t("Legal name (English)")} hint={t("Enter the English or the Arabic legal name, or both.")}>
               <Input required={!(org.legalNameAr ?? "").trim()} value={org.legalNameEn ?? ""} onChange={set("legalNameEn")} />
@@ -165,6 +163,21 @@ function CompanyForm({ initial, provider, onSaved }: {
             <Field label={t("Signatory title")} optional hint={t("e.g. General Manager")}><Input value={org.signatoryTitle ?? ""} onChange={set("signatoryTitle")} /></Field>
           </div>
         </Card>
+        {admin && (
+          <Card>
+            <CardHeader title={t("API rate limits")} subtitle={t("Per visitor (IP address). Over the limit, requests are refused for the rest of the minute. 0 = no limit; empty = default.")} />
+            <div className="grid gap-4 p-5 md:grid-cols-2">
+              <Field label={t("Requests per minute")} optional hint={t("All API calls. Default 600; allowed 60 to 100000.")}>
+                <Input type="number" min="0" max="100000" step="1" placeholder="600" value={org.apiRateLimitPerMinute ?? ""}
+                  onChange={(e) => setOrg({ ...org, apiRateLimitPerMinute: num(e.target.value) })} />
+              </Field>
+              <Field label={t("Sign-in attempts per minute")} optional hint={t("Default 10; allowed 3 to 1000.")}>
+                <Input type="number" min="0" max="1000" step="1" placeholder="10" value={org.loginRateLimitPerMinute ?? ""}
+                  onChange={(e) => setOrg({ ...org, loginRateLimitPerMinute: num(e.target.value) })} />
+              </Field>
+            </div>
+          </Card>
+        )}
         {provider && (
           <Card>
             <CardHeader title={t("ZATCA environment · provider only")} subtitle={t("Sandbox for testing, Simulation for the pre-production dry run, Production for legally binding invoices.")} />

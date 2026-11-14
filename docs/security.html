@@ -113,9 +113,9 @@
       <h2>Overview</h2>
       <p class="lead">A request passes through several independent layers. If one layer fails, the next one still stops an attacker.</p>
       <div class="layers">
-        <div class="layer"><span class="n">1</span><div><b>Server firewall</b> <span class="w">only SSH, 80, 443, 8088 and 8089 are open. SSH and web connections are rate-limited per IP, and fail2ban bans SSH password guessers.</span></div></div>
+        <div class="layer"><span class="n">1</span><div><b>Server firewall</b> <span class="w">only SSH, 80, 443, 8088 and 8089 are open. Web connections are rate-limited per IP, and fail2ban bans SSH password guessers.</span></div></div>
         <div class="layer"><span class="n">2</span><div><b>Caddy front door</b> <span class="w">the only published container. It provides HTTPS with automatic certificates and HSTS, and records each visitor's real IP.</span></div></div>
-        <div class="layer"><span class="n">3</span><div><b>API rate limits</b> <span class="w">600 requests a minute and 10 sign-in attempts a minute per visitor. A single account is locked for 15 minutes after 5 wrong passwords.</span></div></div>
+        <div class="layer"><span class="n">3</span><div><b>API rate limits</b> <span class="w">600 requests a minute and 10 sign-in attempts a minute per visitor by default (admins can change both in Company settings). A single account is locked for 15 minutes after 5 wrong passwords.</span></div></div>
         <div class="layer"><span class="n">4</span><div><b>Authentication</b> <span class="w">BCrypt passwords, signed session cookie (HttpOnly, Secure, SameSite=Strict), CSRF token on every change.</span></div></div>
         <div class="layer"><span class="n">5</span><div><b>Authorization</b> <span class="w">roles, per-feature permissions, branch logins limited to their own records.</span></div></div>
         <div class="layer"><span class="n">6</span><div><b>Data</b> <span class="w">database never exposed, ZATCA keys encrypted (AES-256-GCM), secrets outside git, nightly backups.</span></div></div>
@@ -133,13 +133,12 @@
           <tr><td>API not published</td><td>The Spring API (8080) is internal only. Browsers reach it through the portal.</td><td><span class="badge on">Active</span></td></tr>
           <tr><td>Only Caddy published</td><td>The portal containers are no longer published directly. Caddy serves 80, 443, 8088 and 8089.</td><td><span class="badge new">Added</span></td></tr>
           <tr><td>Per-IP connection limits</td><td>Docker-published ports bypass ufw, so a <code>DOCKER-USER</code> rule limits each source IP to 50 new connections a second (burst 200) and 300 open at once. Floods are dropped before they reach Caddy. A systemd unit (<code>bip-docker-limits</code>) restores the rule after a reboot.</td><td><span class="badge new">Added</span></td></tr>
-          <tr><td>SSH rate limit</td><td><code>ufw limit OpenSSH</code>: an address opening 6 or more SSH connections within 30 seconds is refused.</td><td><span class="badge new">Added</span></td></tr>
           <tr><td>fail2ban for SSH</td><td>Bans an IP for 1 hour after 5 failed SSH logins within 10 minutes. The old jail watched <code>sshd.service</code>, but Ubuntu 24.04 calls the service <code>ssh.service</code>, so it never banned anyone. It now watches the right service.</td><td><span class="badge new">Fixed</span></td></tr>
         </tbody>
       </table></div>
 
       <div class="check"><b>How to check</b>Sign in to the server (<code>ssh root@2.24.60.124</code>) and run:</div>
-<pre><code><span class="c"># 1. Firewall rules: expect "Status: active", "22/tcp LIMIT", 80, 443, 8088, 8089 ALLOW</span>
+<pre><code><span class="c"># 1. Firewall rules: expect "Status: active" and 22, 80, 443, 8088, 8089 ALLOW</span>
 ufw status verbose
 
 <span class="c"># 2. Only these ports are listening publicly (22, 80, 443, 8088, 8089). Nothing on 5432 or 8080.</span>
@@ -168,13 +167,13 @@ nmap -Pn 2.24.60.124           <span class="c"># expect only 22, 80, 443, 8088, 
         <thead><tr><th>Level</th><th>Limit</th><th>When exceeded</th><th>Status</th></tr></thead>
         <tbody>
           <tr><td>Network (iptables)</td><td>50 new connections/second per IP (burst 200), 300 open connections per IP</td><td>Extra connections are dropped</td><td><span class="badge new">Added</span></td></tr>
-          <tr><td>SSH (ufw)</td><td>6 connections in 30 seconds per IP</td><td>Refused; fail2ban then bans for 1 hour after 5 failures</td><td><span class="badge new">Added</span></td></tr>
-          <tr><td>API, all calls</td><td>600 requests/minute per visitor IP</td><td><code>429 Too Many Requests</code> with <code>Retry-After</code></td><td><span class="badge new">Added</span></td></tr>
-          <tr><td>API, sign-in</td><td>10 attempts/minute per visitor IP</td><td><code>429</code> with <code>Retry-After</code></td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>SSH (fail2ban)</td><td>5 failed sign-ins within 10 minutes per IP</td><td>That IP is banned for 1 hour</td><td><span class="badge new">Fixed</span></td></tr>
+          <tr><td>API, all calls</td><td>600 requests/minute per visitor IP (changeable in Settings → Company)</td><td><code>429 Too Many Requests</code> with <code>Retry-After</code></td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>API, sign-in</td><td>10 attempts/minute per visitor IP (changeable in Settings → Company)</td><td><code>429</code> with <code>Retry-After</code></td><td><span class="badge new">Added</span></td></tr>
           <tr><td>Account lockout</td><td>5 wrong passwords for one email</td><td>That email is locked for 15 minutes (<code>429 locked</code>)</td><td><span class="badge on">Active</span></td></tr>
         </tbody>
       </table></div>
-      <p>The API identifies each visitor by IP. Caddy discards any <code>X-Forwarded-For</code> header a client sends and writes the real address, so the limit can't be dodged with a fake header. The limits are set in the env file: <code>FATOORA_RATE_LIMIT_PER_MINUTE</code> (default 600) and <code>FATOORA_RATE_LIMIT_LOGIN_PER_MINUTE</code> (default 10). Setting 0 turns the limiter off. Counters are kept in memory and reset when the API restarts.</p>
+      <p>The API identifies each visitor by IP. Caddy discards any <code>X-Forwarded-For</code> header a client sends and writes the real address, so the limit can't be dodged with a fake header. An admin can change both limits under <b>Settings → Company → API rate limits</b>: requests per minute (60 to 100000) and sign-in attempts per minute (3 to 1000). 0 means no limit, and an empty field means the server default (600 and 10). A new value takes effect at once, and every change is recorded in the audit log as <code>RATE_LIMITS_CHANGED</code>. Counters are kept in memory and reset when the API restarts. SSH has no connection rate limit, because the deploy opens many SSH sessions in a row; fail2ban handles SSH password guessing.</p>
 
       <div class="check"><b>How to check</b>Test against UAT, not production. The sign-in test uses made-up emails, so no real account is locked.</div>
 <pre><code><span class="c"># Sign-in limit: the first 10 attempts answer 401 (wrong password), then 429</span>

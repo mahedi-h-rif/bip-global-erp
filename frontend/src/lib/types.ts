@@ -298,6 +298,10 @@ export interface Organization {
   creditNotePrefix: string;
   debitNotePrefix: string;
   zatcaEnvironment: ZatcaEnvironment;
+  /** Requests per minute per visitor; 0 = no limit, null = server default (600). */
+  apiRateLimitPerMinute?: number | null;
+  /** Sign-in attempts per minute per visitor; 0 = no limit, null = server default (10). */
+  loginRateLimitPerMinute?: number | null;
 }
 
 export interface EgsUnit {

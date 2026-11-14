@@ -61,6 +61,10 @@ public class Organization {
     private String invoicePrefix = "INV";
     private String creditNotePrefix = "CN";
     private String debitNotePrefix = "DN";
+    /** Requests per minute per visitor (0 = no limit, null = server default). */
+    private Integer apiRateLimitPerMinute;
+    /** Sign-in attempts per minute per visitor (0 = no limit, null = server default). */
+    private Integer loginRateLimitPerMinute;
 
     /** Send payment reminders (automatic and "Send reminder") on WhatsApp too, when a number is linked. */
     private boolean whatsappReminders = true;

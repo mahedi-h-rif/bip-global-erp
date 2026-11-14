@@ -49,7 +49,11 @@ public class OrganizationController {
             @NotBlank String invoicePrefix,
             @NotBlank String creditNotePrefix,
             @NotBlank String debitNotePrefix,
-            ZatcaEnvironment zatcaEnvironment) {
+            ZatcaEnvironment zatcaEnvironment,
+            /** Requests per minute per visitor; 0 = no limit, null = server default. */
+            Integer apiRateLimitPerMinute,
+            /** Sign-in attempts per minute per visitor; 0 = no limit, null = server default. */
+            Integer loginRateLimitPerMinute) {
 
         static OrganizationDto of(Organization o) {
             return new OrganizationDto(o.getId(), o.getLegalNameAr(), o.getLegalNameEn(), o.getVatNumber(),
@@ -57,16 +61,19 @@ public class OrganizationController {
                     o.getDistrict(), o.getCity(), o.getPostalCode(), o.getPhone(), o.getEmail(), o.getWebsite(),
                     o.getSignatoryName(), o.getSignatoryTitle(), o.getBrandColor(), o.getLetterheadStyle(), o.getTagline(),
                     o.getLogoUrl(), o.getInvoicePrefix(), o.getCreditNotePrefix(), o.getDebitNotePrefix(),
-                    o.getZatcaEnvironment());
+                    o.getZatcaEnvironment(), o.getApiRateLimitPerMinute(), o.getLoginRateLimitPerMinute());
         }
     }
 
     private final OrganizationRepository repo;
     private final AuditService audit;
+    private final com.fatoora.api.config.RateLimitSettings rateLimits;
 
-    public OrganizationController(OrganizationRepository repo, AuditService audit) {
+    public OrganizationController(OrganizationRepository repo, AuditService audit,
+                                  com.fatoora.api.config.RateLimitSettings rateLimits) {
         this.repo = repo;
         this.audit = audit;
+        this.rateLimits = rateLimits;
     }
 
     @GetMapping
@@ -80,13 +87,20 @@ public class OrganizationController {
     OrganizationDto update(@Valid @RequestBody OrganizationDto dto) {
         Organization o = load();
         if (!CurrentUser.isOperator()) {
-            // Legal identity and the ZATCA environment are tied to the company's ZATCA certificate,
-            // so only the e-invoicing provider may change them. Client admins manage contact details and branding.
-            if (legalIdentityChanged(o, dto))
+            // Company admins manage the legal details, address, branding and limits. Only the ZATCA environment
+            // (which needs a device onboarded in it) stays with the e-invoicing provider.
+            if (dto.zatcaEnvironment() != null && dto.zatcaEnvironment() != o.getZatcaEnvironment())
                 throw new ApiException(HttpStatus.FORBIDDEN, "provider_only",
-                        "Company legal details (name, VAT, CR, address) are managed by your e-invoicing provider. Contact them to change these.");
-            dto = keepProtected(o, dto);
+                        "The ZATCA environment is managed by your e-invoicing provider. Contact them to change it.");
         }
+        java.util.Map<String, String> limitErrors = new java.util.LinkedHashMap<>();
+        Integer api = dto.apiRateLimitPerMinute(), login = dto.loginRateLimitPerMinute();
+        if (api != null && api != 0 && (api < 60 || api > 100_000))
+            limitErrors.put("apiRateLimitPerMinute", "Between 60 and 100000 a minute, or 0 for no limit");
+        if (login != null && login != 0 && (login < 3 || login > 1_000))
+            limitErrors.put("loginRateLimitPerMinute", "Between 3 and 1000 a minute, or 0 for no limit");
+        if (!limitErrors.isEmpty()) throw new ApiException.Validation(limitErrors);
+        String legalBefore = legalSummary(o);
         if (nz(dto.legalNameAr()).isBlank() && nz(dto.legalNameEn()).isBlank())
             throw new ApiException.Validation(java.util.Map.of("legalNameEn", "Enter the legal name in English or Arabic"));
         String idProblem = com.fatoora.api.customer.OtherIdRules.check(dto.otherIdScheme(), dto.otherId());
@@ -113,6 +127,17 @@ public class OrganizationController {
         o.setInvoicePrefix(dto.invoicePrefix());
         o.setCreditNotePrefix(dto.creditNotePrefix());
         o.setDebitNotePrefix(dto.debitNotePrefix());
+        if (!java.util.Objects.equals(o.getApiRateLimitPerMinute(), api)
+                || !java.util.Objects.equals(o.getLoginRateLimitPerMinute(), login)) {
+            audit.record(o.getId(), "RATE_LIMITS_CHANGED", "organization", o.getId(),
+                    "api " + o.getApiRateLimitPerMinute() + " -> " + api + ", sign-in " + o.getLoginRateLimitPerMinute() + " -> " + login);
+            o.setApiRateLimitPerMinute(api);
+            o.setLoginRateLimitPerMinute(login);
+            rateLimits.invalidate();
+        }
+        String legalAfter = legalSummary(o);
+        if (!legalAfter.equals(legalBefore))
+            audit.record(o.getId(), "LEGAL_DETAILS_CHANGED", "organization", o.getId(), legalBefore + " -> " + legalAfter);
         if (dto.zatcaEnvironment() != null && dto.zatcaEnvironment() != o.getZatcaEnvironment()) {
             audit.record(o.getId(), "ZATCA_ENVIRONMENT_CHANGED", "organization", o.getId(),
                     o.getZatcaEnvironment() + " -> " + dto.zatcaEnvironment());
@@ -167,27 +192,11 @@ public class OrganizationController {
         return OrganizationDto.of(o);
     }
 
-    private static boolean legalIdentityChanged(Organization o, OrganizationDto d) {
-        return !java.util.Objects.equals(nz(o.getLegalNameAr()).trim(), nz(d.legalNameAr()).trim())
-                || !java.util.Objects.equals(nz(o.getLegalNameEn()).trim(), nz(d.legalNameEn()).trim())
-                || !java.util.Objects.equals(o.getVatNumber(), d.vatNumber())
-                || !java.util.Objects.equals(o.getOtherId(), d.otherId())
-                || !java.util.Objects.equals(o.getOtherIdScheme(), d.otherIdScheme())
-                || !java.util.Objects.equals(o.getStreet(), d.street())
-                || !java.util.Objects.equals(o.getBuildingNumber(), d.buildingNumber())
-                || !java.util.Objects.equals(nz(o.getAdditionalNumber()), nz(d.additionalNumber()))
-                || !java.util.Objects.equals(o.getDistrict(), d.district())
-                || !java.util.Objects.equals(o.getCity(), d.city())
-                || !java.util.Objects.equals(o.getPostalCode(), d.postalCode())
-                || (d.zatcaEnvironment() != null && d.zatcaEnvironment() != o.getZatcaEnvironment());
-    }
-
-    /** For client admins: everything protected keeps its stored value. */
-    private static OrganizationDto keepProtected(Organization o, OrganizationDto d) {
-        return new OrganizationDto(o.getId(), o.getLegalNameAr(), o.getLegalNameEn(), o.getVatNumber(), o.getOtherId(),
-                o.getOtherIdScheme(), o.getStreet(), o.getBuildingNumber(), o.getAdditionalNumber(), o.getDistrict(),
-                o.getCity(), o.getPostalCode(), d.phone(), d.email(), d.website(), d.signatoryName(), d.signatoryTitle(), d.brandColor(), d.letterheadStyle(), d.tagline(), d.logoUrl(), d.invoicePrefix(),
-                d.creditNotePrefix(), d.debitNotePrefix(), o.getZatcaEnvironment());
+    /** Name, VAT, CR and address in one line, for the audit log when they change. */
+    private static String legalSummary(Organization o) {
+        return String.join(" | ", nz(o.getLegalNameEn()), nz(o.getLegalNameAr()), "VAT " + nz(o.getVatNumber()),
+                nz(o.getOtherIdScheme()) + " " + nz(o.getOtherId()), nz(o.getBuildingNumber()) + " " + nz(o.getStreet()),
+                nz(o.getAdditionalNumber()), nz(o.getDistrict()), nz(o.getCity()), nz(o.getPostalCode()));
     }
 
     private static String nz(String s) {

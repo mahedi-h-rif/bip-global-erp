@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Server firewall and brute-force protection (idempotent; run as root; deploy.sh runs it on every deploy).
-#  1. ufw: deny all incoming except SSH (rate-limited), HTTP/HTTPS and the two portal ports.
+#  1. ufw: deny all incoming except SSH, HTTP/HTTPS and the two portal ports.
 #  2. DOCKER-USER: Docker-published ports skip ufw, so connection floods to the web ports are limited here:
 #     per source IP at most CONN_RATE new connections a second (burst CONN_BURST) and CONN_MAX open at once.
 #     The rules live in a systemd unit, so they come back after a reboot or a Docker restart.
@@ -16,8 +16,9 @@ IFACE=$(ip -o -4 route show default | awk '{print $5; exit}')
 echo "== ufw"
 ufw default deny incoming >/dev/null
 ufw default allow outgoing >/dev/null
-# "limit" = allow, but refuse an address that opens 6+ SSH connections within 30 seconds.
-ufw limit OpenSSH >/dev/null
+# Plain allow, not "ufw limit": deploy.sh opens many SSH sessions in a row and "limit" (6 per 30 s) locks it out.
+# Password guessing is handled by fail2ban below.
+ufw allow OpenSSH >/dev/null
 for p in 80 443 "$WEB_PORT" "$WEB_PORT_PROD"; do ufw allow "$p"/tcp >/dev/null; done
 ufw --force enable >/dev/null
 

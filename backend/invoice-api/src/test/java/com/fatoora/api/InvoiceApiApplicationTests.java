@@ -102,10 +102,23 @@ class InvoiceApiApplicationTests {
                 "location", "L", "industry", "I", "invoiceTypes", "1100")}).statusCode(), "onboarding is provider-only");
 
         var org = (tools.jackson.databind.node.ObjectNode) json.readTree(as.apply("GET /organization", new Object[0]).body());
+        // Company admins manage the legal details themselves; the ZATCA environment stays with the provider.
         var changedVat = org.deepCopy().put("vatNumber", "311111111111113");
-        var refused = as.apply("PUT /organization", new Object[]{changedVat});
+        var vatOk = as.apply("PUT /organization", new Object[]{changedVat});
+        assertEquals(200, vatOk.statusCode(), vatOk.body());
+        assertEquals("311111111111113", json.readTree(vatOk.body()).get("vatNumber").asString());
+        assertEquals(200, as.apply("PUT /organization", new Object[]{org}).statusCode(), "VAT number restored");
+        String env = org.get("zatcaEnvironment").asString();
+        var otherEnv = org.deepCopy().put("zatcaEnvironment", "PRODUCTION".equals(env) ? "SANDBOX" : "PRODUCTION");
+        var refused = as.apply("PUT /organization", new Object[]{otherEnv});
         assertEquals(403, refused.statusCode(), refused.body());
         assertTrue(refused.body().contains("provider_only"));
+        var badLimit = as.apply("PUT /organization", new Object[]{org.deepCopy().put("loginRateLimitPerMinute", 1)});
+        assertEquals(400, badLimit.statusCode(), "a sign-in limit below 3 would lock everyone out");
+        var limits = as.apply("PUT /organization", new Object[]{org.deepCopy().put("apiRateLimitPerMinute", 900).put("loginRateLimitPerMinute", 20)});
+        assertEquals(200, limits.statusCode(), limits.body());
+        assertEquals(900, json.readTree(limits.body()).get("apiRateLimitPerMinute").asInt());
+        assertEquals(200, as.apply("PUT /organization", new Object[]{org}).statusCode(), "limits back to the default");
 
         var branding = org.deepCopy().put("phone", "+966 11 000 0000").put("brandColor", "#1B6B05");
         var ok = as.apply("PUT /organization", new Object[]{branding});

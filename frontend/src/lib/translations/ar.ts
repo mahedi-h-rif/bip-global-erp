@@ -1780,4 +1780,12 @@ export const ar: Record<string, string> = {
   "Plate": "اللوحة",
   "Terminated": "منتهية خدمته",
   "Transport": "بدل النقل",
+  // Rate limits
+  "Must match the VAT registration certificate exactly. A new VAT number also needs a ZATCA device onboarded for it.": "يجب أن تطابق شهادة التسجيل في ضريبة القيمة المضافة تمامًا. الرقم الضريبي الجديد يتطلب أيضًا ربط جهاز جديد مع هيئة الزكاة.",
+  "API rate limits": "حدود معدل الطلبات",
+  "Per visitor (IP address). Over the limit, requests are refused for the rest of the minute. 0 = no limit; empty = default.": "لكل زائر (عنوان IP). عند تجاوز الحد تُرفض الطلبات لبقية الدقيقة. 0 = بلا حد؛ فارغ = الافتراضي.",
+  "Requests per minute": "الطلبات في الدقيقة",
+  "All API calls. Default 600; allowed 60 to 100000.": "جميع الطلبات. الافتراضي 600؛ المسموح من 60 إلى 100000.",
+  "Sign-in attempts per minute": "محاولات تسجيل الدخول في الدقيقة",
+  "Default 10; allowed 3 to 1000.": "الافتراضي 10؛ المسموح من 3 إلى 1000.",
 };
