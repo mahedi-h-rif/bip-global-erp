@@ -491,7 +491,8 @@ class InvoiceApiApplicationTests {
             String text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
             assertTrue(text.contains("Client Trading Co."), "English buyer name");
             // Seller and buyer each show a second-language name row ("Name (English)", wrapped over two lines).
-            assertEquals(2, text.split("\(English\)", -1).length - 1, "both parties show their English name");
+            assertEquals(2, (text.length() - text.replace("(English)", "").length()) / "(English)".length(),
+                    "both parties show their English name");
         }
     }
 
