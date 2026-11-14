@@ -51,8 +51,7 @@ services:
       args:
         API_ORIGIN: http://api:8080
     restart: unless-stopped
-    ports:
-      - "${WEB_PORT:-8088}:3000"
+    # Not published: Caddy serves it on ${WEB_PORT} (see Caddyfile), so every request carries the real client IP.
     depends_on:
       - api
 
@@ -75,12 +74,13 @@ services:
       args:
         API_ORIGIN: http://api-prod:8080
     restart: unless-stopped
-    ports:
-      - "${WEB_PORT_PROD:-8089}:3000"
+    # Not published: Caddy serves it on https://erp.bipgulf.com and on ${WEB_PORT_PROD}.
     depends_on:
       - api-prod
 
-  # HTTPS for erp.bipgulf.com (production), with automatic Let's Encrypt certificates.
+  # The only published service: HTTPS for erp.bipgulf.com (automatic Let's Encrypt certificates) and the two
+  # plain-HTTP portal ports. Caddy replaces any X-Forwarded-For a client sends with the real address, which the
+  # API's per-visitor rate limit relies on.
   caddy:
     image: caddy:2.8.4
     restart: unless-stopped
@@ -88,11 +88,14 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+      - "${WEB_PORT:-8088}:8088"
+      - "${WEB_PORT_PROD:-8089}:8089"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
+      - web
       - web-prod
 
 volumes:

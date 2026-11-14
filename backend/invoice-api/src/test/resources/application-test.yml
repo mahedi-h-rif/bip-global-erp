@@ -13,6 +13,9 @@ fatoora:
     secret: test-jwt-secret-test-jwt-secret-0123456789
     cookie-secure: false
   auto-report-after: PT0S
+  # Tests fire many calls from one address; the limiter has its own unit test.
+  rate-limit:
+    requests-per-minute: 0
   scheduler-interval: PT1H
   bootstrap:
     admin-email: admin@test.local

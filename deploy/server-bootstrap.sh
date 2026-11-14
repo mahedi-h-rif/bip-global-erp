@@ -38,7 +38,10 @@ echo "== fail2ban"
 cat > /etc/fail2ban/jail.d/sshd.local <<'EOF'
 [sshd]
 enabled = true
+backend = systemd
+journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd
 maxretry = 5
+findtime = 10m
 bantime = 1h
 EOF
 systemctl enable --now fail2ban >/dev/null

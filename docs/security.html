@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoudaCore ERP Security</title>
+<meta name="description" content="How the BIP Gulf ERP is protected, layer by layer, and the exact commands to verify each protection.">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --ink: #14181f; --muted: #5b6573; --line: #e3e7ec;
+    --brand: #0b5cad; --brand-soft: #e8f1fb; --ok: #137a3f; --ok-soft: #e6f4ec;
+    --warn: #9a5b00; --warn-soft: #fdf2df; --new: #6b3fb5; --new-soft: #f0eafb;
+    --code-bg: #0f1720; --code-ink: #e6edf3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --surface: #161b22; --ink: #e6edf3; --muted: #9aa5b1; --line: #2a313c;
+      --brand: #6cb0ff; --brand-soft: #132a44; --ok: #4cc38a; --ok-soft: #12291d;
+      --warn: #f0b35a; --warn-soft: #2d2213; --new: #b99af0; --new-soft: #251c38;
+      --code-bg: #0a0e14; --code-ink: #e6edf3;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --surface: #161b22; --ink: #e6edf3; --muted: #9aa5b1; --line: #2a313c;
+    --brand: #6cb0ff; --brand-soft: #132a44; --ok: #4cc38a; --ok-soft: #12291d;
+    --warn: #f0b35a; --warn-soft: #2d2213; --new: #b99af0; --new-soft: #251c38;
+    --code-bg: #0a0e14; --code-ink: #e6edf3;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 16px 80px; display: grid; grid-template-columns: 230px 1fr; gap: 32px; }
+  nav { position: sticky; top: 24px; align-self: start; font-size: 14px; }
+  nav h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  nav a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+  nav a:hover { background: var(--surface); color: var(--ink); }
+  header h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+  header p { color: var(--muted); margin: 0 0 20px; max-width: 70ch; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; margin-bottom: 20px; }
+  section h2 { font-size: 20px; margin: 0 0 4px; scroll-margin-top: 20px; }
+  section > p.lead { color: var(--muted); margin: 0 0 14px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: start; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
+  .badge { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .on { background: var(--ok-soft); color: var(--ok); }
+  .new { background: var(--new-soft); color: var(--new); }
+  .rec { background: var(--warn-soft); color: var(--warn); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 6px 0 4px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .card span { color: var(--muted); font-size: 13.5px; }
+  .check { border-inline-start: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 12px 0; }
+  .check > b { display: block; font-size: 13px; color: var(--brand); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .note { border-inline-start: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 12px 0; }
+  pre { position: relative; background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 8px 0; }
+  pre .c { color: #8b98a5; }
+  code { font: 13px ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  .copy { position: absolute; top: 8px; inset-inline-end: 8px; font: 12px system-ui, sans-serif; border: 1px solid #3a4554; background: #1b2430; color: #cfd8e3; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+  .copy:hover { background: #263142; }
+  ul { padding-inline-start: 20px; margin: 6px 0; }
+  li { margin: 3px 0; }
+  .expect { color: var(--ok); font-weight: 600; }
+  .layers { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
+  .layer { display: flex; gap: 12px; align-items: baseline; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  .layer .n { font-weight: 700; color: var(--brand); min-width: 20px; }
+  .layer .w { color: var(--muted); font-size: 13.5px; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .theme { float: inline-end; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: 1fr; gap: 16px; }
+    nav { position: static; display: flex; flex-wrap: wrap; gap: 2px; }
+    nav h2 { width: 100%; }
+    section { padding: 18px 16px; }
+    header h1 { font-size: 24px; }
+  }
+  @media print { nav, .copy, .theme { display: none; } .wrap { display: block; } section { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav aria-label="Contents">
+    <h2>Contents</h2>
+    <a href="#overview">Overview</a>
+    <a href="#network">Server firewall</a>
+    <a href="#ratelimit">Rate limiting</a>
+    <a href="#https">HTTPS</a>
+    <a href="#auth">Sign-in &amp; sessions</a>
+    <a href="#csrf">CSRF protection</a>
+    <a href="#access">Roles &amp; permissions</a>
+    <a href="#input">Injection &amp; input</a>
+    <a href="#headers">Browser headers</a>
+    <a href="#data">Data &amp; secrets</a>
+    <a href="#backups">Backups &amp; updates</a>
+    <a href="#audit">Audit log</a>
+    <a href="#automated">Automated check</a>
+    <a href="#recommend">Recommendations</a>
+  </nav>
+
+  <main>
+    <header>
+      <button class="theme" type="button" id="theme">Toggle theme</button>
+      <h1>SoudaCore ERP: security</h1>
+      <p>How the BIP Gulf ERP is protected, from the server firewall down to each API call, and the exact commands to check each protection yourself.
+        Production is <code>https://erp.bipgulf.com</code>; UAT is <code>http://2.24.60.124:8088</code>. Both run on one Ubuntu 24.04 server.</p>
+      <p><span class="badge on">Active</span> already running &nbsp; <span class="badge new">Added</span> in the latest change, live after the next deploy &nbsp; <span class="badge rec">Recommended</span> not yet done</p>
+    </header>
+
+    <section id="overview">
+      <h2>Overview</h2>
+      <p class="lead">A request passes through several independent layers. If one layer fails, the next one still stops an attacker.</p>
+      <div class="layers">
+        <div class="layer"><span class="n">1</span><div><b>Server firewall</b> <span class="w">only SSH, 80, 443, 8088 and 8089 are open. SSH and web connections are rate-limited per IP, and fail2ban bans SSH password guessers.</span></div></div>
+        <div class="layer"><span class="n">2</span><div><b>Caddy front door</b> <span class="w">the only published container. It provides HTTPS with automatic certificates and HSTS, and records each visitor's real IP.</span></div></div>
+        <div class="layer"><span class="n">3</span><div><b>API rate limits</b> <span class="w">600 requests a minute and 10 sign-in attempts a minute per visitor. A single account is locked for 15 minutes after 5 wrong passwords.</span></div></div>
+        <div class="layer"><span class="n">4</span><div><b>Authentication</b> <span class="w">BCrypt passwords, signed session cookie (HttpOnly, Secure, SameSite=Strict), CSRF token on every change.</span></div></div>
+        <div class="layer"><span class="n">5</span><div><b>Authorization</b> <span class="w">roles, per-feature permissions, branch logins limited to their own records.</span></div></div>
+        <div class="layer"><span class="n">6</span><div><b>Data</b> <span class="w">database never exposed, ZATCA keys encrypted (AES-256-GCM), secrets outside git, nightly backups.</span></div></div>
+      </div>
+    </section>
+
+    <section id="network">
+      <h2>Server firewall</h2>
+      <p class="lead">Set up by <code>deploy/server-firewall.sh</code>. Every deploy re-applies it, and the same script can be run on its own.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Protection</th><th>What it does</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>ufw default deny</td><td>Blocks every incoming connection except SSH (22), HTTP (80), HTTPS (443) and the portal ports 8088 (UAT) and 8089 (production).</td><td><span class="badge on">Active</span></td></tr>
+          <tr><td>Database not published</td><td>PostgreSQL has no public port. Only the API containers reach it, on Docker's internal network.</td><td><span class="badge on">Active</span></td></tr>
+          <tr><td>API not published</td><td>The Spring API (8080) is internal only. Browsers reach it through the portal.</td><td><span class="badge on">Active</span></td></tr>
+          <tr><td>Only Caddy published</td><td>The portal containers are no longer published directly. Caddy serves 80, 443, 8088 and 8089.</td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>Per-IP connection limits</td><td>Docker-published ports bypass ufw, so a <code>DOCKER-USER</code> rule limits each source IP to 50 new connections a second (burst 200) and 300 open at once. Floods are dropped before they reach Caddy. A systemd unit (<code>bip-docker-limits</code>) restores the rule after a reboot.</td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>SSH rate limit</td><td><code>ufw limit OpenSSH</code>: an address opening 6 or more SSH connections within 30 seconds is refused.</td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>fail2ban for SSH</td><td>Bans an IP for 1 hour after 5 failed SSH logins within 10 minutes. The old jail watched <code>sshd.service</code>, but Ubuntu 24.04 calls the service <code>ssh.service</code>, so it never banned anyone. It now watches the right service.</td><td><span class="badge new">Fixed</span></td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="check"><b>How to check</b>Sign in to the server (<code>ssh root@2.24.60.124</code>) and run:</div>
+<pre><code><span class="c"># 1. Firewall rules: expect "Status: active", "22/tcp LIMIT", 80, 443, 8088, 8089 ALLOW</span>
+ufw status verbose
+
+<span class="c"># 2. Only these ports are listening publicly (22, 80, 443, 8088, 8089). Nothing on 5432 or 8080.</span>
+ss -tlnp | grep -v 127.0.0
+
+<span class="c"># 3. Per-IP connection limits for Docker ports: expect a jump to BIP-LIMITS, a connlimit and a hashlimit rule</span>
+iptables -S DOCKER-USER
+iptables -S BIP-LIMITS
+systemctl status bip-docker-limits --no-pager
+
+<span class="c"># 4. fail2ban is watching SSH: "Total failed" grows as bots try passwords; "Banned IP list" shows who is blocked</span>
+fail2ban-client status sshd
+
+<span class="c"># 5. Containers: only caddy has 0.0.0.0 port mappings</span>
+docker ps --format 'table {{.Names}}\t{{.Ports}}'</code></pre>
+      <p>From your own computer, the database and the API must <b>not</b> answer:</p>
+<pre><code>nc -vz -w 3 2.24.60.124 5432   <span class="c"># expect: timed out / refused</span>
+nc -vz -w 3 2.24.60.124 8080   <span class="c"># expect: timed out / refused</span>
+nmap -Pn 2.24.60.124           <span class="c"># expect only 22, 80, 443, 8088, 8089 open</span></code></pre>
+    </section>
+
+    <section id="ratelimit">
+      <h2>Rate limiting</h2>
+      <p class="lead">Limits at three levels, so a single visitor can't overload the system or keep guessing passwords.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Level</th><th>Limit</th><th>When exceeded</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Network (iptables)</td><td>50 new connections/second per IP (burst 200), 300 open connections per IP</td><td>Extra connections are dropped</td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>SSH (ufw)</td><td>6 connections in 30 seconds per IP</td><td>Refused; fail2ban then bans for 1 hour after 5 failures</td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>API, all calls</td><td>600 requests/minute per visitor IP</td><td><code>429 Too Many Requests</code> with <code>Retry-After</code></td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>API, sign-in</td><td>10 attempts/minute per visitor IP</td><td><code>429</code> with <code>Retry-After</code></td><td><span class="badge new">Added</span></td></tr>
+          <tr><td>Account lockout</td><td>5 wrong passwords for one email</td><td>That email is locked for 15 minutes (<code>429 locked</code>)</td><td><span class="badge on">Active</span></td></tr>
+        </tbody>
+      </table></div>
+      <p>The API identifies each visitor by IP. Caddy discards any <code>X-Forwarded-For</code> header a client sends and writes the real address, so the limit can't be dodged with a fake header. The limits are set in the env file: <code>FATOORA_RATE_LIMIT_PER_MINUTE</code> (default 600) and <code>FATOORA_RATE_LIMIT_LOGIN_PER_MINUTE</code> (default 10). Setting 0 turns the limiter off. Counters are kept in memory and reset when the API restarts.</p>
+
+      <div class="check"><b>How to check</b>Test against UAT, not production. The sign-in test uses made-up emails, so no real account is locked.</div>
+<pre><code><span class="c"># Sign-in limit: the first 10 attempts answer 401 (wrong password), then 429</span>
+U=http://2.24.60.124:8088
+J=$(mktemp); curl -s -c $J $U/api/v1/auth/csrf >/dev/null
+T=$(awk '$6=="XSRF-TOKEN"{print $7}' $J)
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -w "%{http_code} " -b $J -H "X-XSRF-TOKEN: $T" -H "Content-Type: application/json" \
+    -d "{\"email\":\"ratetest$i@example.invalid\",\"password\":\"x\"}" $U/api/v1/auth/login
+done; echo
+<span class="c"># expect: 401 401 401 401 401 401 401 401 401 401 429 429</span>
+
+<span class="c"># The 429 answer says how long to wait</span>
+curl -s -D - -o /dev/null -b $J -H "X-XSRF-TOKEN: $T" -H "Content-Type: application/json" \
+  -d '{"email":"ratetest@example.invalid","password":"x"}' $U/api/v1/auth/login | grep -i retry-after
+
+<span class="c"># General limit: 650 quick calls, the last ~50 answer 429 (wait a minute before using UAT again)</span>
+seq 1 650 | xargs -P 20 -I{} curl -s -o /dev/null -w "%{http_code}\n" $U/api/v1/auth/csrf | sort | uniq -c
+<span class="c"># expect roughly:  600 200   and   50 429</span>
+
+<span class="c"># A fake X-Forwarded-For does not reset the counter (still 429 inside the same minute)</span>
+curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-For: 1.2.3.4" $U/api/v1/auth/csrf</code></pre>
+      <p>The limiter also has its own automated test (<code>RateLimitFilterTest</code>), which runs with the backend tests: <code>cd backend &amp;&amp; ./gradlew :invoice-api:test</code>.</p>
+    </section>
+
+    <section id="https">
+      <h2>HTTPS</h2>
+      <p class="lead">Production is served only over HTTPS by Caddy, which obtains and renews the Let's Encrypt certificate automatically.</p>
+      <ul>
+        <li>HTTP on port 80 redirects to HTTPS. <span class="badge on">Active</span></li>
+        <li>HSTS (<code>Strict-Transport-Security: max-age=31536000; includeSubDomains</code>) tells browsers to use HTTPS only, for one year. <span class="badge new">Added</span></li>
+        <li>On production the session cookie is <code>Secure</code>, so it is never sent over plain HTTP. Signing in therefore only works at the HTTPS address. <span class="badge on">Active</span></li>
+      </ul>
+      <div class="check"><b>How to check</b></div>
+<pre><code>curl -sI http://erp.bipgulf.com | head -3            <span class="c"># expect 308 redirect to https://</span>
+curl -sI https://erp.bipgulf.com | grep -i strict      <span class="c"># expect the HSTS header</span>
+echo | openssl s_client -connect erp.bipgulf.com:443 -servername erp.bipgulf.com 2>/dev/null | openssl x509 -noout -issuer -dates
+<span class="c"># expect issuer Let's Encrypt and a notAfter date in the future</span></code></pre>
+      <p>For a full grade, enter <code>erp.bipgulf.com</code> at <b>ssllabs.com/ssltest</b> (expect A or A+).</p>
+    </section>
+
+    <section id="auth">
+      <h2>Sign-in &amp; sessions</h2>
+      <div class="grid">
+        <div class="card"><b>Passwords</b><span>Stored only as BCrypt hashes (cost 12). Nobody, including admins, can read a password.</span></div>
+        <div class="card"><b>Session cookie</b><span>A signed token in a cookie marked <code>HttpOnly</code> (page scripts can't read it), <code>Secure</code> and <code>SameSite=Strict</code>. It expires after 12 hours.</span></div>
+        <div class="card"><b>Sign-out</b><span>Revokes the token on the server, so a copied cookie stops working.</span></div>
+        <div class="card"><b>Disabled users</b><span>Checked on every request. Disabling someone signs them out immediately.</span></div>
+        <div class="card"><b>Error messages</b><span>"Email or password is incorrect" in all cases, so the login page doesn't reveal which emails exist.</span></div>
+        <div class="card"><b>Lockout</b><span>5 wrong passwords lock the account for 15 minutes. Failed sign-ins are recorded in the audit log.</span></div>
+      </div>
+      <div class="check"><b>How to check</b>In the browser, open DevTools → Application → Cookies after signing in. <code>fatoora_session</code> must show HttpOnly ✓, Secure ✓ (production), SameSite Strict. From a terminal:</div>
+<pre><code><span class="c"># Without signing in, data is refused</span>
+curl -s -o /dev/null -w "%{http_code}\n" https://erp.bipgulf.com/api/v1/invoices          <span class="c"># expect 401</span>
+<span class="c"># A forged token is refused</span>
+curl -s -o /dev/null -w "%{http_code}\n" -b "fatoora_session=forged.token.value" https://erp.bipgulf.com/api/v1/invoices   <span class="c"># expect 401</span></code></pre>
+    </section>
+
+    <section id="csrf">
+      <h2>CSRF protection</h2>
+      <p class="lead">Every change (create, edit, delete) must carry the <code>X-XSRF-TOKEN</code> header matching the <code>XSRF-TOKEN</code> cookie. Another website can't read that cookie, so it can't make your browser submit changes. <code>SameSite=Strict</code> on the session cookie adds a second barrier.</p>
+      <div class="check"><b>How to check</b>A write without the token is refused even when signed in. The automated check below tests this.</div>
+<pre><code><span class="c"># With a valid session cookie in $J but no token header: expect 403</span>
+curl -s -o /dev/null -w "%{http_code}\n" -b $J -H "Content-Type: application/json" \
+  -X POST http://2.24.60.124:8088/api/v1/customers -d '{"nameEn":"CSRF test"}'</code></pre>
+    </section>
+
+    <section id="access">
+      <h2>Roles &amp; permissions</h2>
+      <ul>
+        <li><b>Roles</b>: Admin › Accountant › Viewer. Each includes the rights of the roles below it. Viewers can only read.</li>
+        <li><b>Per-feature access</b>: for each user an admin ticks the features and actions (view, create, update, delete) they may use, and chooses whether they see all data or only their own.</li>
+        <li><b>Branch logins</b>: limited to invoices, quotations, agreements, their own cash book and the shared customer and product lists. Every record they get back is filtered to what that login created.</li>
+        <li><b>Provider (operator) role</b>: a company admin can't create provider accounts or switch the ZATCA environment.</li>
+        <li><b>Unknown or foreign records</b> answer 404 without detail, so ids can't be probed.</li>
+      </ul>
+      <div class="check"><b>How to check</b>Sign in as a Viewer and try to add a product, open Settings → Users or change bank details. Each is refused. The automated check creates temporary Viewer and Branch users and tests all of this, then disables them.</div>
+    </section>
+
+    <section id="input">
+      <h2>Injection &amp; input validation</h2>
+      <ul>
+        <li>All database queries use bound parameters. Report grouping and document types are matched against fixed lists, never pasted into SQL.</li>
+        <li>Names and text are escaped in PDFs and pages, so <code>&lt;script&gt;</code> typed into a field stays plain text.</li>
+        <li>Validation rejects negative quantities and prices, documents without lines, malformed VAT numbers and malformed JSON (answering 400, never 500).</li>
+        <li>Uploads check the file type. A logo must be an image.</li>
+        <li>Public invoice links in customer reminders carry an HMAC-SHA256 token, so they can't be guessed from an invoice number.</li>
+      </ul>
+      <div class="check"><b>How to check</b>Covered by sections 5 and 6 of the automated check (SQL injection in search, timing-based injection, HTML in names, invalid values).</div>
+    </section>
+
+    <section id="headers">
+      <h2>Browser security headers</h2>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Header</th><th>Protects against</th></tr></thead>
+        <tbody>
+          <tr><td><code>X-Frame-Options: DENY</code></td><td>Clickjacking: the ERP can't be embedded in another site.</td></tr>
+          <tr><td><code>X-Content-Type-Options: nosniff</code></td><td>Browsers treating uploaded files as scripts.</td></tr>
+          <tr><td><code>Referrer-Policy: same-origin</code></td><td>Page addresses leaking to other sites.</td></tr>
+          <tr><td><code>Permissions-Policy</code></td><td>Camera and microphone only on the ERP itself (voice input, scanning); location blocked.</td></tr>
+          <tr><td><code>Strict-Transport-Security</code></td><td>Downgrade to plain HTTP (production). <span class="badge new">Added</span></td></tr>
+          <tr><td>No <code>X-Powered-By</code></td><td>Advertising the framework and version to attackers.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="check"><b>How to check</b></div>
+<pre><code>curl -sI https://erp.bipgulf.com/login | grep -iE "x-frame|nosniff|referrer|permissions|strict|powered"</code></pre>
+      <p>You can also enter <code>https://erp.bipgulf.com</code> at <b>securityheaders.com</b>.</p>
+    </section>
+
+    <section id="data">
+      <h2>Data &amp; secrets</h2>
+      <ul>
+        <li>ZATCA EGS private keys and CSID secrets are encrypted in the database with AES-256-GCM, using a master key that lives only in the server's env file.</li>
+        <li>Secrets (database password, session signing key, master key, admin password) are kept in <code>deploy/clients/*.env</code>. These files are not in git, and on the server they are readable only by root (<code>chmod 600</code>).</li>
+        <li>UAT and production use separate databases (<code>bip_uat</code>, <code>bip_prod</code>), with separate logins and secrets.</li>
+      </ul>
+      <div class="check"><b>How to check</b></div>
+<pre><code><span class="c"># On the server: expect -rw------- root root</span>
+ls -l /opt/bip-erp/deploy/clients/
+<span class="c"># On your computer: expect no output (env files are not tracked)</span>
+git ls-files deploy/clients | grep -v example</code></pre>
+    </section>
+
+    <section id="backups">
+      <h2>Backups &amp; updates</h2>
+      <ul>
+        <li><b>Nightly backups</b> of both databases at 02:30 server time, kept for 14 days, in <code>/opt/bip-erp/deploy/backups</code>. <span class="badge on">Active</span></li>
+        <li><b>Automatic security updates</b> for Ubuntu (unattended-upgrades). <span class="badge on">Active</span></li>
+        <li><b>Off-server copy</b> of the backups (to another machine or cloud storage) is not set up yet. <span class="badge rec">Recommended</span></li>
+      </ul>
+      <div class="check"><b>How to check</b></div>
+<pre><code>ls -lh /opt/bip-erp/deploy/backups | tail -6       <span class="c"># expect today's bip_uat and bip_prod dumps</span>
+systemctl is-active unattended-upgrades            <span class="c"># expect active</span>
+cat /etc/apt/apt.conf.d/20auto-upgrades            <span class="c"># expect both values "1"</span></code></pre>
+    </section>
+
+    <section id="audit">
+      <h2>Audit log</h2>
+      <p class="lead">Sign-ins, failed sign-ins and changes to records are recorded with the user and time. Admins see them under <b>Settings → Audit log</b>. Repeated <code>LOGIN_FAILED</code> entries for one email suggest someone is guessing that account's password.</p>
+    </section>
+
+    <section id="automated">
+      <h2>Automated security check</h2>
+      <p class="lead"><code>deploy/security-check.sh</code> runs about 40 non-destructive checks at a low request rate. It covers sign-in, CSRF, roles, record ownership, injection, validation, cookies, headers and sign-out. It creates a few clearly named test records and two temporary users, then removes or disables them. Run it against UAT.</p>
+<pre><code><span class="c"># From the erp folder on your computer (Git Bash), with UAT admin credentials</span>
+BASE=http://2.24.60.124:8088 EMAIL='admin email' PASSWORD='admin password' bash deploy/security-check.sh
+<span class="c"># expect the last line:  == NN passed, 0 failed, N notes</span></code></pre>
+      <p>On plain-HTTP UAT, "session cookie not Secure" appears as a note. That is expected there; production uses HTTPS with Secure cookies.</p>
+    </section>
+
+    <section id="recommend">
+      <h2>Recommendations (not yet done)</h2>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Item</th><th>Why</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge rec">High</span> SSH keys only</td><td>The server accepts root sign-in with a password. Keys can't be guessed; passwords can.</td><td>Make sure your own SSH key works first. Then set <code>PasswordAuthentication no</code> and <code>PermitRootLogin prohibit-password</code> in <code>/etc/ssh/sshd_config.d/99-hardening.conf</code> and run <code>systemctl reload ssh</code>. Check with <code>sshd -T | grep -E "passwordauth|permitroot"</code>.</td></tr>
+          <tr><td><span class="badge rec">Medium</span> Off-server backups</td><td>If the server is lost, the nightly dumps are lost with it.</td><td>Copy <code>backups/*.dump</code> daily to another location (e.g. rclone to cloud storage).</td></tr>
+          <tr><td><span class="badge rec">Medium</span> UAT over HTTPS</td><td>UAT runs on plain HTTP, so its sign-in travels unencrypted.</td><td>Point a subdomain (e.g. <code>uat.bipgulf.com</code>) at the server and add it to the Caddyfile.</td></tr>
+          <tr><td><span class="badge rec">Low</span> IPv6 connection limits</td><td>The per-IP connection limits cover IPv4. IPv6 traffic still has the API rate limits.</td><td>Mirror the <code>BIP-LIMITS</code> rules with <code>ip6tables</code> if IPv6 visitors matter.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <footer>Last updated 14 November 2026. Sources: <code>deploy/server-firewall.sh</code>, <code>deploy/Caddyfile</code>, <code>deploy/docker-compose.yml</code>, <code>backend/…/config/SecurityConfig.java</code>, <code>RateLimitFilter.java</code>, <code>frontend/next.config.ts</code>.</footer>
+  </main>
+</div>
+<script>
+  document.querySelectorAll("pre").forEach(function (pre) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function () {
+      var text = pre.querySelector("code").innerText;
+      navigator.clipboard.writeText(text).then(function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); });
+    });
+    pre.appendChild(b);
+  });
+  (function () {
+    var root = document.documentElement, key = "security-doc-theme";
+    try { var saved = localStorage.getItem(key); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+    document.getElementById("theme").addEventListener("click", function () {
+      var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      var next = dark ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem(key, next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

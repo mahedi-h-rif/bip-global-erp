@@ -24,6 +24,10 @@ server:
 fatoora:
   # 32-byte key, base64. Encrypts EGS private keys and CSID secrets at rest. Never commit a real one.
   master-key: ${FATOORA_MASTER_KEY}
+  # Per-visitor limits (by real client IP): all API calls, and sign-in attempts. 0 turns the limiter off.
+  rate-limit:
+    requests-per-minute: ${FATOORA_RATE_LIMIT_PER_MINUTE:600}
+    login-per-minute: ${FATOORA_RATE_LIMIT_LOGIN_PER_MINUTE:10}
   jwt:
     secret: ${FATOORA_JWT_SECRET}
     ttl: ${FATOORA_JWT_TTL:PT12H}

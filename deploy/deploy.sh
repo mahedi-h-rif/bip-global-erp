@@ -38,6 +38,9 @@ git log -1 --format='%H %s' | $SSH "cat > $APP_DIR/REVISION"
 
 # One image at a time: building the backend and both frontends together runs the server out of memory.
 # The backend image is built once and shared by api and api-prod.
+echo "== firewall and brute-force protection"
+$SSH "WEB_PORT=$WEB_PORT WEB_PORT_PROD=${WEB_PORT_PROD:-8089} bash -s" < deploy/server-firewall.sh | sed 's/^/   /'
+
 echo "== build (one image at a time)"
 for svc in api web web-prod; do
   echo "   $svc"
