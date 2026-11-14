@@ -323,7 +323,7 @@ public class InvoicePdfService {
         if (a != null) {
             kv.append(row("Address", joined("، ", a.street(), a.district(), a.city()), "العنوان"))
                     .append(row("Building / postal", joined(" · ",
-                            blank(a.buildingNumber()) ? null : "Bldg " + a.buildingNumber(),
+                            blank(a.buildingNumber()) ? null : "Building No. " + a.buildingNumber(),
                             blank(a.postalCode()) ? null : "Postal " + a.postalCode(),
                             blank(a.additionalNumber()) ? null : "Add. " + a.additionalNumber(),
                             a.countryCode()), "المبنى / الرمز البريدي"));

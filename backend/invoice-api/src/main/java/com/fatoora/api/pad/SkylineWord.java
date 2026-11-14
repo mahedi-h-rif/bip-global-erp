@@ -156,7 +156,7 @@ final class SkylineWord {
         XWPFParagraph a2 = addr.addParagraph();
         tight(a2);
         PadWord.run(a2, 8.5, TEXT).setText(PadWord.joined(" · ",
-                org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
+                org.getBuildingNumber() == null ? null : "Building No. " + org.getBuildingNumber(),
                 org.getPostalCode() == null ? null : "Postal Code " + org.getPostalCode(),
                 city.isBlank() || arabicCity ? "KSA" : city + ", KSA"));
 

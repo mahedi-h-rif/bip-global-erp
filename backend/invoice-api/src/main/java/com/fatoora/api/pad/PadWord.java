@@ -157,7 +157,7 @@ public final class PadWord {
             r.addBreak();
         }
         run(p, 7.5, "5A6275").setText(joined(" · ",
-                org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
+                org.getBuildingNumber() == null ? null : "Building No. " + org.getBuildingNumber(),
                 org.getPostalCode() == null ? null : "Postal " + org.getPostalCode(),
                 "VAT " + nz(org.getVatNumber()), "CR " + nz(org.getOtherId())));
     }

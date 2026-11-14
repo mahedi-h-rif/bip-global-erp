@@ -11,10 +11,11 @@ import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/component
 import { agreementStatusLabel } from "@/components/agreement-editor";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PdfPreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
 
-function Row({ a, onChanged }: { a: Agreement; onChanged: () => void }) {
+function Row({ a, onChanged, rowProps, onView }: { a: Agreement; onChanged: () => void; rowProps: object; onView: () => void }) {
   const t = useT();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -33,7 +34,7 @@ function Row({ a, onChanged }: { a: Agreement; onChanged: () => void }) {
   }
 
   return (
-    <tr className="hover:bg-canvas">
+    <tr {...rowProps}>
       <td className="px-4 py-3 font-medium"><Link href={`/agreements/${a.id}`} className="hover:underline">{a.number}</Link></td>
       <td className="px-4 py-3">{a.clientName}</td>
       <td className="px-4 py-3">{a.title}</td>
@@ -44,6 +45,7 @@ function Row({ a, onChanged }: { a: Agreement; onChanged: () => void }) {
       </td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap justify-end gap-1.5">
+          <ViewButton onClick={onView} className={small} />
           <Link href={`/agreements/${a.id}`} className={small}><Pencil className="size-3.5" aria-hidden /> {t("Edit")}</Link>
           <button type="button" className={small} disabled={busy} onClick={() => run(() => openFile(`/agreements/${a.id}/pdf?lang=en`))}>
             <FileDown className="size-3.5" aria-hidden /> PDF EN
@@ -75,6 +77,8 @@ function Row({ a, onChanged }: { a: Agreement; onChanged: () => void }) {
 export default function AgreementsPage() {
   const t = useT();
   const { data, error, mutate } = useSWR<Agreement[]>("/agreements", fetcher);
+  const preview = usePreview<Agreement>();
+  const pv = preview.current;
   const { toolbar, shown } = useListTools<Agreement>(data, { filters: [{ label: "Status", get: (r) => r.status, format: statusText }, { label: "Client", get: (r) => r.clientName }], date: (r) => r.agreementDate });
 
   return (
@@ -103,12 +107,17 @@ export default function AgreementsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {shown.map((x) => <Row key={x.id} a={x} onChanged={() => mutate()} />)}
+                {shown.map((x) => <Row key={x.id} a={x} onChanged={() => mutate()} rowProps={preview.row(x, "hover:bg-canvas")} onView={() => preview.open(x)} />)}
               </tbody>
             </table>
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.clientName} href={`/agreements/${pv.id}`} onClose={preview.close}>
+          <PdfPreview path={`/agreements/${pv.id}/pdf?lang=en`} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

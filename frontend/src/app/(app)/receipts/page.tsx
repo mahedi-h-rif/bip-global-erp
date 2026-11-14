@@ -10,11 +10,15 @@ import { Alert, ButtonLink, Card, Empty, PageHeader, Spinner } from "@/component
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
 import { PendingCollections } from "@/components/pending-work";
+import { PagePreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
+import ReceiptPage from "./[id]/page";
 
 export default function ReceiptsPage() {
   const t = useT();
   const { data, error } = useSWR<Receipt[]>("/receipts", fetcher);
   const { toolbar, shown } = useListTools<Receipt>(data, { filters: [{ label: "Customer", get: (r) => r.customerName }, { label: "Method", get: (r) => r.method, format: statusText }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.receiptDate });
+  const preview = usePreview<Receipt>();
+  const pv = preview.current;
   return (
     <>
       <PageHeader
@@ -40,17 +44,18 @@ export default function ReceiptsPage() {
                   <th className="px-4 py-2.5 text-start font-medium">{t("Method")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Invoices")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Amount")}</th>
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {shown.map((r) => (
-                  <tr key={r.id} className={`hover:bg-slate-50 ${r.status === "CANCELLED" ? "text-muted line-through" : ""}`}>
+                  <tr key={r.id} {...preview.row(r, `hover:bg-slate-50 ${r.status === "CANCELLED" ? "text-muted line-through" : ""}`)}>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/receipts/${r.id}`}>{r.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(r.receiptDate)}</td>
                     <td className="px-4 py-3" dir="auto">{r.customerName}</td>
                     <td className="px-4 py-3">{t(paymentMethodLabel[r.method as keyof typeof paymentMethodLabel] ?? r.method)}</td>
                     <td className="tabular px-4 py-3 text-muted">{r.allocations.map((a) => a.invoiceNumber).join(", ")}</td>
                     <td className="tabular px-4 py-3 text-end font-medium">{money(r.amount)}</td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(r)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -58,6 +63,11 @@ export default function ReceiptsPage() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.customerName} href={`/receipts/${pv.id}`} onClose={preview.close}>
+          <PagePreview page={ReceiptPage} id={pv.id} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

@@ -11,6 +11,8 @@ import { Alert, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { SearchInput } from "@/components/voice";
 import { DueActions } from "@/components/due-actions";
 import { useT } from "@/lib/i18n";
+import { CustomerPreview } from "@/components/customer-preview";
+import { usePreview, ViewButton } from "@/components/preview";
 
 export default function CustomerDuesPage() {
   const t = useT();
@@ -20,6 +22,7 @@ export default function CustomerDuesPage() {
   });
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const canWrite = me != null && me.role !== "VIEWER";
+  const preview = usePreview<number>();
   const total = (data ?? []).reduce((s, c) => s + Number(c.due), 0);
 
   return (
@@ -51,7 +54,7 @@ export default function CustomerDuesPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {data.map((c) => (
-                  <tr key={c.customerId ?? "walk-in"} className="hover:bg-canvas">
+                  <tr key={c.customerId ?? "walk-in"} {...(c.customerId != null ? preview.row(c.customerId, "hover:bg-canvas") : { className: "hover:bg-canvas" })}>
                     <td className="px-4 py-3">
                       {c.customerId != null ? (
                         <Link href={`/dues?customerId=${c.customerId}`} className="inline-flex items-center gap-1 font-medium hover:underline">
@@ -77,9 +80,12 @@ export default function CustomerDuesPage() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-end">
-                      {canWrite && c.customerId != null && (
-                        <DueActions compact customerId={c.customerId} email={c.email} phone={c.phone} onDone={() => mutate()} />
-                      )}
+                      <span className="inline-flex items-center gap-1.5">
+                        {c.customerId != null && <ViewButton onClick={() => preview.open(c.customerId!)} />}
+                        {canWrite && c.customerId != null && (
+                          <DueActions compact customerId={c.customerId} email={c.email} phone={c.phone} onDone={() => mutate()} />
+                        )}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -88,6 +94,7 @@ export default function CustomerDuesPage() {
           </div>
         )}
       </Card>
+      {preview.current != null && <CustomerPreview id={preview.current} canWrite={canWrite} onClose={preview.close} />}
     </>
   );
 }

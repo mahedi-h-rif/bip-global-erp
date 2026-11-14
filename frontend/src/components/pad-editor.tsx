@@ -328,7 +328,7 @@ function PadFooter({ org }: { org?: Organization }) {
   if (org?.letterheadStyle === "SKYLINE") return <SkylineFooter org={org} />;
   const color = org?.brandColor || "#0B2A6F";
   const ids = [
-    org?.buildingNumber ? `Bldg ${org.buildingNumber}` : null,
+    org?.buildingNumber ? `Building No. ${org.buildingNumber}` : null,
     org?.postalCode ? `Postal ${org.postalCode}` : null,
     org?.vatNumber ? `VAT ${org.vatNumber}` : null,
     org?.otherId ? `CR ${org.otherId}` : null,
@@ -406,7 +406,7 @@ function SkylineFooter({ org }: { org: Organization }) {
   const city = org.city ?? "";
   const arabicCity = /[؀-ۿ]/.test(city);
   const numbers = [
-    org.buildingNumber ? `Bldg ${org.buildingNumber}` : null,
+    org.buildingNumber ? `Building No. ${org.buildingNumber}` : null,
     org.postalCode ? `Postal Code ${org.postalCode}` : null,
     !city || arabicCity ? "KSA" : `${city}, KSA`,
   ].filter(Boolean).join(" · ");

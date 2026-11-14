@@ -25,7 +25,7 @@ interface Overview {
 }
 
 /** A customer at a glance, in a panel beside the list: details, balance and latest invoices. */
-export function CustomerPreview({ id, canWrite, onEdit, onClose }: { id: number; canWrite: boolean; onEdit: (c: Customer) => void; onClose: () => void }) {
+export function CustomerPreview({ id, canWrite, onEdit, onClose }: { id: number; canWrite: boolean; onEdit?: (c: Customer) => void; onClose: () => void }) {
   const t = useT();
   const { data, error } = useSWR<Overview>(`/customers/${id}/overview`, fetcher);
 
@@ -38,7 +38,7 @@ export function CustomerPreview({ id, canWrite, onEdit, onClose }: { id: number;
   const c = data?.customer;
   const row = (label: string, value?: string | null) =>
     value ? <div className="flex justify-between gap-4 py-1.5 text-sm"><dt className="text-muted">{t(label)}</dt><dd className="text-end font-medium" dir="auto">{value}</dd></div> : null;
-  const address = c ? [c.street, c.buildingNumber && `${t("Bldg")} ${c.buildingNumber}`, c.district, c.city, c.postalCode, c.countryCode].filter(Boolean).join(", ") : "";
+  const address = c ? [c.street, c.buildingNumber && `${t("Building No.")} ${c.buildingNumber}`, c.district, c.city, c.postalCode, c.countryCode].filter(Boolean).join(", ") : "";
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={t("Customer preview")}>
@@ -57,7 +57,7 @@ export function CustomerPreview({ id, canWrite, onEdit, onClose }: { id: number;
           <div className="space-y-5 p-5">
             <div className="flex flex-wrap gap-2">
               {canWrite && <ButtonLink href={`/invoices/new?customerId=${c.id}`}><FilePlus2 className="size-4" aria-hidden /> {t("New invoice")}</ButtonLink>}
-              {canWrite && <Button variant="secondary" onClick={() => onEdit(c)}><Pencil className="size-4" aria-hidden /> {t("Edit")}</Button>}
+              {canWrite && onEdit && <Button variant="secondary" onClick={() => onEdit(c)}><Pencil className="size-4" aria-hidden /> {t("Edit")}</Button>}
               <RelationshipMapButton type="CUSTOMER" id={c.id!} label={c.nameEn || c.nameAr || undefined} />
             </div>
 

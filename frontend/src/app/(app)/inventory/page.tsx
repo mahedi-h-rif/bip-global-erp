@@ -8,6 +8,8 @@ import type { InventoryAudit, Me, Product, StockMovement, StockRow, StockTransfe
 import { dateTime, money, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { Details, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
+import { ProductPreview } from "@/components/product-preview";
 
 type Tab = "stock" | "warehouses" | "transfers" | "movements" | "audit";
 
@@ -85,7 +87,7 @@ function AdjustForm({ warehouses, products, onDone }: { warehouses: Warehouse[];
           <Field label={t("Product")}>
             <Select required value={productId} onChange={(e) => setProductId(e.target.value)}>
               <option value="">{t("Select…")}</option>
-              {products.filter((p) => p.trackStock).map((p) => <option key={p.id} value={p.id}>{p.number} · {p.name}</option>)}
+              {products.map((p) => <option key={p.id} value={p.id}>{p.number} · {p.name}</option>)}
             </Select>
           </Field>
           <Field label={t("Warehouse")}>
@@ -132,6 +134,8 @@ function StockTab({ warehouses, products, canWrite }: { warehouses: Warehouse[];
   if (warehouseId) params.set("warehouseId", warehouseId);
   if (q.trim()) params.set("q", q.trim());
   const { data, error, mutate } = useSWR<StockRow[]>(`/stock?${params}`, fetcher, { keepPreviousData: true });
+  const preview = usePreview<StockRow>();
+  const pv = preview.current;
   const total = (data ?? []).reduce((s, r) => s + Number(r.value), 0);
 
   return (
@@ -156,7 +160,7 @@ function StockTab({ warehouses, products, canWrite }: { warehouses: Warehouse[];
         {error && <div className="p-4"><Alert tone="bad">{error.message}</Alert></div>}
         {!data && !error && <Spinner />}
         {data?.length === 0 && (
-          <Empty title={t("No stock items")}>{t("Turn on “Track stock” on a product, then add its opening stock here.")}</Empty>
+          <Empty title={t("No stock items")}>{t("Every product is unlimited until you add its opening stock here.")}</Empty>
         )}
         {data && data.length > 0 && (
           <div className="overflow-x-auto">
@@ -169,11 +173,11 @@ function StockTab({ warehouses, products, canWrite }: { warehouses: Warehouse[];
                   <th className="px-4 py-2.5 text-end font-medium">{t("On hand")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Cost")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Value")}</th>
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {data.map((r) => (
-                  <tr key={`${r.productId}-${r.warehouseId}`}>
+                  <tr key={`${r.productId}-${r.warehouseId}`} {...preview.row(r)}>
                     <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted">{r.productNumber ?? "—"}</td>
                     <td className="px-4 py-3 font-medium" dir="auto">{r.productName}</td>
                     <td className="px-4 py-3">{r.warehouseName}</td>
@@ -183,6 +187,7 @@ function StockTab({ warehouses, products, canWrite }: { warehouses: Warehouse[];
                     </td>
                     <td className="tabular px-4 py-3 text-end text-muted">{r.costPrice == null ? "—" : money(r.costPrice)}</td>
                     <td className="tabular px-4 py-3 text-end">{money(r.value)}</td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(r)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -196,6 +201,11 @@ function StockTab({ warehouses, products, canWrite }: { warehouses: Warehouse[];
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer title={pv.productName} subtitle={pv.productNumber} onClose={preview.close}>
+          <ProductPreview product={products.find((p) => p.id === pv.productId) ?? { id: pv.productId, number: pv.productNumber, name: pv.productName, unitPrice: 0, unitCode: pv.unitCode, trackStock: true }} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }
@@ -307,6 +317,8 @@ function WarehousesTab({ warehouses, canWrite, onChange }: { warehouses: Warehou
 function TransfersTab({ warehouses, products, canWrite }: { warehouses: Warehouse[]; products: Product[]; canWrite: boolean }) {
   const t = useT();
   const { data, mutate } = useSWR<StockTransfer[]>("/stock/transfers", fetcher);
+  const transferPreview = usePreview<StockTransfer>();
+  const tp = transferPreview.current;
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(String(warehouses[0]?.id ?? ""));
   const [to, setTo] = useState(String(warehouses[1]?.id ?? ""));
@@ -406,22 +418,34 @@ function TransfersTab({ warehouses, products, canWrite }: { warehouses: Warehous
                 <th className="px-4 py-2.5 text-start font-medium">{t("From → To")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Items")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("By")}</th>
+                <th className="w-16" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {data.map((tr) => (
-                <tr key={tr.id}>
+                <tr key={tr.id} {...transferPreview.row(tr)}>
                   <td className="tabular px-4 py-3 font-medium">{tr.number}</td>
                   <td className="tabular px-4 py-3">{tr.transferDate}</td>
                   <td className="px-4 py-3">{tr.fromWarehouse} → {tr.toWarehouse}</td>
                   <td className="px-4 py-3" dir="auto">{tr.lines.map((l) => `${l.productName} × ${qty(l.quantity)}`).join(", ")}</td>
                   <td className="px-4 py-3 text-xs text-muted">{tr.createdBy}</td>
+                  <td className="px-2 py-3 text-end"><ViewButton onClick={() => transferPreview.open(tr)} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </Card>
+      {tp && (
+        <PreviewDrawer title={tp.number} subtitle={`${tp.fromWarehouse} → ${tp.toWarehouse}`} onClose={transferPreview.close}>
+          <Details items={[["Date", tp.transferDate], ["From", tp.fromWarehouse], ["To", tp.toWarehouse], ["By", tp.createdBy], ["Note", tp.note]]} />
+          <ul className="mx-5 mb-5 divide-y divide-line rounded-lg border border-line text-sm">
+            {tp.lines.map((l, i) => (
+              <li key={i} className="flex justify-between gap-3 px-3 py-2"><span dir="auto">{l.productName}</span><span className="tabular font-medium">{qty(l.quantity)}</span></li>
+            ))}
+          </ul>
+        </PreviewDrawer>
+      )}
     </>
   );
 }

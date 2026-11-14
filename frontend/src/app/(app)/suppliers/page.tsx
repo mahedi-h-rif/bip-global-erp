@@ -12,6 +12,7 @@ import { currencies } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { CityInput, CountrySelect, SuggestInput } from "@/components/suggest";
+import { Details, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 function SupplierForm({ initial, onDone }: { initial: Supplier; onDone: () => void }) {
   const t = useT();
@@ -70,6 +71,8 @@ export default function SuppliersPage() {
   const t = useT();
   const [q, setQ] = useState("");
   const { data, error, mutate } = useSWR<Supplier[]>(`/suppliers${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`, fetcher, { keepPreviousData: true });
+  const preview = usePreview<Supplier>();
+  const pv = preview.current;
   const [editing, setEditing] = useState<Supplier | null>(null);
   return (
     <>
@@ -93,10 +96,10 @@ export default function SuppliersPage() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Code")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Name")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Country")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Currency")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Contact")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Payable")}</th><th className="w-24" />
-              </tr></thead>
+              <th className="w-16" /></tr></thead>
               <tbody className="divide-y divide-line">
                 {data.map((s) => (
-                  <tr key={s.id}>
+                  <tr key={s.id} {...preview.row(s)}>
                     <td className="tabular px-4 py-3 text-xs text-muted">{s.code}</td>
                     <td className="px-4 py-3 font-medium" dir="auto">{s.name}{s.nameAr && <span className="ms-2 text-muted" dir="rtl">{s.nameAr}</span>}</td>
                     <td className="px-4 py-3">{s.country}</td>
@@ -110,6 +113,7 @@ export default function SuppliersPage() {
                         <Button variant="ghost" onClick={() => setEditing(s)} aria-label={t("Edit {name}", { name: s.name })}><Pencil className="size-4" aria-hidden /></Button>
                       </span>
                     </td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(s)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -117,6 +121,17 @@ export default function SuppliersPage() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer title={pv.name} subtitle={pv.code} onClose={preview.close}>
+          <Details items={[
+            ["Code", pv.code], ["Name", pv.name], ["Arabic name", pv.nameAr], ["VAT number", pv.vatNumber], ["CR number", pv.crNumber],
+            ["Contact person", pv.contactPerson], ["Phone", pv.phone], ["Email", pv.email],
+            ["Address", [pv.address, pv.city, pv.country].filter(Boolean).join(", ")], ["Currency", pv.currency],
+            ["Payment terms", pv.paymentTermsDays != null ? t("{n} days", { n: String(pv.paymentTermsDays) }) : null],
+            ["Payable", money(pv.payable ?? 0)],
+          ]} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

@@ -14,6 +14,7 @@ import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from 
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
 import { PendingDeliveries } from "@/components/pending-work";
+import { PdfPreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 const tone: Record<DeliveryNote["status"], string> = {
   DRAFT: "bg-amber-50 text-amber-700",
@@ -86,6 +87,8 @@ export default function DeliveryNotesPage() {
   const [status, setStatus] = useState("");
   const { data, error } = useSWR<DeliveryNote[]>(`/delivery-notes${status ? `?status=${status}` : ""}`, fetcher, { keepPreviousData: true });
   const { toolbar, shown } = useListTools<DeliveryNote>(data, { filters: [{ label: "Customer", get: (r) => r.customerName ?? r.clientName }, { label: "Warehouse", get: (r) => r.warehouseName }], date: (r) => r.deliveryDate });
+  const preview = usePreview<DeliveryNote>();
+  const pv = preview.current;
   return (
     <>
       <PageHeader
@@ -118,17 +121,18 @@ export default function DeliveryNotesPage() {
                   <th className="px-4 py-2.5 text-start font-medium">{t("Invoice")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Driver / vehicle")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {shown.map((n) => (
-                  <tr key={n.id} className="hover:bg-slate-50">
+                  <tr key={n.id} {...preview.row(n, "hover:bg-slate-50")}>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/delivery-notes/${n.id}`}>{n.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(n.deliveryDate)}</td>
                     <td className="px-4 py-3" dir="auto">{n.customerName ?? n.clientName ?? "—"}</td>
                     <td className="tabular px-4 py-3">{n.invoiceNumber ?? "—"}</td>
                     <td className="px-4 py-3 text-muted">{[n.driverName, n.vehicleNo].filter(Boolean).join(" · ") || "—"}</td>
                     <td className="px-4 py-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${tone[n.status]}`}>{t(deliveryStatusLabel[n.status])}</span></td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(n)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -136,6 +140,11 @@ export default function DeliveryNotesPage() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.customerName ?? pv.clientName} href={`/delivery-notes/${pv.id}`} onClose={preview.close}>
+          <PdfPreview path={`/delivery-notes/${pv.id}/pdf`} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

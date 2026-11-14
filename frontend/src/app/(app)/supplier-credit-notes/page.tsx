@@ -9,12 +9,16 @@ import { Alert, Card, Empty, PageHeader, Spinner } from "@/components/ui";
 import { StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PagePreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
+import SupplierCreditNotePage from "./[id]/page";
 
 /** A/P credit memos (SAP B1): a supplier's credit against one of its invoices. */
 export default function SupplierCreditNotesPage() {
   const t = useT();
   const { data, error } = useSWR<SupplierCreditNote[]>("/supplier-credit-notes", fetcher);
   const { toolbar, shown } = useListTools<SupplierCreditNote>(data, { filters: [{ label: "Supplier", get: (r) => r.supplierName }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.creditDate });
+  const preview = usePreview<SupplierCreditNote>();
+  const pv = preview.current;
   return (
     <>
       <PageHeader title={t("A/P credit memos")} subtitle={t("Supplier credits for returns, price differences or discounts. They lower what you owe and your input VAT.")} />
@@ -32,10 +36,10 @@ export default function SupplierCreditNotesPage() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Supplier")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Supplier invoice")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Supplier's ref.")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Total (SAR)")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
-              </tr></thead>
+              <th className="w-16" /></tr></thead>
               <tbody className="divide-y divide-line">
                 {shown.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
+                  <tr key={c.id} {...preview.row(c, "hover:bg-slate-50")}>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/supplier-credit-notes/${c.id}`}>{c.number}</Link></td>
                     <td className="tabular px-4 py-3">{date(c.creditDate)}</td>
                     <td className="px-4 py-3" dir="auto">{c.supplierName}</td>
@@ -43,6 +47,7 @@ export default function SupplierCreditNotesPage() {
                     <td className="px-4 py-3 text-muted">{c.supplierRef ?? "—"}</td>
                     <td className="tabular px-4 py-3 text-end">{money(c.totalSar)}</td>
                     <td className="px-4 py-3"><StatusPill status={c.status} /></td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(c)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -50,6 +55,11 @@ export default function SupplierCreditNotesPage() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.supplierName} href={`/supplier-credit-notes/${pv.id}`} onClose={preview.close}>
+          <PagePreview page={SupplierCreditNotePage} id={pv.id} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

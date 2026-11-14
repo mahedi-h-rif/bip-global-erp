@@ -8,7 +8,9 @@ import type { Me, Product } from "@/lib/types";
 import { money, unitCodes } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { ProductUnits } from "@/components/units";
+import { ProductPreview } from "@/components/product-preview";
 import { useT } from "@/lib/i18n";
+import { PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 const blank: Product = { name: "", unitPrice: "" };
 
@@ -29,8 +31,9 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
     setError(null);
     try {
       const num = (v: unknown) => (v === "" || v == null ? null : Number(v));
-      const body = { ...p, number: code.trim() || undefined, name: p.name.trim(), unitPrice: Number(p.unitPrice),
-        trackStock: !!p.trackStock, costPrice: num(p.costPrice), lowStockThreshold: num(p.lowStockThreshold), unitCode: p.unitCode || "PCE" };
+      // Every product is sold and bought. Stock counting starts on its own once a quantity is entered in Inventory.
+      const body = { ...p, trackStock: undefined, salesItem: undefined, purchaseItem: undefined, number: code.trim() || undefined, name: p.name.trim(), unitPrice: Number(p.unitPrice),
+        costPrice: num(p.costPrice), lowStockThreshold: num(p.lowStockThreshold), unitCode: p.unitCode || "PCE" };
       if (p.id) await api("PUT", `/products/${p.id}`, body);
       else await api("POST", "/products", body);
       onDone();
@@ -63,29 +66,20 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
           <Field label={t("Brand")} optional><Input dir="auto" value={p.brand ?? ""} onChange={(e) => setP({ ...p, brand: e.target.value })} /></Field>
           <Field label={t("Barcode")} optional><Input dir="ltr" value={p.barcode ?? ""} onChange={(e) => setP({ ...p, barcode: e.target.value })} /></Field>
         </div>
-        <div className="flex flex-wrap gap-6 text-sm">
-          <label className="inline-flex items-center gap-2"><input type="checkbox" checked={p.salesItem !== false} onChange={(e) => setP({ ...p, salesItem: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />{t("Sales item")}</label>
-          <label className="inline-flex items-center gap-2"><input type="checkbox" checked={p.purchaseItem !== false} onChange={(e) => setP({ ...p, purchaseItem: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />{t("Purchase item")}</label>
+        <p className="text-xs text-muted">{t("Stock is unlimited until you enter a quantity in Inventory; from then on it is counted in the warehouse.")}</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label={t("Cost price (SAR)")} optional error={error?.fields?.costPrice}>
+            <Input type="number" min="0" step="any" value={p.costPrice ?? ""} onChange={(e) => setP({ ...p, costPrice: e.target.value })} />
+          </Field>
+          <Field label={t("Low-stock alert at")} optional error={error?.fields?.lowStockThreshold}>
+            <Input type="number" min="0" step="any" value={p.lowStockThreshold ?? ""} onChange={(e) => setP({ ...p, lowStockThreshold: e.target.value })} />
+          </Field>
+          <Field label={t("Unit")} optional>
+            <Select value={p.unitCode ?? "PCE"} onChange={(e) => setP({ ...p, unitCode: e.target.value })}>
+              {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
+            </Select>
+          </Field>
         </div>
-        <label className="inline-flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={!!p.trackStock} onChange={(e) => setP({ ...p, trackStock: e.target.checked })} className="size-4 accent-[var(--color-brand)]" />
-          {t("Track stock (goods kept in warehouses). Leave off for services.")}
-        </label>
-        {p.trackStock && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <Field label={t("Cost price (SAR)")} optional error={error?.fields?.costPrice}>
-              <Input type="number" min="0" step="any" value={p.costPrice ?? ""} onChange={(e) => setP({ ...p, costPrice: e.target.value })} />
-            </Field>
-            <Field label={t("Low-stock alert at")} optional error={error?.fields?.lowStockThreshold}>
-              <Input type="number" min="0" step="any" value={p.lowStockThreshold ?? ""} onChange={(e) => setP({ ...p, lowStockThreshold: e.target.value })} />
-            </Field>
-            <Field label={t("Unit")} optional>
-              <Select value={p.unitCode ?? "PCE"} onChange={(e) => setP({ ...p, unitCode: e.target.value })}>
-                {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
-              </Select>
-            </Field>
-          </div>
-        )}
         <div className="flex gap-2">
           <Button type="submit" loading={busy}>{t("Save product")}</Button>
           <Button type="button" variant="ghost" onClick={onDone}>{t("Cancel")}</Button>
@@ -103,6 +97,8 @@ export default function ProductsPage() {
   const query = new URLSearchParams({ all: String(showInactive) });
   if (q.trim()) query.set("q", q.trim());
   const { data, error, mutate } = useSWR<Product[]>(`/products?${query}`, fetcher, { keepPreviousData: true });
+  const preview = usePreview<Product>();
+  const pv = preview.current;
   const [editing, setEditing] = useState<Product | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const canWrite = me?.role !== "VIEWER";
@@ -166,11 +162,11 @@ export default function ProductsPage() {
                   <th className="px-4 py-2.5 text-end font-medium">{t("With 15% VAT")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("On hand")}</th>
                   <th className="w-28" />
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {data.map((p) => (
-                  <tr key={p.id} className={p.active ? "" : "text-muted"}>
+                  <tr key={p.id} {...preview.row(p, p.active ? "" : "text-muted")}>
                     <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted">{p.number ?? "—"}</td>
                     <td className="px-4 py-3 font-medium" dir="auto">
                       {p.name}
@@ -180,7 +176,7 @@ export default function ProductsPage() {
                     <td className="tabular px-4 py-3 text-end">{money(p.unitPrice)}</td>
                     <td className="tabular px-4 py-3 text-end text-muted">{money(Math.round(Number(p.unitPrice) * 115) / 100)}</td>
                     <td className={`tabular px-4 py-3 text-end ${p.trackStock && p.lowStockThreshold != null && Number(p.onHand) <= Number(p.lowStockThreshold) ? "font-semibold text-bad" : ""}`}>
-                      {p.trackStock ? `${Number(p.onHand ?? 0)} ${p.unitCode ?? ""}` : <span className="text-xs text-muted">{t("Service")}</span>}
+                      {p.trackStock ? `${Number(p.onHand ?? 0)} ${p.unitCode ?? ""}` : <span className="text-xs text-muted">{t("Unlimited")}</span>}
                     </td>
                     <td className="px-2 py-2 text-end">
                       {canWrite && (
@@ -198,6 +194,7 @@ export default function ProductsPage() {
                         </span>
                       )}
                     </td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(p)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -210,6 +207,11 @@ export default function ProductsPage() {
           </p>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer title={pv.name} subtitle={pv.number} onClose={preview.close}>
+          <ProductPreview product={pv} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

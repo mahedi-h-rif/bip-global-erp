@@ -100,7 +100,7 @@ public class LetterheadPdf {
                 // Arabic address and the numbers on separate lines, so right-to-left text and digits never mix.
                 "<span dir=\"rtl\">" + InvoicePdfService.esc(joined("، ", org.getStreet(), org.getDistrict(), org.getCity())) + "</span>",
                 InvoicePdfService.esc(joined(" · ",
-                        org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
+                        org.getBuildingNumber() == null ? null : "Building No. " + org.getBuildingNumber(),
                         org.getPostalCode() == null ? null : "Postal " + org.getPostalCode())),
                 contactLine(org),
                 watermark(org),
@@ -164,7 +164,7 @@ public class LetterheadPdf {
         String gold = "#a9833f";
         String addr = "<span dir=\"rtl\">" + InvoicePdfService.esc(joined("، ", org.getStreet(), org.getDistrict(), org.getCity())) + "</span>";
         String reg = InvoicePdfService.esc(joined(" · ",
-                org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
+                org.getBuildingNumber() == null ? null : "Building No. " + org.getBuildingNumber(),
                 org.getPostalCode() == null ? null : "Postal " + org.getPostalCode()));
         String contactLine = InvoicePdfService.esc(joined(" · ", org.getEmail(), org.getWebsite(),
                 org.getPhone() == null || org.getPhone().isBlank() ? null : "Mobile " + org.getPhone()));

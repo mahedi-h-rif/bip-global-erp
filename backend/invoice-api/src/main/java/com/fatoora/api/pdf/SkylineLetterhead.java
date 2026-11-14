@@ -93,7 +93,7 @@ public final class SkylineLetterhead {
         String city = nz(org.getCity());
         boolean arabicCity = city.codePoints().anyMatch(c -> Character.UnicodeBlock.of(c) == Character.UnicodeBlock.ARABIC);
         String numbers = LetterheadPdf.joined(" · ",
-                org.getBuildingNumber() == null ? null : "Bldg " + org.getBuildingNumber(),
+                org.getBuildingNumber() == null ? null : "Building No. " + org.getBuildingNumber(),
                 org.getPostalCode() == null ? null : "Postal Code " + org.getPostalCode(),
                 city.isBlank() || arabicCity ? "KSA" : city + ", KSA");
         String address = LetterheadPdf.joined("، ", org.getStreet(), org.getDistrict(), org.getCity());

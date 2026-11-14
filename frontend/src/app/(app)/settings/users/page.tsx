@@ -10,11 +10,14 @@ import { dateTime } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { useListTools } from "@/components/list-tools";
+import { Details, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 export default function UsersPage() {
   const t = useT();
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const { data, error, mutate } = useSWR<AppUserRow[]>("/users", fetcher);
+  const preview = usePreview<AppUserRow>();
+  const pv = preview.current;
   const { toolbar, shown } = useListTools<AppUserRow>(data, { filters: [
     { label: "Access", get: (r) => (r.role === "ADMIN" || r.role === "OPERATOR" ? "Admin" : r.features ? "Custom access" : "Full access (old role)") },
     { label: "Status", get: (r) => (r.enabled ? "Active" : "Disabled") }] });
@@ -55,13 +58,13 @@ export default function UsersPage() {
                   <th className="px-4 py-2.5 text-start font-medium">{t("Last active")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Last sign-in")}</th>
                   <th className="px-4 py-2.5" />
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {shown.map((u) => {
                   const provider = u.role === "OPERATOR" && me?.role !== "OPERATOR";
                   return (
-                    <tr key={u.id} className={u.enabled ? "" : "opacity-60"}>
+                    <tr key={u.id} {...preview.row(u, u.enabled ? "" : "opacity-60")}>
                       <td className="px-4 py-2.5">
                         <Link href={`/settings/users/${u.id}`} className="font-medium text-brand hover:underline">{u.fullName}</Link>
                         <div className="text-xs text-muted" dir="ltr">{u.email}{u.id === me?.id ? ` · ${t("you")}` : ""}</div>
@@ -97,6 +100,7 @@ export default function UsersPage() {
                           </>
                         )}
                       </td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(u)} /></td>
                     </tr>
                   );
                 })}
@@ -106,6 +110,20 @@ export default function UsersPage() {
         )}
       </Card>
       <p className="mt-3 text-xs text-muted">{t("Admins have every feature and see all data. Other users get only the features and actions ticked for them, and all data or only their own.")}</p>
+      {pv && (
+        <PreviewDrawer title={pv.fullName} subtitle={pv.email} href={`/settings/users/${pv.id}`} onClose={preview.close}>
+          <Details items={[
+            ["Name", pv.fullName], ["Email", <span key="e" dir="ltr">{pv.email}</span>],
+            ["Access", pv.role === "ADMIN" ? t("Admin") : pv.role === "OPERATOR" ? t("Provider") : pv.features ? t("{n} features", { n: String(pv.features.length) }) : t("Full access (old role)")],
+            ["Data", pv.features ? (pv.ownDataOnly ? t("own data") : t("all data")) : null],
+            ["Status", pv.enabled ? t("Active") : t("Disabled")],
+            ["Actions this month", String(pv.actionsThisMonth)],
+            ["Last active", pv.lastActiveAt ? dateTime(pv.lastActiveAt) : null],
+            ["Last sign-in", pv.lastLoginAt ? dateTime(pv.lastLoginAt) : null],
+            ["Created", dateTime(pv.createdAt)],
+          ]} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

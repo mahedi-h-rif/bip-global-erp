@@ -11,6 +11,7 @@ import { date, kindLabel, money } from "@/lib/format";
 import { Alert, Card, Empty, Input, PageHeader, PaymentBadge, Select, Spinner } from "@/components/ui";
 import { DueActions } from "@/components/due-actions";
 import { useT } from "@/lib/i18n";
+import { PdfPreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 function Dues() {
   const params = useSearchParams();
@@ -25,6 +26,8 @@ function Dues() {
   if (overdue) query.set("overdueOnly", "true");
   if (q.trim()) query.set("q", q.trim());
   const { data, error, mutate } = useSWR<DueInvoice[]>(`/dues?${query}`, fetcher, { keepPreviousData: true });
+  const preview = usePreview<DueInvoice>();
+  const pv = preview.current;
   const { data: customers } = useSWR<Customer[]>("/customers", fetcher);
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const canWrite = me != null && me.role !== "VIEWER";
@@ -104,13 +107,13 @@ function Dues() {
                   <th className="px-4 py-2.5 text-end font-medium">{t("Paid")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Due")}</th>
                   <th className="px-4 py-2.5 text-end font-medium" />
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {data.map((d) => {
                   const c = d.customerId != null ? byId.get(d.customerId) : undefined;
                   return (
-                    <tr key={d.invoiceId} className="hover:bg-canvas">
+                    <tr key={d.invoiceId} {...preview.row(d, "hover:bg-canvas")}>
                       <td className="px-4 py-3">
                         <Link href={`/invoices/${d.invoiceId}`} className="font-medium hover:underline">{d.number}</Link>
                         <span className="block text-xs text-muted">{t(kindLabel[d.kind])}</span>
@@ -149,6 +152,7 @@ function Dues() {
                           <DueActions compact customerId={c.id!} email={c.email ?? null} phone={c.phone ?? null} onDone={() => mutate()} />
                         )}
                       </td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(d)} /></td>
                     </tr>
                   );
                 })}
@@ -157,6 +161,11 @@ function Dues() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.customerName ?? t("Walk-in")} href={`/invoices/${pv.invoiceId}`} onClose={preview.close}>
+          <PdfPreview path={`/invoices/${pv.invoiceId}/pdf`} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

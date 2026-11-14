@@ -9,6 +9,7 @@ import { date, money, todayKsa } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Select, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { Details, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 interface Vehicle { id?: number; plate: string; name: string; vehicleType?: string; capacity?: string | null; modelYear?: number | null; driverEmployeeId?: number | null; driverName?: string | null;
   istimaraExpiry?: string | null; insuranceExpiry?: string | null; mvpiExpiry?: string | null; odometer?: number | string | null; active?: boolean; notes?: string | null; nextExpiryDays?: number | null; costThisMonth?: number }
@@ -115,6 +116,8 @@ export default function FleetPage() {
   const { data: logs, mutate: mutateLogs } = useSWR<Log[]>(tab === "logs" ? "/fleet/logs" : null, fetcher);
   const { data: trips, mutate: mutateTrips } = useSWR<Trip[]>(tab === "trips" ? "/fleet/trips" : null, fetcher);
   const vehicleList = useListTools<Vehicle>(vehicles, { filters: [{ label: "Type", get: (r) => r.vehicleType }, { label: "Driver", get: (r) => r.driverName }] });
+  const preview = usePreview<Vehicle>();
+  const pv = preview.current;
   const logList = useListTools<Log>(logs, { filters: [{ label: "Vehicle", get: (r) => r.plate }, { label: "Kind", get: (r) => r.kind, format: statusText }], date: (r) => r.date });
   const tripList = useListTools<Trip>(trips, { filters: [{ label: "Vehicle", get: (r) => r.plate }, { label: "Driver", get: (r) => r.driverName }, { label: "Status", get: (r) => r.status, format: statusText }], date: (r) => r.tripDate });
   const [editing, setEditing] = useState<Vehicle | null>(null);
@@ -135,11 +138,11 @@ export default function FleetPage() {
             {vehicles.length > 0 && vehicleList.toolbar}
             {vehicles.length === 0 ? <Empty title={t("No vehicles yet")} /> : (
               <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2 text-start font-medium">{t("Plate")}</th><th className="px-4 py-2 text-start font-medium">{t("Vehicle")}</th><th className="px-4 py-2 text-start font-medium">{t("Driver")}</th><th className="px-4 py-2 text-end font-medium">{t("Km")}</th><th className="px-4 py-2 text-end font-medium">{t("Cost this month")}</th><th className="w-10" /></tr></thead>
+                <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2 text-start font-medium">{t("Plate")}</th><th className="px-4 py-2 text-start font-medium">{t("Vehicle")}</th><th className="px-4 py-2 text-start font-medium">{t("Driver")}</th><th className="px-4 py-2 text-end font-medium">{t("Km")}</th><th className="px-4 py-2 text-end font-medium">{t("Cost this month")}</th><th className="w-10" /><th className="w-16" /></tr></thead>
                 <tbody className="divide-y divide-line">{(vehicleList.shown ?? []).map((v) => (
-                  <tr key={v.id} className={v.active ? "" : "text-muted"}><td className="tabular px-4 py-2 font-medium">{v.plate}</td><td className="px-4 py-2">{v.name} <span className="text-xs text-muted">{v.vehicleType} {v.capacity}</span></td><td className="px-4 py-2">{v.driverName ?? "—"}</td>
+                  <tr key={v.id} {...preview.row(v, v.active ? "" : "text-muted")}><td className="tabular px-4 py-2 font-medium">{v.plate}</td><td className="px-4 py-2">{v.name} <span className="text-xs text-muted">{v.vehicleType} {v.capacity}</span></td><td className="px-4 py-2">{v.driverName ?? "—"}</td>
                     <td className="tabular px-4 py-2 text-end">{v.odometer ? Number(v.odometer).toLocaleString("en-US") : "—"}</td><td className="tabular px-4 py-2 text-end">{money(v.costThisMonth)}</td>
-                    <td><Button variant="ghost" onClick={() => setEditing(v)} aria-label={t("Edit")}><Pencil className="size-4" aria-hidden /></Button></td></tr>
+                    <td><Button variant="ghost" onClick={() => setEditing(v)} aria-label={t("Edit")}><Pencil className="size-4" aria-hidden /></Button></td><td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(v)} /></td></tr>
                 ))}</tbody></table></div>
             )}
           </Card>
@@ -185,6 +188,20 @@ export default function FleetPage() {
             {(tripList.shown ?? []).map((x) => <TripCard key={x.id} trip={x} onChange={() => mutateTrips()} />)}
           </>}
         </>
+      )}
+      {pv && (
+        <PreviewDrawer title={pv.plate} subtitle={pv.name} onClose={preview.close}>
+          <Details items={[
+            ["Plate", pv.plate], ["Vehicle", pv.name], ["Type", pv.vehicleType], ["Capacity", pv.capacity],
+            ["Model year", pv.modelYear != null ? String(pv.modelYear) : null], ["Driver", pv.driverName],
+            ["Km", pv.odometer ? Number(pv.odometer).toLocaleString("en-US") : null],
+            ["Istimara expiry", pv.istimaraExpiry ? date(pv.istimaraExpiry) : null],
+            ["Insurance expiry", pv.insuranceExpiry ? date(pv.insuranceExpiry) : null],
+            ["MVPI expiry", pv.mvpiExpiry ? date(pv.mvpiExpiry) : null],
+            ["Cost this month", money(pv.costThisMonth ?? 0)], ["Notes", pv.notes],
+            ["Status", pv.active === false ? t("Inactive") : null],
+          ]} />
+        </PreviewDrawer>
       )}
     </>
   );

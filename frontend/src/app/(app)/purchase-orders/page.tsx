@@ -13,12 +13,15 @@ import { fmtCur, poStatus, StatusPill } from "@/components/purchase";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
 import { PendingPurchaseRequests } from "@/components/pending-work";
+import { PdfPreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 export default function PurchaseOrdersPage() {
   const t = useT();
   const [status, setStatus] = useState("");
   const { data, error } = useSWR<PurchaseOrder[]>(`/purchase-orders${status ? `?status=${status}` : ""}`, fetcher, { keepPreviousData: true });
   const { toolbar, shown } = useListTools<PurchaseOrder>(data, { filters: [{ label: "Supplier", get: (r) => r.supplierName }, { label: "Warehouse", get: (r) => r.warehouseName }, { label: "Currency", get: (r) => r.currency }], date: (r) => r.orderDate });
+  const preview = usePreview<PurchaseOrder>();
+  const pv = preview.current;
   const router = useRouter();
   const [picked, setPicked] = useState<number[]>([]);
   const open = (p: PurchaseOrder) => p.status === "APPROVED" || p.status === "PARTIALLY_RECEIVED";
@@ -54,10 +57,10 @@ export default function PurchaseOrdersPage() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Number")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Date")}</th>
                 <th className="px-4 py-2.5 text-start font-medium">{t("Supplier")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Supplier ref.")}</th>
                 <th className="px-4 py-2.5 text-end font-medium">{t("Total")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
-              </tr></thead>
+              <th className="w-16" /></tr></thead>
               <tbody className="divide-y divide-line">
                 {shown.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50">
+                  <tr key={p.id} {...preview.row(p, "hover:bg-slate-50")}>
                     <td className="px-3 py-3">{open(p) && <input type="checkbox" aria-label={t("Select {number}", { number: p.number })} checked={picked.includes(p.id)}
                       onChange={(e) => setPicked(e.target.checked ? [...picked, p.id] : picked.filter((x) => x !== p.id))} />}</td>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/purchase-orders/${p.id}`}>{p.number}</Link></td>
@@ -66,6 +69,7 @@ export default function PurchaseOrdersPage() {
                     <td className="tabular px-4 py-3 text-muted">{p.supplierRef ?? "—"}</td>
                     <td className="tabular px-4 py-3 text-end">{fmtCur(p.totalInclVat, p.currency)}</td>
                     <td className="px-4 py-3"><StatusPill status={p.status} /></td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(p)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -73,6 +77,11 @@ export default function PurchaseOrdersPage() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.supplierName} href={`/purchase-orders/${pv.id}`} onClose={preview.close}>
+          <PdfPreview path={`/purchase-orders/${pv.id}/pdf`} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

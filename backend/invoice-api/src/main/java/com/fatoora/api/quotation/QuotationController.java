@@ -299,7 +299,7 @@ public class QuotationController {
         String place = String.join("، ", java.util.stream.Stream.of(c.getStreet(), c.getDistrict(), c.getCity())
                 .filter(s -> s != null && !s.isBlank()).toList());
         String numbers = String.join(" · ", java.util.stream.Stream.of(
-                        c.getBuildingNumber() == null || c.getBuildingNumber().isBlank() ? null : "Bldg " + c.getBuildingNumber(),
+                        c.getBuildingNumber() == null || c.getBuildingNumber().isBlank() ? null : "Building No. " + c.getBuildingNumber(),
                         c.getPostalCode() == null || c.getPostalCode().isBlank() ? null : "Postal " + c.getPostalCode())
                 .filter(s -> s != null).toList());
         String structured = numbers.isBlank() ? place : place.isBlank() ? numbers : place + "\n" + numbers;

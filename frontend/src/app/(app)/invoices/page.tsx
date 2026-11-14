@@ -13,6 +13,8 @@ import { Alert, Button, ButtonLink, Card, Empty, Input, PageHeader, PaymentBadge
 import { useT } from "@/lib/i18n";
 import { LifecycleBadge } from "@/components/invoice-lifecycle";
 import { PendingInvoicing } from "@/components/pending-work";
+import { PagePreview, PdfPreview, PreviewDrawer, usePreview } from "@/components/preview";
+import InvoicePage from "./[id]/page";
 
 const statuses = Object.keys(statusLabel) as InvoiceStatus[];
 
@@ -35,7 +37,7 @@ function DeadlineNote({ invoice: i }: { invoice: InvoiceSummary }) {
 }
 
 /** View, PDF and credit/debit note, plus Edit and Delete for every invoice (see EditDeleteActions). */
-function RowActions({ invoice: i, canWrite, onChanged }: { invoice: InvoiceSummary; canWrite: boolean; onChanged: () => void }) {
+function RowActions({ invoice: i, canWrite, onChanged, onView }: { invoice: InvoiceSummary; canWrite: boolean; onChanged: () => void; onView: () => void }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ function RowActions({ invoice: i, canWrite, onChanged }: { invoice: InvoiceSumma
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex flex-wrap justify-end gap-1.5">
-        <Link href={`/invoices/${i.id}`} className={iconLink}><Eye className="size-3.5" aria-hidden /> {t("View")}</Link>
+        <button type="button" onClick={onView} className={iconLink}><Eye className="size-3.5" aria-hidden /> {t("View")}</button>
         {i.status === "SIGNED" && canWrite && (
           <button
             type="button"
@@ -107,6 +109,8 @@ function InvoiceList() {
   const { data, error, mutate } = useSWR<Page<InvoiceSummary>>(`/invoices?${query}`, fetcher);
   const { data: me } = useSWR<Me>("/auth/me", fetcher);
   const canWrite = me != null && me.role !== "VIEWER";
+  const preview = usePreview<InvoiceSummary>();
+  const pv = preview.current;
 
   function update(next: Record<string, string>) {
     const p = new URLSearchParams(params.toString());
@@ -166,7 +170,7 @@ function InvoiceList() {
               </thead>
               <tbody className="divide-y divide-line">
                 {data.content.map((i) => (
-                  <tr key={i.id} className="hover:bg-canvas">
+                  <tr key={i.id} {...preview.row(i, "hover:bg-canvas")}>
                     <td className="px-4 py-3 font-medium">
                       <Link href={`/invoices/${i.id}`} className="hover:underline">{i.number ?? t("Draft #{id}", { id: i.id })}</Link>
                     </td>
@@ -193,7 +197,7 @@ function InvoiceList() {
                       <DeadlineNote invoice={i} />
                     </td>
                     <td className="px-4 py-3">
-                      <RowActions invoice={i} canWrite={canWrite} onChanged={() => mutate()} />
+                      <RowActions invoice={i} canWrite={canWrite} onChanged={() => mutate()} onView={() => preview.open(i)} />
                     </td>
                   </tr>
                 ))}
@@ -211,6 +215,12 @@ function InvoiceList() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number ?? t("Draft #{id}", { id: pv.id })} subtitle={pv.customerName ?? t("Walk-in")}
+          href={`/invoices/${pv.id}`} onClose={preview.close}>
+          {pv.status === "DRAFT" ? <PagePreview page={InvoicePage} id={pv.id} /> : <PdfPreview path={`/invoices/${pv.id}/pdf`} />}
+        </PreviewDrawer>
+      )}
     </>
   );
 }

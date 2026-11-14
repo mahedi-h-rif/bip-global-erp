@@ -11,6 +11,8 @@ import { money } from "@/lib/format";
 import { Alert, Button, Card, Empty, Field, Input, PageHeader, Spinner } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
+import { PagePreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
+import PayrollRunPage from "./[id]/page";
 
 const payrollTone: Record<string, string> = { DRAFT: "bg-amber-50 text-amber-700", APPROVED: "bg-blue-50 text-blue-700", PAID: "bg-emerald-50 text-emerald-700" };
 
@@ -19,6 +21,8 @@ export default function PayrollPage() {
   const router = useRouter();
   const { data, error } = useSWR<PayrollRun[]>("/payroll/runs", fetcher);
   const { toolbar, shown } = useListTools<PayrollRun>(data, { filters: [{ label: "Status", get: (r) => r.status, format: statusText }], date: undefined });
+  const preview = usePreview<PayrollRun>();
+  const pv = preview.current;
   const now = new Date();
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
   const [problem, setProblem] = useState<string | null>(null);
@@ -48,18 +52,24 @@ export default function PayrollPage() {
         {data && data.length > 0 && shown?.length === 0 && <Empty title={t("Nothing matches")} />}
         {shown && shown.length > 0 && (
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2.5 text-start font-medium">{t("Payroll")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Employees")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Gross")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Deductions")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Net")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th></tr></thead>
+            <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2.5 text-start font-medium">{t("Payroll")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Employees")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Gross")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Deductions")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Net")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th><th className="w-16" /></tr></thead>
             <tbody className="divide-y divide-line">{shown.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-50">
+              <tr key={r.id} {...preview.row(r, "hover:bg-slate-50")}>
                 <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/payroll/${r.id}`}>{r.number}</Link></td>
                 <td className="tabular px-4 py-3 text-end">{r.lines.length}</td><td className="tabular px-4 py-3 text-end">{money(r.totalGross)}</td>
                 <td className="tabular px-4 py-3 text-end">{money(r.totalDeductions)}</td><td className="tabular px-4 py-3 text-end font-semibold">{money(r.totalNet)}</td>
                 <td className="px-4 py-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${payrollTone[r.status]}`}>{t(r.status.charAt(0) + r.status.slice(1).toLowerCase())}</span></td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(r)} /></td>
               </tr>
             ))}</tbody>
           </table>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} href={`/payroll/${pv.id}`} onClose={preview.close}>
+          <PagePreview page={PayrollRunPage} id={pv.id} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

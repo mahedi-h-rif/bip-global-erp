@@ -10,6 +10,7 @@ import { dateTime } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, CardHeader, Empty, Input, PageHeader, Spinner } from "@/components/ui";
 import { padFileName } from "@/components/pad-editor";
 import { useT } from "@/lib/i18n";
+import { PdfPreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
@@ -72,18 +73,19 @@ function BlankPad() {
   );
 }
 
-function Row({ p, onChanged }: { p: PadSummary; onChanged: () => void }) {
+function Row({ p, onChanged, rowProps, onView }: { p: PadSummary; onChanged: () => void; rowProps: object; onView: () => void }) {
   const t = useT();
   const { busy, error, notice, run } = useRunner();
   const [confirm, setConfirm] = useState(false);
   const name = padFileName(p.title);
   return (
-    <tr className="hover:bg-canvas">
+    <tr {...rowProps}>
       <td className="px-4 py-3 font-medium"><Link href={`/pad/${p.id}`} className="hover:underline" dir="auto">{p.title}</Link></td>
       <td className="px-4 py-3 text-muted">{p.createdBy}</td>
       <td className="px-4 py-3 whitespace-nowrap text-muted">{dateTime(p.updatedAt)}</td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap justify-end gap-1.5">
+          <ViewButton onClick={onView} className={small} />
           <Link href={`/pad/${p.id}`} className={small}><Pencil className="size-3.5" aria-hidden /> {t("Edit")}</Link>
           <button type="button" className={small} disabled={busy != null} onClick={() => run("pdf", () => openFile(`/pads/${p.id}/pdf`))}>
             <FileDown className="size-3.5" aria-hidden /> PDF
@@ -123,6 +125,8 @@ export default function PadListPage() {
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   const shown = data?.filter((p) => !needle || p.title.toLowerCase().includes(needle));
+  const preview = usePreview<PadSummary>();
+  const pv = preview.current;
 
   return (
     <>
@@ -165,13 +169,18 @@ export default function PadListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {shown.map((p) => <Row key={p.id} p={p} onChanged={() => mutate()} />)}
+                  {shown.map((p) => <Row key={p.id} p={p} onChanged={() => mutate()} rowProps={preview.row(p, "hover:bg-canvas")} onView={() => preview.open(p)} />)}
                 </tbody>
               </table>
             </div>
           )}
         </Card>
       </div>
+      {pv && (
+        <PreviewDrawer wide title={pv.title} href={`/pad/${pv.id}`} onClose={preview.close}>
+          <PdfPreview path={`/pads/${pv.id}/pdf`} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

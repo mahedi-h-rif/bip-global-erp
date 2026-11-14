@@ -10,6 +10,7 @@ import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Selec
 import { useT } from "@/lib/i18n";
 import { CountrySelect, SuggestInput } from "@/components/suggest";
 import { statusText, useListTools } from "@/components/list-tools";
+import { Details, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 type Tab = "employees" | "leave" | "holidays" | "advances";
 const errText = (e: unknown, f: string) => (e instanceof ApiError ? (e.fields ? Object.values(e.fields).join(", ") : e.message) : f);
@@ -70,6 +71,8 @@ function EmployeesTab() {
   const t = useT();
   const [all, setAll] = useState(false);
   const { data, error, mutate } = useSWR<Employee[]>(`/hr/employees?all=${all}`, fetcher, { keepPreviousData: true });
+  const preview = usePreview<Employee>();
+  const pv = preview.current;
   const { toolbar, shown } = useListTools<Employee>(data, { filters: [{ label: "Department", get: (r) => r.department }, { label: "Job title", get: (r) => r.jobTitle }, { label: "Nationality", get: (r) => r.nationality }, { label: "Status", get: (r) => r.status, format: statusText }], date: undefined });
   const [editing, setEditing] = useState<Employee | null>(null);
   return (
@@ -92,16 +95,17 @@ function EmployeesTab() {
                 <th className="px-4 py-2.5 text-start font-medium">{t("Employee")}</th><th className="px-4 py-2.5 text-start font-medium">{t("Job")}</th>
                 <th className="px-4 py-2.5 text-end font-medium">{t("Gross salary")}</th>
                 <th className="px-4 py-2.5 text-end font-medium">{t("Leave balance")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Advance due")}</th><th className="w-12" />
-              </tr></thead>
+              <th className="w-16" /></tr></thead>
               <tbody className="divide-y divide-line">
                 {shown.map((e) => (
-                  <tr key={e.id} className={e.status === "TERMINATED" ? "text-muted" : ""}>
+                  <tr key={e.id} {...preview.row(e, e.status === "TERMINATED" ? "text-muted" : "")}>
                     <td className="px-4 py-3"><span className="font-medium" dir="auto">{e.name}</span> <span className="text-xs text-muted">{e.code} · {e.nationality}</span></td>
                     <td className="px-4 py-3">{[e.jobTitle, e.department].filter(Boolean).join(" · ") || "—"}</td>
                     <td className="tabular px-4 py-3 text-end">{money(e.grossSalary)}</td>
                     <td className="tabular px-4 py-3 text-end">{Number(e.leaveBalance ?? 0)}</td>
                     <td className="tabular px-4 py-3 text-end">{Number(e.advanceOutstanding) > 0 ? money(e.advanceOutstanding) : "—"}</td>
                     <td className="px-2 py-2"><Button variant="ghost" onClick={() => setEditing(e)} aria-label={t("Edit {name}", { name: e.name })}><Pencil className="size-4" aria-hidden /></Button></td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(e)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -109,6 +113,24 @@ function EmployeesTab() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer title={pv.name} subtitle={[pv.code, pv.jobTitle].filter(Boolean).join(" · ")} onClose={preview.close}>
+          <Details items={[
+            ["Code", pv.code], ["Name", pv.name], ["Arabic name", pv.nameAr], ["Nationality", pv.nationality],
+            ["Job title", pv.jobTitle], ["Department", pv.department], ["Phone", pv.phone], ["Email", pv.email],
+            ["ID number", pv.idNumber], ["ID expiry", pv.idExpiry ? date(pv.idExpiry) : null],
+            ["Passport number", pv.passportNumber], ["Passport expiry", pv.passportExpiry ? date(pv.passportExpiry) : null],
+            ["Join date", date(pv.joinDate)], ["End date", pv.endDate ? date(pv.endDate) : null],
+            ["Basic salary", money(pv.basic)], ["Housing", pv.housing ? money(pv.housing) : null],
+            ["Transport", pv.transport ? money(pv.transport) : null], ["Other allowance", pv.otherAllowance ? money(pv.otherAllowance) : null],
+            ["Gross salary", pv.grossSalary != null ? money(pv.grossSalary) : null],
+            ["Leave balance", String(Number(pv.leaveBalance ?? 0))],
+            ["Advance due", Number(pv.advanceOutstanding) > 0 ? money(pv.advanceOutstanding) : null],
+            ["Bank", pv.bankName], ["IBAN", pv.iban ? <span dir="ltr">{pv.iban}</span> : null],
+            ["Status", pv.status === "TERMINATED" ? t("Terminated") : t("Active")],
+          ]} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

@@ -13,12 +13,15 @@ import { salesOrderStatusLabel, salesOrderStatusTone } from "@/components/sales-
 import { useT } from "@/lib/i18n";
 import { statusText, useListTools } from "@/components/list-tools";
 import { PendingQuotations } from "@/components/pending-work";
+import { PdfPreview, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 
 export default function SalesOrdersPage() {
   const t = useT();
   const [status, setStatus] = useState("");
   const { data, error } = useSWR<SalesOrder[]>(`/sales-orders${status ? `?status=${status}` : ""}`, fetcher, { keepPreviousData: true });
   const { toolbar, shown } = useListTools<SalesOrder>(data, { filters: [{ label: "Customer", get: (r) => r.customerName ?? r.clientName }], date: (r) => r.orderDate });
+  const preview = usePreview<SalesOrder>();
+  const pv = preview.current;
   const router = useRouter();
   const [picked, setPicked] = useState<number[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -70,11 +73,11 @@ export default function SalesOrdersPage() {
                   <th className="px-4 py-2.5 text-start font-medium">{t("Quotation")}</th>
                   <th className="px-4 py-2.5 text-end font-medium">{t("Total")}</th>
                   <th className="px-4 py-2.5 text-start font-medium">{t("Status")}</th>
-                </tr>
+                <th className="w-16" /></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {shown.map((o) => (
-                  <tr key={o.id} className="hover:bg-slate-50">
+                  <tr key={o.id} {...preview.row(o, "hover:bg-slate-50")}>
                     <td className="px-3 py-3">{isOpen(o) && <input type="checkbox" aria-label={t("Select {number}", { number: o.number })} checked={picked.includes(o.id)}
                       onChange={(e) => setPicked(e.target.checked ? [...picked, o.id] : picked.filter((x) => x !== o.id))} />}</td>
                     <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/sales-orders/${o.id}`}>{o.number}</Link></td>
@@ -84,6 +87,7 @@ export default function SalesOrdersPage() {
                     <td className="tabular px-4 py-3 text-muted">{o.quotationNumber ?? "—"}</td>
                     <td className="tabular px-4 py-3 text-end">{money(o.totalInclVat)}</td>
                     <td className="px-4 py-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${salesOrderStatusTone[o.status]}`}>{t(salesOrderStatusLabel[o.status])}</span></td>
+  <td className="px-2 py-3 text-end"><ViewButton onClick={() => preview.open(o)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -91,6 +95,11 @@ export default function SalesOrdersPage() {
           </div>
         )}
       </Card>
+      {pv && (
+        <PreviewDrawer wide title={pv.number} subtitle={pv.customerName ?? pv.clientName} href={`/sales-orders/${pv.id}`} onClose={preview.close}>
+          <PdfPreview path={`/sales-orders/${pv.id}/pdf`} />
+        </PreviewDrawer>
+      )}
     </>
   );
 }

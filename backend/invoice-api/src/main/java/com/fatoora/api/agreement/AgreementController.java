@@ -275,7 +275,7 @@ public class AgreementController {
         values.put("company_cr", nz(org.getOtherId()));
         // Numbers first, then the Arabic street, district and city, so digits never sit inside right-to-left text.
         values.put("company_address", String.join(" · ", Stream.of(
-                blank(org.getBuildingNumber()) ? null : "Bldg " + org.getBuildingNumber(),
+                blank(org.getBuildingNumber()) ? null : "Building No. " + org.getBuildingNumber(),
                 blank(org.getPostalCode()) ? null : "Postal " + org.getPostalCode(),
                 String.join("، ", Stream.of(org.getStreet(), org.getDistrict(), org.getCity()).filter(s -> !blank(s)).toList()))
                 .filter(s -> !blank(s)).toList()));
