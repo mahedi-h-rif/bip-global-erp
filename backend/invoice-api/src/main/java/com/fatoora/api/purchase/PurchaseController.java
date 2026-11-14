@@ -370,7 +370,8 @@ public class PurchaseController {
             BigDecimal ln = l.quantity().multiply(l.unitCost()).setScale(2, RoundingMode.HALF_UP);
             net = net.add(ln);
             vat = vat.add(ln.multiply(rateVat).divide(HUNDRED, 2, RoundingMode.HALF_UP));
-            if (productId != null && stock.tracked(productId))
+            if (productId != null) stock.startTracking(productId);
+            if (productId != null)
                 // Stock is counted in base units: 2 cartons of 24 enter as 48 pieces at landed cost ÷ 24 each.
                 moves.add(new StockService.Move(productId, req.warehouseId(), com.fatoora.api.product.UomService.base(l.quantity(), factor),
                         StockService.Kind.RECEIPT, "goods_receipt", id, number, null, landed.divide(factor, 6, RoundingMode.HALF_UP)));

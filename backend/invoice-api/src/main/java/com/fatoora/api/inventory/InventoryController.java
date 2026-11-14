@@ -165,8 +165,9 @@ public class InventoryController {
     @Transactional
     List<StockRow> adjust(@Valid @RequestBody AdjustRequest req) {
         Long orgId = CurrentUser.orgId();
-        requireTrackedProduct(orgId, req.productId());
+        requireProduct(orgId, req.productId());
         stock.requireWarehouse(orgId, req.warehouseId());
+        stock.startTracking(req.productId());
         BigDecimal delta;
         if (req.countedQuantity() != null) {
             BigDecimal current = jdbc.queryForList("SELECT quantity FROM stock_level WHERE warehouse_id = ? AND product_id = ?",
@@ -338,12 +339,16 @@ public class InventoryController {
         if (n != null && n > 0) throw new ApiException.Validation(Map.of("code", "A warehouse with this code already exists"));
     }
 
+    private void requireProduct(Long orgId, Long productId) {
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM product WHERE id = ? AND organization_id = ?",
+                Integer.class, productId, orgId);
+        if (n == null || n == 0) throw ApiException.notFound("Product");
+    }
+
     private void requireTrackedProduct(Long orgId, Long productId) {
-        List<Boolean> t = jdbc.queryForList("SELECT track_stock FROM product WHERE id = ? AND organization_id = ?",
-                Boolean.class, productId, orgId);
-        if (t.isEmpty()) throw ApiException.notFound("Product");
-        if (!t.getFirst())
-            throw ApiException.badRequest("not_stock_item", "This product does not track stock. Turn on \"Track stock\" on the product first.");
+        requireProduct(orgId, productId);
+        if (!stock.tracked(productId))
+            throw ApiException.badRequest("not_stock_item", "This product has no stock quantity yet. Add its opening stock first.");
     }
 
     private static StockRow stockRow(ResultSet rs, int i) throws SQLException {

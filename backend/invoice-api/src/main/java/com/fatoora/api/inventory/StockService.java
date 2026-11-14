@@ -132,6 +132,14 @@ public class StockService {
         jdbc.update("UPDATE stock_movement SET ref_number = ? WHERE ref_type = 'invoice' AND ref_id = ?", number, invoiceId);
     }
 
+    /**
+     * A product is unlimited (no stock counted) until someone first gives it a quantity: opening stock,
+     * an adjustment or a goods receipt. From then on it is counted and cannot be sold below zero.
+     */
+    public void startTracking(Long productId) {
+        jdbc.update("UPDATE product SET track_stock = TRUE WHERE id = ? AND NOT track_stock", productId);
+    }
+
     public boolean tracked(Long productId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT track_stock FROM product WHERE id = ?", Boolean.class, productId));
     }

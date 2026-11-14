@@ -110,7 +110,7 @@ export default function PosPage() {
                     <span className="font-medium" dir="auto">{i.name}</span>
                     {i.nameAr && <span className="text-xs text-muted" dir="rtl">{i.nameAr}</span>}
                     <span className="mt-auto pt-2 font-semibold tabular">{money(i.unitPrice)}</span>
-                    <span className={`text-[11px] ${out ? "text-bad" : "text-muted"}`}>{i.trackStock ? t("{n} in stock", { n: String(Number(i.onHand)) }) : t("Service")}</span>
+                    <span className={`text-[11px] ${out ? "text-bad" : "text-muted"}`}>{i.trackStock ? t("{n} in stock", { n: String(Number(i.onHand)) }) : t("Unlimited")}</span>
                   </button>
                 );
               })}
