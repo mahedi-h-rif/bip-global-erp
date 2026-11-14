@@ -70,7 +70,7 @@ public class InvoicePdfService {
         Organization org = orgs.findById(inv.getOrganizationId()).orElseThrow();
         Party seller = json.readValue(inv.getSellerSnapshot(), Party.class);
         Party buyer = inv.getBuyerSnapshot() == null ? null : json.readValue(inv.getBuyerSnapshot(), Party.class);
-        String html = html(inv, org, seller, buyer);
+        String html = html(inv, asIssued(org, seller), seller, buyer);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PdfRendererBuilder b = new PdfRendererBuilder();
@@ -271,6 +271,36 @@ public class InvoicePdfService {
             if (en == null || en.isBlank() || ar == null || ar.isBlank()) return null;
             return buyer.name().equals(ar) ? en : buyer.name().equals(en) ? ar : null;
         }).orElse(null);
+    }
+
+    /**
+     * The company as it was when the invoice was issued: the heading must match the Seller box and the signed
+     * ZATCA XML, so a later change of VAT number, CR number, address or legal name in Settings doesn't show on
+     * invoices issued before it. A detached copy, so nothing is written back to the database.
+     */
+    static Organization asIssued(Organization current, Party seller) {
+        Organization o = new Organization();
+        org.springframework.beans.BeanUtils.copyProperties(current, o);
+        if (seller == null) return o;
+        o.setVatNumber(seller.vatNumber());
+        o.setOtherId(seller.otherId());
+        if (seller.otherIdScheme() != null) o.setOtherIdScheme(seller.otherIdScheme());
+        if (seller.address() != null) {
+            var a = seller.address();
+            o.setStreet(a.street());
+            o.setBuildingNumber(a.buildingNumber());
+            o.setAdditionalNumber(a.additionalNumber());
+            o.setDistrict(a.district());
+            o.setCity(a.city());
+            o.setPostalCode(a.postalCode());
+            o.setCountryCode(a.countryCode());
+        }
+        // The registration name (Arabic if there was one) is what the invoice was issued under.
+        if (seller.name() != null && !seller.name().equals(current.registrationName())) {
+            if (current.getLegalNameAr() != null) o.setLegalNameAr(seller.name());
+            else o.setLegalNameEn(seller.name());
+        }
+        return o;
     }
 
     /**
