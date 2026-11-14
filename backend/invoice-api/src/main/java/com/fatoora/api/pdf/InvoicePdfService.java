@@ -189,7 +189,8 @@ public class InvoicePdfService {
                   .brand-en { font-size: 11.5pt; font-weight: 700; color: %s; white-space: nowrap; }
                   .brand-ar { font-size: 11.5pt; font-weight: 700; color: %s; }
                   .muted { color: #5a6275; }
-                  .title { margin: 12px 0 10px; border-top: 3px solid %s; border-bottom: 1px solid #e3e7ef; }
+                  .top { margin: 12px 0 0; border-top: 3px solid %s; }
+                  .title { margin: 0 0 6px; border-bottom: 1px solid #e3e7ef; }
                   .title td { padding: 8px 0; }
                   .title td.t { font-size: 15pt; font-weight: 700; color: %s; width: 1%%; white-space: nowrap; padding-right: 10px; }
                   .kv td { padding: 3px 6px; }
@@ -217,13 +218,6 @@ public class InvoicePdfService {
                 </style></head>
                 <body>
                   %s
-
-                  <table class="title"><tr>
-                    <td class="t">%s</td>
-                    <td class="t">/</td>
-                    <td class="t rtl">%s</td>
-                    <td></td>
-                  </tr></table>
 
                   %s
 
@@ -257,8 +251,7 @@ public class InvoicePdfService {
                 skyline ? SkylineLetterhead.css() + " body { margin: 0; }" : "@page { size: A4; margin: 14mm 12mm; }",
                 color, color, color, color, color, color,
                 skyline ? SkylineLetterhead.chrome(org) : classicHead(org, seller, brandEn),
-                title[1], title[0],
-                metaAndQr(meta.toString(), qrDataUri(inv.getQrCode())),
+                titleMetaAndQr(title[1], title[0], meta.toString(), qrDataUri(inv.getQrCode())),
                 parties(seller, org.getLegalNameEn(), buyer, buyerOtherName(inv, buyer)),
                 rows,
                 money(totals.taxExclusive()), cur,
@@ -280,12 +273,18 @@ public class InvoicePdfService {
         }).orElse(null);
     }
 
-    /** The invoice details (number, dates, references) on the left, the ZATCA QR code on the right. */
-    private static String metaAndQr(String meta, String qr) {
-        return "<table style=\"page-break-inside:avoid\"><tr>"
-                + "<td style=\"width:75%; vertical-align:top; padding:0\"><table class=\"kv\">" + meta + "</table></td>"
+    /**
+     * Under the brand rule: the title ("English / Arabic") and the invoice details (number, dates, references) on
+     * the left, the ZATCA QR code on the right, its top level with the title just below the rule.
+     */
+    private static String titleMetaAndQr(String titleEn, String titleAr, String meta, String qr) {
+        return "<table class=\"top\" style=\"page-break-inside:avoid\"><tr>"
+                + "<td style=\"width:75%; vertical-align:top; padding:0\">"
+                + "<table class=\"title\"><tr><td class=\"t\">" + esc(titleEn) + "</td><td class=\"t\">/</td>"
+                + "<td class=\"t rtl\">" + esc(titleAr) + "</td><td></td></tr></table>"
+                + "<table class=\"kv\">" + meta + "</table></td>"
                 + "<td style=\"width:2%; padding:0\"></td>"
-                + "<td style=\"width:23%; vertical-align:top; text-align:center; padding:0\">"
+                + "<td style=\"width:23%; vertical-align:top; text-align:center; padding:6px 0 0 0\">"
                 + "<img src=\"" + qr + "\" style=\"width:118px;height:118px\"/>"
                 + "</td></tr></table>";
     }
