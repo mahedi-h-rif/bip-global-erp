@@ -213,6 +213,23 @@ curl -sI https://erp.bipgulf.com | grep -i strict      <span class="c"># expect 
 echo | openssl s_client -connect erp.bipgulf.com:443 -servername erp.bipgulf.com 2>/dev/null | openssl x509 -noout -issuer -dates
 <span class="c"># expect issuer Let's Encrypt and a notAfter date in the future</span></code></pre>
       <p>For a full grade, enter <code>erp.bipgulf.com</code> at <b>ssllabs.com/ssltest</b> (expect A or A+).</p>
+
+      <h3>Certificate renewal</h3>
+      <p>Renewal is automatic: Caddy renews the certificate about 30 days before it expires, with no action needed. It keeps working as long as the domain points to this server, ports 80 and 443 stay open, the Caddy container runs, and the <code>bip-erp_caddy-data</code> volume is kept. Never run <code>docker compose down -v</code> or <code>docker volume prune</code>.</p>
+      <p>To force a fresh certificate (for example after the domain was pointed elsewhere for a while), run on the server:</p>
+<pre><code><span class="c"># On the server: certificate renewal command</span>
+<span class="c"># 1. Remove Caddy's stored certificate for the domain</span>
+docker exec bip-erp-caddy-1 rm -rf /data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/erp.bipgulf.com
+
+<span class="c"># 2. Restart Caddy so it requests a new one straight away</span>
+cd /opt/bip-erp/deploy &amp;&amp; docker compose -p bip-erp --env-file clients/bip-gulf.env restart caddy
+
+<span class="c"># 3. Watch for "certificate obtained successfully" (Ctrl+C to stop watching)</span>
+docker logs -f bip-erp-caddy-1
+
+<span class="c"># 4. Confirm the new dates</span>
+echo | openssl s_client -connect erp.bipgulf.com:443 -servername erp.bipgulf.com 2&gt;/dev/null | openssl x509 -noout -dates</code></pre>
+      <div class="note">Let's Encrypt issues at most 5 certificates for the same domain per week. Forcing a new one only when needed keeps you well inside that limit; if it is reached, Caddy keeps retrying and succeeds once the week has passed.</div>
     </section>
 
     <section id="auth">

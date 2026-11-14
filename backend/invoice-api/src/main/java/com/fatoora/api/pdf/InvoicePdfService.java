@@ -68,7 +68,7 @@ public class InvoicePdfService {
 
     public byte[] render(Invoice inv) {
         Organization org = orgs.findById(inv.getOrganizationId()).orElseThrow();
-        Party seller = json.readValue(inv.getSellerSnapshot(), Party.class);
+        Party seller = withCurrentCr(json.readValue(inv.getSellerSnapshot(), Party.class), org);
         Party buyer = inv.getBuyerSnapshot() == null ? null : json.readValue(inv.getBuyerSnapshot(), Party.class);
         String html = html(inv, asIssued(org, seller), seller, buyer);
 
@@ -275,16 +275,22 @@ public class InvoicePdfService {
 
     /**
      * The company as it was when the invoice was issued: the heading must match the Seller box and the signed
-     * ZATCA XML, so a later change of VAT number, CR number, address or legal name in Settings doesn't show on
-     * invoices issued before it. A detached copy, so nothing is written back to the database.
+     * ZATCA XML, so a later change of VAT number, address or legal name in Settings doesn't show on invoices
+     * issued before it. The CR number is the exception: it always comes from Settings (see withCurrentCr).
+     * A detached copy, so nothing is written back to the database.
      */
+    /** The CR number always as set in Company settings, on every invoice (heading and Seller box). */
+    static Party withCurrentCr(Party seller, Organization current) {
+        if (seller == null || current.getOtherId() == null) return seller;
+        return new Party(seller.name(), seller.vatNumber(), current.getOtherId(),
+                current.getOtherIdScheme() != null ? current.getOtherIdScheme() : seller.otherIdScheme(), seller.address());
+    }
+
     static Organization asIssued(Organization current, Party seller) {
         Organization o = new Organization();
         org.springframework.beans.BeanUtils.copyProperties(current, o);
         if (seller == null) return o;
         o.setVatNumber(seller.vatNumber());
-        o.setOtherId(seller.otherId());
-        if (seller.otherIdScheme() != null) o.setOtherIdScheme(seller.otherIdScheme());
         if (seller.address() != null) {
             var a = seller.address();
             o.setStreet(a.street());
