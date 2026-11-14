@@ -32,6 +32,7 @@ import {
   Route,
   Store,
   BarChart3,
+  Percent,
   CreditCard,
   IdCard,
   WalletCards as Wallet2,
@@ -113,6 +114,7 @@ const workforceNav: NavItem[] = [
 // Company money, partners' withdrawals and the business audit: admins only.
 const financeNav: NavItem[] = [
   { href: "/erp-reports", label: "Reports", icon: BarChart3 },
+  { href: "/vat", label: "VAT & ZATCA returns", icon: Percent },
   { href: "/accounts", label: "Accounts", icon: Landmark, exact: true },
   { href: "/audit", label: "Business audit", icon: ClipboardCheck },
 ];

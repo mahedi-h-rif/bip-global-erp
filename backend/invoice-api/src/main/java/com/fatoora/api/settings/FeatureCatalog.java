@@ -43,6 +43,7 @@ public final class FeatureCatalog {
             f("payroll", "Payroll", "Workforce", List.of("/payroll"), "payroll"),
             f("workers", "Workers", "Workforce", List.of("/workers"), "workers"),
             f("reports", "Reports", "Finance", List.of("/erp-reports"), "erp-reports", "reports"),
+            f("vat", "VAT & ZATCA returns", "Finance", List.of("/vat"), "vat"),
             f("accounts", "Accounts", "Finance", List.of("/accounts"), "accounts"),
             f("business-audit", "Business audit", "Finance", List.of("/audit"), "business-audit"),
             f("settings", "Company settings", "Administration", List.of("/settings", "/settings/bank", "/settings/agreement", "/settings/devices", "/settings/whatsapp"),

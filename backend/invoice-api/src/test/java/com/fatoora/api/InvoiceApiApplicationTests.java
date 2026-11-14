@@ -458,6 +458,29 @@ class InvoiceApiApplicationTests {
         assertFalse(removed.get("hasQr").asBoolean(), "QR removed");
     }
 
+    @Test
+    @Order(28)
+    void vatSummaryAndQuarterFiling() throws Exception {
+        var before = body(call("GET", "/vat/summary", null), 200);
+        long id = body(call("POST", "/invoices", Map.of("kind", "SIMPLIFIED",
+                "lines", new Object[]{Map.of("name", "VAT check", "quantity", 1, "unitCode", "PCE", "unitPrice", 200)})), 201).get("id").asLong();
+        body(call("POST", "/invoices/" + id + "/issue", Map.of("sendMode", "NOW")), 200);
+        var after = body(call("GET", "/vat/summary", null), 200);
+        assertEquals(0, after.get("outputVat").decimalValue().subtract(before.get("outputVat").decimalValue())
+                .compareTo(new java.math.BigDecimal("30.00")), "200 at 15% adds 30 VAT: " + after);
+        assertEquals(0, after.get("payable").decimalValue()
+                .compareTo(after.get("outputVat").decimalValue().subtract(after.get("inputVat").decimalValue())), "payable = output - input");
+
+        int year = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Riyadh")).getYear();
+        var quarters = body(call("GET", "/vat/quarters?year=" + year, null), 200);
+        assertEquals(4, quarters.size());
+        var saved = body(call("PUT", "/vat/returns/" + year + "/1", Map.of("filedOn", year + "-04-20", "reference", "ZATCA-RET-1",
+                "paidAmount", 10, "paidOn", year + "-04-25")), 200);
+        assertEquals("PAID", saved.get("state").asString());
+        assertEquals("ZATCA-RET-1", saved.get("filing").get("reference").asString());
+        assertTrue(body(call("DELETE", "/vat/returns/" + year + "/1", null), 200).get("filing").isNull());
+    }
+
     // --- helpers ---------------------------------------------------------------------------------
 
     private HttpResponse<String> call(String method, String path, Object body) throws Exception {
