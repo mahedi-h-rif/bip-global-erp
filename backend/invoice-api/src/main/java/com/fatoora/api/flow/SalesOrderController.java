@@ -429,7 +429,7 @@ public class SalesOrderController {
             BigDecimal vat = net.multiply(l.vatRate()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
             rows.append("<tr>").append(td(Integer.toString(n++), "center"))
                     .append(td(LetterheadPdf.esc(l.name()), InvoicePdfService.startsRtl(l.name()) ? "right; direction:rtl" : "left"))
-                    .append(td(StockServicePlain.plain(l.quantity()) + " " + LetterheadPdf.esc(l.unitCode()), "right"))
+                    .append(td(StockServicePlain.plain(l.quantity()) + " " + LetterheadPdf.esc(com.fatoora.api.common.UnitNames.of(l.unitCode())), "right"))
                     .append(td(LetterheadPdf.money(l.unitPrice()), "right"))
                     .append(td(l.discountPct().signum() == 0 ? "" : StockServicePlain.plain(l.discountPct()) + "%", "right"))
                     .append(td(LetterheadPdf.money(vat), "right"))

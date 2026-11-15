@@ -575,7 +575,7 @@ public class PurchaseController {
             BigDecimal ln = l.quantity().multiply(l.unitCost()).setScale(2, RoundingMode.HALF_UP);
             rows.append("<tr>").append(td(Integer.toString(n++), "center"))
                     .append(td(LetterheadPdf.esc(l.name()), InvoicePdfService.startsRtl(l.name()) ? "right; direction:rtl" : "left"))
-                    .append(td(StockService.plainOf(l.quantity()) + " " + LetterheadPdf.esc(l.unitCode()), "right"))
+                    .append(td(StockService.plainOf(l.quantity()) + " " + LetterheadPdf.esc(com.fatoora.api.common.UnitNames.of(l.unitCode())), "right"))
                     .append(td(LetterheadPdf.money(l.unitCost()), "right")).append(td(LetterheadPdf.money(ln), "right")).append("</tr>");
         }
         return """

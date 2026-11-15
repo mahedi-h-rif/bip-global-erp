@@ -146,7 +146,7 @@ public class PurchaseFlowController {
                     .append("<td style=\"").append(cell).append(rtl ? "right; direction:rtl" : "left").append("\">")
                     .append(com.fatoora.api.pdf.LetterheadPdf.esc(l.name())).append("</td>")
                     .append("<td style=\"").append(cell).append("right\">").append(StockService.plainOf(l.quantity())).append("</td>")
-                    .append("<td style=\"").append(cell).append("center\">").append(com.fatoora.api.pdf.LetterheadPdf.esc(l.unitCode() == null ? "" : l.unitCode())).append("</td></tr>");
+                    .append("<td style=\"").append(cell).append("center\">").append(com.fatoora.api.pdf.LetterheadPdf.esc(com.fatoora.api.common.UnitNames.of(l.unitCode()))).append("</td></tr>");
         }
         String sign = """
                 <td style="width:50%%; vertical-align:top; %s">

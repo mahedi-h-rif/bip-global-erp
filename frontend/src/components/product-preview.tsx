@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import type { Product, StockMovement, StockRow } from "@/lib/types";
-import { dateTime, money } from "@/lib/format";
+import { dateTime, money, unitName } from "@/lib/format";
 import { Details } from "@/components/preview";
 import { useT } from "@/lib/i18n";
 
@@ -30,8 +30,8 @@ export function ProductPreview({ product: p }: { product: Product }) {
         ["With 15% VAT", money(Math.round(Number(p.unitPrice) * 115) / 100)],
         ["Cost price (SAR)", p.costPrice != null && p.costPrice !== "" ? money(p.costPrice) : null],
         ["Average cost", p.avgCost != null ? money(p.avgCost) : null],
-        ["Unit", p.unitCode],
-        ["On hand", tracked ? `${qty(p.onHand)} ${p.unitCode ?? ""}` : t("Unlimited")],
+        ["Unit", t(unitName(p.unitCode))],
+        ["On hand", tracked ? `${qty(p.onHand)} ${t(unitName(p.unitCode))}` : t("Unlimited")],
         ["Low-stock alert at", p.lowStockThreshold != null && p.lowStockThreshold !== "" ? qty(p.lowStockThreshold) : null],
         ["Status", p.active === false ? t("Deactivated") : null],
       ]} />
@@ -42,7 +42,7 @@ export function ProductPreview({ product: p }: { product: Product }) {
             {mine.map((l) => (
               <li key={l.warehouseId} className="flex justify-between px-3 py-2">
                 <span>{l.warehouseName}</span>
-                <span className={`tabular font-medium ${l.low ? "text-bad" : ""}`}>{qty(l.quantity)} {l.unitCode}</span>
+                <span className={`tabular font-medium ${l.low ? "text-bad" : ""}`}>{qty(l.quantity)} {t(unitName(l.unitCode))}</span>
               </li>
             ))}
           </ul>

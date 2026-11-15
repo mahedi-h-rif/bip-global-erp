@@ -237,7 +237,7 @@ public class QuotationController {
             rows.append("<tr>")
                     .append(td(Integer.toString(n++), "center"))
                     .append(td(LetterheadPdf.esc(l.getName()), InvoicePdfService.startsRtl(l.getName()) ? "right; direction:rtl" : "left"))
-                    .append(td(l.getQuantity().stripTrailingZeros().toPlainString() + " " + LetterheadPdf.esc(l.getUnitCode()), "right"))
+                    .append(td(l.getQuantity().stripTrailingZeros().toPlainString() + " " + LetterheadPdf.esc(com.fatoora.api.common.UnitNames.of(l.getUnitCode())), "right"))
                     .append(td(LetterheadPdf.money(l.getUnitPrice()), "right"))
                     .append(td(l.getVatRate().stripTrailingZeros().toPlainString() + "%", "right"))
                     .append(td(LetterheadPdf.money(vat), "right"))

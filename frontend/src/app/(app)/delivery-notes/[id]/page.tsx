@@ -14,6 +14,7 @@ import { RelationshipMapButton } from "@/components/relationship-map";
 import { InvoiceQuantities, invoicePicks, picksValid, type QuantityInput } from "@/components/invoice-quantities";
 import { useT } from "@/lib/i18n";
 import { SuggestInput } from "@/components/suggest";
+import { Unit } from "@/components/units";
 
 export default function DeliveryNotePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -134,7 +135,7 @@ export default function DeliveryNotePage({ params }: { params: Promise<{ id: str
               <tr key={i}>
                 <td className="px-4 py-3 text-muted">{i + 1}</td>
                 <td className="px-4 py-3" dir="auto">{l.name}</td>
-                <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} {l.unitCode}</td>
+                <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td>
               </tr>
             ))}
           </tbody>

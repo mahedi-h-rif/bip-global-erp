@@ -151,7 +151,7 @@ public class InvoicePdfService {
             rows.append("<tr>")
                     .append(td(Integer.toString(n++), "c"))
                     .append(td(esc(l.line().name()), startsRtl(l.line().name()) ? "desc rtl" : "desc"))
-                    .append(td(plain(l.line().quantity()) + " " + esc(l.line().unitCode()), "n"))
+                    .append(td(plain(l.line().quantity()) + " " + esc(com.fatoora.api.common.UnitNames.of(l.line().unitCode())), "n"))
                     .append(td(money(l.line().unitPrice()), "n"))
                     .append(td(money(l.net()), "n"))
                     .append(td(plain(l.line().vatRate()) + "%", "n"))

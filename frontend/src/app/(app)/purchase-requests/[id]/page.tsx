@@ -12,6 +12,7 @@ import { Alert, Button, Card, CardHeader, Field, PageHeader, Select, Spinner } f
 import { StatusPill } from "@/components/purchase";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { useT } from "@/lib/i18n";
+import { Unit } from "@/components/units";
 
 export default function PurchaseRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -46,7 +47,7 @@ export default function PurchaseRequestPage({ params }: { params: Promise<{ id: 
         <table className="w-full border-t border-line text-sm">
           <thead><tr className="border-b border-line text-xs text-muted"><th className="px-4 py-2.5 text-start font-medium">{t("Item")}</th><th className="px-4 py-2.5 text-end font-medium">{t("Quantity")}</th></tr></thead>
           <tbody className="divide-y divide-line">
-            {r.lines.map((l, i) => <tr key={i}><td className="px-4 py-3" dir="auto">{l.name}</td><td className="tabular px-4 py-3 text-end">{Number(l.quantity)} {l.unitCode}</td></tr>)}
+            {r.lines.map((l, i) => <tr key={i}><td className="px-4 py-3" dir="auto">{l.name}</td><td className="tabular px-4 py-3 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td></tr>)}
           </tbody>
         </table>
       </Card>

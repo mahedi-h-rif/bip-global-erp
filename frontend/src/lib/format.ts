@@ -127,6 +127,13 @@ export const unitCodes = [
   { code: "SET", label: "Set" },
 ];
 
+/** Full English unit name ("Piece", "Kilogram", "Roll") for a UN/ECE code; unknown codes as "Abc". */
+export function unitName(code?: string | null): string {
+  const c = (code ?? "").trim();
+  if (!c) return "";
+  return unitCodes.find((u) => u.code === c.toUpperCase())?.label ?? c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
+}
+
 export const exemptionCodes = [
   { code: "VATEX-SA-32", label: "Export of goods", category: "Z" },
   { code: "VATEX-SA-33", label: "Export of services", category: "Z" },

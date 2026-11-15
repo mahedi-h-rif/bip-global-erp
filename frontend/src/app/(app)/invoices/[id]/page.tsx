@@ -17,6 +17,7 @@ import { GrossProfitCard } from "@/components/gross-profit";
 import { ReturnItems } from "@/components/return-items";
 import { useT } from "@/lib/i18n";
 import { InvoiceLifecycle } from "@/components/invoice-lifecycle";
+import { Unit } from "@/components/units";
 
 type ZatcaMessage = { code?: string; message?: string; category?: string };
 
@@ -209,7 +210,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                   {inv.lines.map((l, i) => (
                     <tr key={i}>
                       <td className="px-4 py-2.5" dir="auto">{l.name}</td>
-                      <td className="tabular px-4 py-2.5 text-end">{Number(l.quantity)} {l.unitCode}</td>
+                      <td className="tabular px-4 py-2.5 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td>
                       <td className="tabular px-4 py-2.5 text-end">{money(l.unitPrice)}</td>
                       <td className="px-4 py-2.5 text-end">{l.vatCategory === "S" ? `${Number(l.vatRate)}%` : l.vatCategory}</td>
                     </tr>

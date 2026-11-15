@@ -10,6 +10,7 @@ import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, Selec
 import { useT } from "@/lib/i18n";
 import { Details, PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
 import { ProductPreview } from "@/components/product-preview";
+import { Unit } from "@/components/units";
 
 type Tab = "stock" | "warehouses" | "transfers" | "movements" | "audit";
 
@@ -182,7 +183,7 @@ function StockTab({ warehouses, products, canWrite }: { warehouses: Warehouse[];
                     <td className="px-4 py-3 font-medium" dir="auto">{r.productName}</td>
                     <td className="px-4 py-3">{r.warehouseName}</td>
                     <td className={`tabular px-4 py-3 text-end ${r.low ? "font-semibold text-bad" : ""}`}>
-                      {qty(r.quantity)} {r.unitCode}
+                      {qty(r.quantity)} <Unit code={r.unitCode} />
                       {r.low && <span className="ms-2 rounded bg-red-50 px-1.5 py-0.5 text-[11px] text-bad">{t("Low")}</span>}
                     </td>
                     <td className="tabular px-4 py-3 text-end text-muted">{r.costPrice == null ? "—" : money(r.costPrice)}</td>

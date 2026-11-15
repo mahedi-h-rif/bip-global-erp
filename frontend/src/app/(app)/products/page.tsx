@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import useSWR from "swr";
 import { Archive, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Product } from "@/lib/types";
-import { money, unitCodes } from "@/lib/format";
+import { money, unitCodes, unitName } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
 import { ProductUnits } from "@/components/units";
 import { ProductPreview } from "@/components/product-preview";
@@ -96,7 +96,10 @@ export default function ProductsPage() {
   const [showInactive, setShowInactive] = useState(false);
   const query = new URLSearchParams({ all: String(showInactive) });
   if (q.trim()) query.set("q", q.trim());
-  const { data, error, mutate } = useSWR<Product[]>(`/products?${query}`, fetcher, { keepPreviousData: true });
+  const { data: raw, error, mutate } = useSWR<Product[]>(`/products?${query}`, fetcher, { keepPreviousData: true });
+  // Sorted by item code in natural order (ITEM-9 before ITEM-10); items without a code last.
+  const data = useMemo(() => raw && [...raw].sort((a, b) => !a.number ? (b.number ? 1 : 0) : !b.number ? -1
+    : a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: "base" })), [raw]);
   const preview = usePreview<Product>();
   const pv = preview.current;
   const [editing, setEditing] = useState<Product | null>(null);
@@ -176,7 +179,7 @@ export default function ProductsPage() {
                     <td className="tabular px-4 py-3 text-end">{money(p.unitPrice)}</td>
                     <td className="tabular px-4 py-3 text-end text-muted">{money(Math.round(Number(p.unitPrice) * 115) / 100)}</td>
                     <td className={`tabular px-4 py-3 text-end ${p.trackStock && p.lowStockThreshold != null && Number(p.onHand) <= Number(p.lowStockThreshold) ? "font-semibold text-bad" : ""}`}>
-                      {p.trackStock ? `${Number(p.onHand ?? 0)} ${p.unitCode ?? ""}` : <span className="text-xs text-muted">{t("Unlimited")}</span>}
+                      {p.trackStock ? `${Number(p.onHand ?? 0)} ${t(unitName(p.unitCode))}` : <span className="text-xs text-muted">{t("Unlimited")}</span>}
                     </td>
                     <td className="px-2 py-2 text-end">
                       {canWrite && (

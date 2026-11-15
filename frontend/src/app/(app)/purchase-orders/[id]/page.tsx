@@ -11,6 +11,7 @@ import { Alert, Button, ButtonLink, Card, CardHeader, PageHeader, Spinner } from
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { useT } from "@/lib/i18n";
+import { Unit } from "@/components/units";
 
 export default function PurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -75,7 +76,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
             {p.lines.map((l) => (
               <tr key={l.id}>
                 <td className="px-4 py-3" dir="auto">{l.name}</td>
-                <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} {l.unitCode}</td>
+                <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td>
                 <td className="tabular px-4 py-3 text-end">{Number(l.received ?? 0)}</td>
                 <td className={`tabular px-4 py-3 text-end ${Number(l.remaining) > 0 ? "font-semibold text-amber-700" : "text-muted"}`}>{Number(l.remaining ?? 0)}</td>
                 <td className="tabular px-4 py-3 text-end">{fmtCur(l.unitCost, p.currency)}</td>

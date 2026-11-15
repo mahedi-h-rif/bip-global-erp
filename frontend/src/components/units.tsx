@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { Plus, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
-import { unitCodes } from "@/lib/format";
+import { unitCodes, unitName } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Input, Select } from "@/components/ui";
 import { useT } from "@/lib/i18n";
 
@@ -30,7 +30,13 @@ export function defaultUnit(units: ItemUnit[], productId: number | null | undefi
   return own.find((u) => (purchase ? u.purchaseDefault : u.salesDefault)) ?? own.find((u) => u.base);
 }
 
-const label = (code: string) => unitCodes.find((u) => u.code === code)?.label ?? code;
+const label = (code: string) => unitName(code);
+
+/** A unit shown in full ("Piece", not "PCE"), translated. */
+export function Unit({ code }: { code?: string | null }) {
+  const t = useT();
+  return <>{t(unitName(code))}</>;
+}
 
 /**
  * Unit picker for a document line. For an item line it offers only that item's units ("Carton ×24"); for a free-text
@@ -57,7 +63,7 @@ export function UnitSelect({ productId, value, onPick, disabled, ariaLabel }: {
   }
   return (
     <Select value={value} disabled={disabled} aria-label={ariaLabel ?? t("Unit")} onChange={(e) => onPick(e.target.value, null, 1)}>
-      {!unitCodes.some((u) => u.code === value) && <option value={value}>{value}</option>}
+      {!unitCodes.some((u) => u.code === value) && <option value={value}>{t(unitName(value))}</option>}
       {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
     </Select>
   );
@@ -66,7 +72,7 @@ export function UnitSelect({ productId, value, onPick, disabled, ariaLabel }: {
 /** "3 CT (72 PCE)" — a quantity with its base-unit equivalent when the unit isn't the base one. */
 export function qtyWithBase(qty: number | string, unitCode: string, factor: number | string | null | undefined, baseUnit?: string) {
   const f = Number(factor ?? 1), q = Number(qty);
-  return f === 1 || !baseUnit ? `${q} ${unitCode}` : `${q} ${unitCode} (${+(q * f).toFixed(3)} ${baseUnit})`;
+  return f === 1 || !baseUnit ? `${q} ${unitName(unitCode)}` : `${q} ${unitName(unitCode)} (${+(q * f).toFixed(3)} ${unitName(baseUnit)})`;
 }
 
 interface UomRow { unitCode: string; factor: string; price: string; barcode: string; salesDefault: boolean; purchaseDefault: boolean }

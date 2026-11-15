@@ -3,6 +3,7 @@
 import type { DeliveryNote } from "@/lib/types";
 import { Input } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { Unit } from "@/components/units";
 
 /** One delivery line's share of the invoice being made: line = its position on the note (from 0). */
 export type InvoicePick = { deliveryNoteId: number; line: number; quantity: number };
@@ -56,7 +57,7 @@ export function InvoiceQuantities({ notes, value, onChange }: { notes: DeliveryN
               <tr key={key}>
                 {many && <td className="tabular px-3 py-2 text-muted">{n.number}</td>}
                 <td className="px-3 py-2">{l.name}</td>
-                <td className="tabular px-3 py-2 text-end">{fmt(num(l.quantity))} {l.unitCode}</td>
+                <td className="tabular px-3 py-2 text-end">{fmt(num(l.quantity))} <Unit code={l.unitCode} /></td>
                 <td className="tabular px-3 py-2 text-end text-muted">{fmt(num(l.invoiced))}</td>
                 <td className="px-3 py-2">
                   <Input type="number" min="0" max={left} step="any" className={`ms-auto w-28 text-end ${over ? "border-bad" : ""}`} value={v}

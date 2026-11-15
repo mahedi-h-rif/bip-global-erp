@@ -7,6 +7,7 @@ import { api, ApiError, fetcher } from "@/lib/api";
 import type { GoodsReturn } from "@/lib/types";
 import { Alert, Button, Card, Field, Input, PageHeader, Spinner, Textarea } from "@/components/ui";
 import { useT } from "@/lib/i18n";
+import { Unit } from "@/components/units";
 
 interface Returnable { goodsReceiptLineId: number; name: string; received: number; returnable: number; invoiced: number; unitCost: number; unitCode: string }
 
@@ -48,7 +49,7 @@ function NewReturn() {
             {data.map((l) => (
               <tr key={l.goodsReceiptLineId}>
                 <td className="px-4 py-2" dir="auto">{l.name}</td>
-                <td className="tabular px-4 py-2 text-end">{Number(l.received)} {l.unitCode}</td>
+                <td className="tabular px-4 py-2 text-end">{Number(l.received)} <Unit code={l.unitCode} /></td>
                 <td className="tabular px-4 py-2 text-end">{Number(l.invoiced)}</td>
                 <td className="tabular px-4 py-2 text-end font-medium">{Number(l.returnable)}</td>
                 <td className="px-4 py-2"><Input type="number" min="0" max={Number(l.returnable)} step="any" className="text-end" aria-label={t("Return now")}

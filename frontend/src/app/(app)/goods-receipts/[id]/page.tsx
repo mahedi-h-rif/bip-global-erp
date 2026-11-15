@@ -11,6 +11,7 @@ import { Alert, Button, ButtonLink, Card, PageHeader, Spinner } from "@/componen
 import { fmtCur, StatusPill } from "@/components/purchase";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { useT } from "@/lib/i18n";
+import { Unit } from "@/components/units";
 
 export default function GoodsReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -50,7 +51,7 @@ export default function GoodsReceiptPage({ params }: { params: Promise<{ id: str
             {g.lines.map((l) => (
               <tr key={l.id}>
                 <td className="px-4 py-3" dir="auto">{l.name}</td>
-                <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} {l.unitCode}</td>
+                <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td>
                 <td className="tabular px-4 py-3 text-end">{fmtCur(l.unitCost, g.currency ?? "SAR")}</td>
                 <td className="tabular px-4 py-3 text-end font-medium">{Number(l.landedUnitCost ?? 0).toFixed(4)}</td>
                 <td className="tabular px-4 py-3 text-end">{Number(l.invoiced ?? 0)}</td>

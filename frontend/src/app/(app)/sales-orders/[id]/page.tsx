@@ -7,13 +7,14 @@ import { useRouter } from "next/navigation";
 import { FileDown, FileText, Lock, Pencil, Printer, Truck, XCircle } from "lucide-react";
 import { api, ApiError, fetcher, openFile, printFile } from "@/lib/api";
 import type { DeliveryNote, SalesOrder } from "@/lib/types";
-import { date, money } from "@/lib/format";
+import { date, money, unitName } from "@/lib/format";
 import { Alert, Button, ButtonLink, Card, CardHeader, PageHeader, Spinner } from "@/components/ui";
 import { SalesOrderEditor, salesOrderStatusLabel, salesOrderStatusTone } from "@/components/sales-order-editor";
 import { deliveryStatusLabel } from "@/components/delivery-note-editor";
 import { RelationshipMapButton } from "@/components/relationship-map";
 import { GrossProfitCard } from "@/components/gross-profit";
 import { useT } from "@/lib/i18n";
+import { Unit } from "@/components/units";
 
 export default function SalesOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -103,7 +104,7 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
                 <tr key={l.id ?? i}>
                   <td className="px-4 py-3 text-muted">{i + 1}</td>
                   <td className="px-4 py-3" dir="auto">{l.name}</td>
-                  <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} {l.unitCode}</td>
+                  <td className="tabular px-4 py-3 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td>
                   <td className="tabular px-4 py-3 text-end">{Number(l.delivered ?? 0)}</td>
                   <td className={`tabular px-4 py-3 text-end ${Number(l.remaining) > 0 ? "font-semibold text-amber-700" : "text-muted"}`}>{Number(l.remaining ?? 0)}</td>
                   <td className="tabular px-4 py-3 text-end">{money(l.unitPrice)}</td>
@@ -132,7 +133,7 @@ export default function SalesOrderPage({ params }: { params: Promise<{ id: strin
                   <td className="tabular px-4 py-3 font-medium"><Link className="text-brand hover:underline" href={`/delivery-notes/${n.id}`}>{n.number}</Link></td>
                   <td className="tabular px-4 py-3">{date(n.deliveryDate)}</td>
                   <td className="px-4 py-3">{t(deliveryStatusLabel[n.status])}</td>
-                  <td className="px-4 py-3 text-muted">{n.lines.filter((l) => !l.salesOrderLineId || o.lines.some((x) => x.id === l.salesOrderLineId)).map((l) => `${l.name} × ${Number(l.quantity)} ${l.unitCode ?? ""}`.trim()).join(", ")}</td>
+                  <td className="px-4 py-3 text-muted">{n.lines.filter((l) => !l.salesOrderLineId || o.lines.some((x) => x.id === l.salesOrderLineId)).map((l) => `${l.name} × ${Number(l.quantity)} ${t(unitName(l.unitCode))}`.trim()).join(", ")}</td>
                 </tr>
               ))}
             </tbody>

@@ -583,7 +583,7 @@ public class DeliveryNoteController {
         for (Line l : d.lines())
             rows.append("<tr>").append(td(Integer.toString(n++), "center"))
                     .append(td(LetterheadPdf.esc(l.name()), InvoicePdfService.startsRtl(l.name()) ? "right; direction:rtl" : "left"))
-                    .append(td(StockService.plain(l.quantity()) + " " + LetterheadPdf.esc(l.unitCode()), "right"))
+                    .append(td(StockService.plain(l.quantity()) + " " + LetterheadPdf.esc(com.fatoora.api.common.UnitNames.of(l.unitCode())), "right"))
                     .append(td("", "center")).append("</tr>");
         String received = d.receivedBy() == null ? "" : "<p style=\"margin-top:8px\">Received by · استلمها: <b>"
                 + LetterheadPdf.esc(d.receivedBy()) + "</b>"

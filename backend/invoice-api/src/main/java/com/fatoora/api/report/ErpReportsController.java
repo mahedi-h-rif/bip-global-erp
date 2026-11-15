@@ -158,7 +158,7 @@ public class ErpReportsController {
                 WHERE w.organization_id = ? AND p.track_stock AND (?::bigint IS NULL OR w.id = ?::bigint) AND s.quantity <> 0
                 ORDER BY w.name, lower(p.name)""",
                 (rs, x) -> row(rs.getString("wname"), rs.getString("number"), rs.getString("name"), rs.getBigDecimal("quantity"),
-                        rs.getString("unit_code"), rs.getBigDecimal("cost"), rs.getBigDecimal("value"),
+                        com.fatoora.api.common.UnitNames.of(rs.getString("unit_code")), rs.getBigDecimal("cost"), rs.getBigDecimal("value"),
                         rs.getBigDecimal("low_stock_threshold") != null && rs.getBigDecimal("quantity").compareTo(rs.getBigDecimal("low_stock_threshold")) <= 0 ? "LOW" : ""),
                 orgId, warehouseId, warehouseId);
         return table("Stock valuation (moving average)", null, List.of("Warehouse", "Code", "Item", "On hand", "Unit", "Avg cost", "Value", "Alert"), rows, 6);
