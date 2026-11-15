@@ -23,10 +23,10 @@ export function unitsOf(units: ItemUnit[], productId: number | null | undefined)
   return productId ? units.filter((u) => u.productId === productId) : [];
 }
 
-/** The unit an item is sold (or bought) in by default: the flagged one, else its base unit. */
+/** The unit a new line of an item starts in: the unit chosen when the item was created. Other units are picked per line. */
 export function defaultUnit(units: ItemUnit[], productId: number | null | undefined, purchase = false): ItemUnit | undefined {
-  const own = unitsOf(units, productId);
-  return own.find((u) => (purchase ? u.purchaseDefault : u.salesDefault)) ?? own.find((u) => u.base);
+  void purchase;
+  return unitsOf(units, productId).find((u) => u.base);
 }
 
 const label = (code: string) => unitName(code);
@@ -87,7 +87,7 @@ export function uomRows(data: { unitCode: string; factor: number; price: number 
 /** Body for PUT /products/{id}/units. Rows in the base unit are dropped: the base unit is always factor 1. */
 export function uomPayload(rows: UomRow[], baseUnit: string) {
   return rows.filter((r) => r.unitCode !== baseUnit).map((r) => ({ unitCode: r.unitCode, factor: Number(r.factor), price: r.price === "" ? null : Number(r.price),
-    barcode: r.barcode.trim() || null, salesDefault: r.salesDefault, purchaseDefault: r.purchaseDefault }));
+    barcode: r.barcode.trim() || null, salesDefault: false, purchaseDefault: false }));
 }
 
 /** A problem with the rows the user can fix before saving, or null. */
@@ -104,45 +104,47 @@ export function uomProblem(rows: UomRow[], baseUnit: string, t: TFunction): stri
 }
 
 /**
- * The units an item is sold or bought in, each with its own price (SAP B1 UoM group): e.g. Dozen ×12 at its own
- * price, Carton ×24 with its own barcode. Part of the product form; lines already entered keep their own factor.
+ * The units an item is sold in, each with its own price. The first row is the item's own unit (stock is counted in
+ * it); each added unit says how many of the first it holds, so stock stays right whichever unit a line uses.
  */
-export function UnitRows({ rows, onChange, baseUnit, basePrice, name }: {
-  rows: UomRow[]; onChange: (rows: UomRow[]) => void; baseUnit: string; basePrice: number | string; name: string;
+export function UnitRows({ rows, onChange, baseUnit, onBaseUnit, basePrice, onBasePrice, priceError }: {
+  rows: UomRow[]; onChange: (rows: UomRow[]) => void; baseUnit: string; onBaseUnit: (code: string) => void;
+  basePrice: number | string; onBasePrice: (price: string) => void; priceError?: string;
 }) {
   const t = useT();
   const set = (i: number, patch: Partial<UomRow>) => onChange(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)));
   const base = Number(basePrice) || 0;
+  const baseName = t(unitName(baseUnit));
   return (
     <div className="rounded-lg border border-line">
       <div className="border-b border-line px-4 py-3">
         <p className="text-sm font-semibold">{t("Units and prices")}</p>
-        <p className="text-xs text-muted">{t("Stock is counted in {unit}. Add the other units this item is sold or bought in, each with its own price.", { unit: t(unitName(baseUnit)) })}</p>
+        <p className="text-xs text-muted">{t("Prices exclude VAT. Add every unit this item is sold in, each with its own price. Stock is counted in the first unit.")}</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-line text-xs text-muted">
-            <th className="px-3 py-2 text-start font-medium">{t("Unit")}</th><th className="px-3 py-2 text-end font-medium">{t("Contains ({unit})", { unit: t(unitName(baseUnit)) })}</th>
-            <th className="px-3 py-2 text-end font-medium">{t("Selling price")}</th><th className="px-3 py-2 text-start font-medium">{t("Barcode")}</th>
-            <th className="px-3 py-2 text-center font-medium">{t("Default sale")}</th><th className="px-3 py-2 text-center font-medium">{t("Default purchase")}</th><th className="w-10" />
+            <th className="px-3 py-2 text-start font-medium">{t("Unit")}</th>
+            <th className="px-3 py-2 text-end font-medium">{t("Price (SAR, excl. VAT)")}</th>
+            <th className="px-3 py-2 text-end font-medium">{t("Contains ({unit})", { unit: baseName })}</th><th className="w-10" />
           </tr></thead>
           <tbody className="divide-y divide-line">
-            <tr className="bg-slate-50 text-muted">
-              <td className="px-3 py-2">{t(label(baseUnit))} ({t("base")})</td><td className="tabular px-3 py-2 text-end">1</td>
-              <td className="tabular px-3 py-2 text-end">{base.toFixed(2)}</td><td />
-              <td className="px-3 py-2 text-center"><input type="radio" name={`sd-${name}`} aria-label={t("Default sale")} checked={!rows.some((r) => r.salesDefault)} onChange={() => onChange(rows.map((x) => ({ ...x, salesDefault: false })))} /></td>
-              <td className="px-3 py-2 text-center"><input type="radio" name={`pd-${name}`} aria-label={t("Default purchase")} checked={!rows.some((r) => r.purchaseDefault)} onChange={() => onChange(rows.map((x) => ({ ...x, purchaseDefault: false })))} /></td>
-              <td />
+            <tr>
+              <td className="min-w-40 px-3 py-2"><Select value={baseUnit} aria-label={t("Unit")} onChange={(e) => onBaseUnit(e.target.value)}>
+                {!unitCodes.some((u) => u.code === baseUnit) && <option value={baseUnit}>{baseName}</option>}
+                {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}</Select></td>
+              <td className="min-w-32 px-3 py-2">
+                <Input required type="number" min="0" step="any" className="text-end" aria-label={t("Price (SAR, excl. VAT)")} value={basePrice} onChange={(e) => onBasePrice(e.target.value)} />
+                {priceError && <span className="mt-1 block text-xs text-bad">{priceError}</span>}
+              </td>
+              <td className="tabular px-3 py-2 text-end text-muted">1</td><td />
             </tr>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td className="min-w-36 px-3 py-2"><Select value={r.unitCode} aria-label={t("Unit")} onChange={(e) => set(i, { unitCode: e.target.value })}>
+                <td className="min-w-40 px-3 py-2"><Select value={r.unitCode} aria-label={t("Unit")} onChange={(e) => set(i, { unitCode: e.target.value })}>
                   {unitCodes.filter((u) => u.code !== baseUnit || u.code === r.unitCode).map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}</Select></td>
-                <td className="min-w-24 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Contains ({unit})", { unit: t(unitName(baseUnit)) })} placeholder="12" value={r.factor} onChange={(e) => set(i, { factor: e.target.value })} /></td>
-                <td className="min-w-28 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Selling price")} placeholder={Number(r.factor) > 0 ? (base * Number(r.factor)).toFixed(2) : ""} value={r.price} onChange={(e) => set(i, { price: e.target.value })} /></td>
-                <td className="min-w-32 px-3 py-2"><Input dir="ltr" aria-label={t("Barcode")} value={r.barcode} onChange={(e) => set(i, { barcode: e.target.value })} /></td>
-                <td className="px-3 py-2 text-center"><input type="radio" name={`sd-${name}`} aria-label={t("Default sale")} checked={r.salesDefault} onChange={() => onChange(rows.map((x, k) => ({ ...x, salesDefault: k === i })))} /></td>
-                <td className="px-3 py-2 text-center"><input type="radio" name={`pd-${name}`} aria-label={t("Default purchase")} checked={r.purchaseDefault} onChange={() => onChange(rows.map((x, k) => ({ ...x, purchaseDefault: k === i })))} /></td>
+                <td className="min-w-32 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Price (SAR, excl. VAT)")} placeholder={Number(r.factor) > 0 ? (base * Number(r.factor)).toFixed(2) : ""} value={r.price} onChange={(e) => set(i, { price: e.target.value })} /></td>
+                <td className="min-w-28 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Contains ({unit})", { unit: baseName })} placeholder="12" value={r.factor} onChange={(e) => set(i, { factor: e.target.value })} /></td>
                 <td className="px-2 py-2"><Button type="button" variant="ghost" aria-label={t("Remove line")} onClick={() => onChange(rows.filter((_, k) => k !== i))}><Trash2 className="size-4" aria-hidden /></Button></td>
               </tr>
             ))}
@@ -152,7 +154,7 @@ export function UnitRows({ rows, onChange, baseUnit, basePrice, name }: {
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
         <Button type="button" variant="secondary" onClick={() => onChange([...rows, { unitCode: unitCodes.find((u) => u.code !== baseUnit && !rows.some((r) => r.unitCode === u.code))?.code ?? "CT", factor: "", price: "", barcode: "", salesDefault: false, purchaseDefault: false }])}>
           <Plus className="size-4" aria-hidden /> {t("Add unit")}</Button>
-        <span className="text-xs text-muted">{t("Leave a price empty to use the base price × the quantity it contains.")}</span>
+        <span className="text-xs text-muted">{t("“Contains”: how many {unit} are in one of that unit, e.g. a carton of 24.", { unit: baseName })}</span>
       </div>
     </div>
   );

@@ -5,9 +5,9 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { Archive, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Product } from "@/lib/types";
-import { money, unitCodes, unitName } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
-import { UnitRows, uomPayload, uomProblem, uomRows, type UomRow } from "@/components/units";
+import { money, unitName } from "@/lib/format";
+import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Spinner } from "@/components/ui";
+import { UnitRows, unitsOf, uomPayload, uomProblem, uomRows, useItemUnits, type UomRow } from "@/components/units";
 import { ProductPreview } from "@/components/product-preview";
 import { useT } from "@/lib/i18n";
 import { PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
@@ -64,17 +64,16 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
       <form onSubmit={submit} className="space-y-4 p-5">
         {error && !error.fields && <Alert tone="bad" title={t("Not saved")}>{error.message}</Alert>}
         <RequiredLegend />
-        <div className="grid gap-4 md:grid-cols-[12rem_1fr_12rem]">
+        <div className="grid gap-4 md:grid-cols-[12rem_1fr]">
           <Field label={t("Item code")} optional error={error?.fields?.number} hint={t("Auto-generated; edit if you use your own codes.")}>
             <Input dir="ltr" value={code} onChange={(e) => setP({ ...p, number: e.target.value })} placeholder="ITEM-000001" maxLength={30} />
           </Field>
           <Field label={t("Product name")} error={error?.fields?.name}>
             <Input required autoFocus dir="auto" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} placeholder={t("e.g. Diesel - ديزل")} />
           </Field>
-          <Field label={t("Unit price (SAR, excl. VAT)")} error={error?.fields?.unitPrice}>
-            <Input required type="number" min="0" step="any" value={p.unitPrice} onChange={(e) => setP({ ...p, unitPrice: e.target.value })} />
-          </Field>
         </div>
+        {units === null ? <Spinner /> : <UnitRows rows={units} onChange={setUnits} baseUnit={baseUnit} onBaseUnit={(c) => setP({ ...p, unitCode: c })}
+          basePrice={p.unitPrice} onBasePrice={(v) => setP({ ...p, unitPrice: v })} priceError={error?.fields?.unitPrice} />}
         <div className="grid gap-4 md:grid-cols-4">
           <Field label={t("Arabic name")} optional><Input dir="rtl" value={p.nameAr ?? ""} onChange={(e) => setP({ ...p, nameAr: e.target.value })} /></Field>
           <Field label={t("Category")} optional><Input dir="auto" value={p.category ?? ""} onChange={(e) => setP({ ...p, category: e.target.value })} /></Field>
@@ -82,20 +81,14 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
           <Field label={t("Barcode")} optional><Input dir="ltr" value={p.barcode ?? ""} onChange={(e) => setP({ ...p, barcode: e.target.value })} /></Field>
         </div>
         <p className="text-xs text-muted">{t("Stock is unlimited until you enter a quantity in Inventory; from then on it is counted in the warehouse.")}</p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("Cost price (SAR)")} optional error={error?.fields?.costPrice}>
             <Input type="number" min="0" step="any" value={p.costPrice ?? ""} onChange={(e) => setP({ ...p, costPrice: e.target.value })} />
           </Field>
           <Field label={t("Low-stock alert at")} optional error={error?.fields?.lowStockThreshold}>
             <Input type="number" min="0" step="any" value={p.lowStockThreshold ?? ""} onChange={(e) => setP({ ...p, lowStockThreshold: e.target.value })} />
           </Field>
-          <Field label={t("Base unit")} optional hint={t("Stock is counted in this unit.")}>
-            <Select value={p.unitCode ?? "PCE"} onChange={(e) => setP({ ...p, unitCode: e.target.value })}>
-              {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
-            </Select>
-          </Field>
         </div>
-        {units === null ? <Spinner /> : <UnitRows rows={units} onChange={setUnits} baseUnit={baseUnit} basePrice={p.unitPrice} name={String(p.id ?? "new")} />}
         <div className="flex gap-2">
           <Button type="submit" loading={busy}>{t("Save product")}</Button>
           <Button type="button" variant="ghost" onClick={onDone}>{t("Cancel")}</Button>
@@ -121,6 +114,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const canWrite = me?.role !== "VIEWER";
+  const itemUnits = useItemUnits();
 
   async function remove(p: Product) {
     if (!window.confirm(t("Delete “{name}”? If it appears on invoices it is deactivated instead.", { name: p.name }))) return;
@@ -191,7 +185,12 @@ export default function ProductsPage() {
                       {(p.nameAr || p.brand || p.barcode) && <span className="block text-xs font-normal text-muted">{[p.nameAr, p.brand, p.category, p.barcode].filter(Boolean).join(" · ")}</span>}
                       {!p.active && <span className="ms-2 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{t("Deactivated")}</span>}
                     </td>
-                    <td className="tabular px-4 py-3 text-end">{money(p.unitPrice)}</td>
+                    <td className="tabular px-4 py-3 text-end">
+                      {money(p.unitPrice)} <span className="text-xs text-muted">/ {t(unitName(p.unitCode))}</span>
+                      {unitsOf(itemUnits, p.id).filter((u) => !u.base).map((u) => (
+                        <span key={u.unitCode} className="block text-xs text-muted">{money(u.price)} / {t(unitName(u.unitCode))}</span>
+                      ))}
+                    </td>
                     <td className="tabular px-4 py-3 text-end text-muted">{money(Math.round(Number(p.unitPrice) * 115) / 100)}</td>
                     <td className={`tabular px-4 py-3 text-end ${p.trackStock && p.lowStockThreshold != null && Number(p.onHand) <= Number(p.lowStockThreshold) ? "font-semibold text-bad" : ""}`}>
                       {p.trackStock ? `${Number(p.onHand ?? 0)} ${t(unitName(p.unitCode))}` : <span className="text-xs text-muted">{t("Unlimited")}</span>}
