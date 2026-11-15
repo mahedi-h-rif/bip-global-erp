@@ -104,6 +104,10 @@ public class InvoiceController {
         Long orgId = CurrentUser.orgId();
         String user = CurrentUser.get().email();
         service.requireCancellable(orgId, id);
+        if (service.load(orgId, id).isWithoutZatca()) {
+            service.cancelWithoutZatca(orgId, user, id, req.reason(), req.goodsReturned(), req.paymentRefunded());
+            return service.detail(orgId, id);
+        }
         var note = service.createNote(orgId, user, id, new NoteRequest(com.fatoora.zatca.model.DocumentType.CREDIT_NOTE,
                 "Cancellation: " + req.reason()));
         service.setStockReturn(orgId, note.getId(), req.goodsReturned());
@@ -142,6 +146,7 @@ public class InvoiceController {
     @GetMapping("/{id}/xml")
     ResponseEntity<byte[]> xml(@PathVariable Long id) {
         Invoice inv = downloadable(id);
+        if (inv.isWithoutZatca()) throw ApiException.conflict("no_xml", "This invoice was issued without ZATCA, so it has no XML");
         return file(inv.legalXml().getBytes(StandardCharsets.UTF_8), MediaType.APPLICATION_XML, inv.getNumber() + ".xml");
     }
 

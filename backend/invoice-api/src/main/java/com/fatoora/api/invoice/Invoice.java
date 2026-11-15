@@ -62,6 +62,8 @@ public class Invoice {
     private String closeReason;
     /** On a credit note: the goods were not returned, so issuing it does not put them back in stock. */
     private boolean noStockReturn;
+    /** Issued outside ZATCA: no VAT, no QR or XML, never submitted (status ISSUED). */
+    private boolean withoutZatca;
     private String billingReference;
     private String reason;
     private String internalNote;

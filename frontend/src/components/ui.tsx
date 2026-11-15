@@ -166,6 +166,7 @@ const statusStyle: Record<InvoiceStatus, string> = {
   REPORTED: "bg-sky-50 text-sky-800 ring-sky-200",
   REPORTED_WITH_WARNINGS: "bg-sky-50 text-sky-800 ring-amber-300",
   REJECTED: "bg-red-50 text-red-700 ring-red-200",
+  ISSUED: "bg-violet-50 text-violet-800 ring-violet-200",
 };
 
 export function StatusBadge({ status }: { status: InvoiceStatus }) {

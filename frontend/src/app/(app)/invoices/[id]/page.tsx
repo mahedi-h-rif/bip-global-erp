@@ -127,14 +127,14 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             >
               <Printer className="size-4" aria-hidden /> {t("Print without logo")}
             </Button>
-            <Button
+            {!inv.withoutZatca && <Button
               variant="secondary"
               disabled={!inv.downloadable}
               loading={busy === "xml"}
               onClick={() => act("xml", () => download(`/invoices/${inv.id}/xml`, `${inv.number}.xml`))}
             >
               <FileCode2 className="size-4" aria-hidden /> XML
-            </Button>
+            </Button>}
             {canWrite && WHATSAPP_ENABLED && <WhatsAppInvoiceButton invoiceId={inv.id} disabled={!inv.downloadable} />}
             {inv.status === "SIGNED" && (
               <Button loading={busy === "send"} onClick={() => act("send", async () => { await api("POST", `/invoices/${inv.id}/submit`); await mutate(); })}>
@@ -155,7 +155,9 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
 
         <p className="flex items-center gap-1.5 text-xs text-muted">
           <Lock className="size-3.5" aria-hidden />
-          {inv.test
+          {inv.withoutZatca
+            ? t("Issued without ZATCA: no VAT and no QR, and it was not sent to ZATCA. Delete cancels it and puts the goods back in stock.")
+            : inv.test
             ? t("Test invoice from the ZATCA sandbox: not a legal invoice. Delete it when you no longer need it.")
             : t("ZATCA keeps every issued invoice, so Edit and Delete work through a credit note that cancels it.")}
         </p>
@@ -203,7 +205,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                     <th className="px-4 py-2 text-start font-medium">{t("Description")}</th>
                     <th className="px-4 py-2 text-end font-medium">{t("Qty")}</th>
                     <th className="px-4 py-2 text-end font-medium">{t("Unit price")}</th>
-                    <th className="px-4 py-2 text-end font-medium">{t("VAT")}</th>
+                    {!inv.withoutZatca && <th className="px-4 py-2 text-end font-medium">{t("VAT")}</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -212,15 +214,17 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                       <td className="px-4 py-2.5" dir="auto">{l.name}</td>
                       <td className="tabular px-4 py-2.5 text-end">{Number(l.quantity)} <Unit code={l.unitCode} /></td>
                       <td className="tabular px-4 py-2.5 text-end">{money(l.unitPrice)}</td>
-                      <td className="px-4 py-2.5 text-end">{l.vatCategory === "S" ? `${Number(l.vatRate)}%` : l.vatCategory}</td>
+                      {!inv.withoutZatca && <td className="px-4 py-2.5 text-end">{l.vatCategory === "S" ? `${Number(l.vatRate)}%` : l.vatCategory}</td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <dl className="tabular ms-auto max-w-xs space-y-1.5 border-t border-line p-5 text-sm">
-              <div className="flex justify-between"><dt className="text-muted">{t("Total excl. VAT")}</dt><dd>{money(inv.totalExclVat)}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted">{t("VAT")}</dt><dd>{money(inv.vatTotal)}</dd></div>
+              {!inv.withoutZatca && <>
+                <div className="flex justify-between"><dt className="text-muted">{t("Total excl. VAT")}</dt><dd>{money(inv.totalExclVat)}</dd></div>
+                <div className="flex justify-between"><dt className="text-muted">{t("VAT")}</dt><dd>{money(inv.vatTotal)}</dd></div>
+              </>}
               <div className="flex justify-between border-t border-line pt-2 text-base font-semibold"><dt>{t("Total")}</dt><dd>{money(inv.totalInclVat)}</dd></div>
             </dl>
           </Card>
@@ -252,16 +256,18 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         <GrossProfitCard path={`/invoices/${inv.id}/gross-profit`} />
         {inv.paymentStatus != null && <PaymentsCard key={`${inv.id}-${inv.dueDate}`} inv={inv} canWrite={canWrite} onChange={() => mutate()} />}
 
-        {accepted && inv.type === "INVOICE" && canWrite && (
+        {(accepted || (inv.withoutZatca && inv.status === "ISSUED" && inv.lifecycle !== "CANCELLED")) && inv.type === "INVOICE" && canWrite && (
           <Card className="scroll-mt-6" id="adjust">
             <CardHeader title={t("Adjust this invoice")} subtitle={t("Issued invoices can't be edited. Raise a credit note (reduce) or debit note (increase) instead.")} />
             <div className="p-5">
               {noteType == null ? (
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => setNoteType("CREDIT_NOTE")}><FileMinus2 className="size-4" aria-hidden /> {t("Credit note")}</Button>
-                  <Button variant="secondary" onClick={() => setNoteType("DEBIT_NOTE")}><FilePlus2 className="size-4" aria-hidden /> {t("Debit note")}</Button>
+                  {!inv.withoutZatca && <>
+                    <Button variant="secondary" onClick={() => setNoteType("CREDIT_NOTE")}><FileMinus2 className="size-4" aria-hidden /> {t("Credit note")}</Button>
+                    <Button variant="secondary" onClick={() => setNoteType("DEBIT_NOTE")}><FilePlus2 className="size-4" aria-hidden /> {t("Debit note")}</Button>
+                  </>}
                   <ButtonLink variant="secondary" href={`/delivery-notes/new?invoiceId=${inv.id}`}><Truck className="size-4" aria-hidden /> {t("Delivery note")}</ButtonLink>
-                  <ReturnItems invoiceId={inv.id} />
+                  {!inv.withoutZatca && <ReturnItems invoiceId={inv.id} />}
                 </div>
               ) : (
                 <form
@@ -285,7 +291,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           </Card>
         )}
 
-        <Card>
+        {!inv.withoutZatca && <Card>
           <CardHeader title={t("ZATCA history")} subtitle={t("Every call to the Fatoora platform, kept for audit")} />
           {inv.submissions.length === 0 ? (
             <p className="px-5 py-6 text-sm text-muted">{t("Not sent yet.")}</p>
@@ -306,7 +312,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               })}
             </ol>
           )}
-        </Card>
+        </Card>}
       </div>
     </>
   );

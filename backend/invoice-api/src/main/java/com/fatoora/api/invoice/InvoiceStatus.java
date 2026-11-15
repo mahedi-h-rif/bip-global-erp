@@ -12,7 +12,9 @@ public enum InvoiceStatus {
     REPORTED,
     REPORTED_WITH_WARNINGS,
     /** ZATCA refused it. It stays in the chain; issue a corrected document instead. */
-    REJECTED;
+    REJECTED,
+    /** Issued without ZATCA (no VAT, no QR): numbered and billable, never submitted. */
+    ISSUED;
 
     public static final Set<InvoiceStatus> ACCEPTED =
             Set.of(CLEARED, CLEARED_WITH_WARNINGS, REPORTED, REPORTED_WITH_WARNINGS);

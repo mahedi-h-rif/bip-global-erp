@@ -144,6 +144,41 @@ public class InvoiceSigningService {
     }
 
     /**
+     * Issues an invoice outside ZATCA: the next number of the normal invoice series, stock taken out, seller and buyer
+     * recorded, but no VAT, no signature, no QR and no submission (status ISSUED).
+     */
+    @Transactional
+    public Invoice issueWithoutZatca(Long orgId, Long invoiceId) {
+        Invoice inv = invoices.findByIdAndOrganizationId(invoiceId, orgId).orElseThrow(() -> ApiException.notFound("Invoice"));
+        if (inv.getStatus() != InvoiceStatus.DRAFT) throw ApiException.conflict("not_draft", "Only drafts can be issued");
+        if (!inv.isWithoutZatca() || inv.getType() != DocumentType.INVOICE)
+            throw ApiException.conflict("not_without_zatca", "This document is issued through ZATCA");
+        if (inv.getLines().isEmpty())
+            throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "not_issuable", "Add at least one line");
+        Organization org = orgs.findById(orgId).orElseThrow();
+        Party seller = org.toParty();
+        Party buyer = buyer(inv);
+
+        flow.checkDeliveryLines(inv);
+        flow.applyCustomerTerms(inv);
+        stock.onIssue(inv, actor());
+
+        LocalDateTime issueTime = LocalDateTime.now(InvoiceApiApplication.KSA).truncatedTo(ChronoUnit.SECONDS);
+        String number = nextNumber(org, DocumentType.INVOICE, issueTime.getYear());
+        inv.setNumber(number);
+        stock.labelInvoiceMovements(inv.getId(), number);
+        inv.setUuid(UUID.randomUUID());
+        inv.setIssuedAt(issueTime.atZone(InvoiceApiApplication.KSA).toInstant());
+        if (inv.getSupplyDate() == null) inv.setSupplyDate(issueTime.toLocalDate());
+        inv.setSellerSnapshot(json.writeValueAsString(seller));
+        inv.setBuyerSnapshot(buyer == null ? null : json.writeValueAsString(buyer));
+        inv.setScheduledSubmitAt(null);
+        inv.setReportDeadlineAt(null);
+        inv.setStatus(InvoiceStatus.ISSUED);
+        return inv;
+    }
+
+    /**
      * ZATCA rejects any document whose seller VAT differs from the VAT in the signing certificate
      * ("certificate-permissions"). Refuse before a number is consumed. The usual cause is the developer
      * sandbox, which hands everyone the same test certificate.

@@ -14,6 +14,9 @@ const accepted = ["CLEARED", "CLEARED_WITH_WARNINGS", "REPORTED", "REPORTED_WITH
 export async function cancelInvoice(id: number, reason: string): Promise<InvoiceDetail> {
   let inv = await api<InvoiceDetail>("GET", `/invoices/${id}`);
   if (inv.type !== "INVOICE") throw new ApiError(409, "not_invoice", "Only invoices can be cancelled");
+  // Issued without ZATCA: cancelled directly, goods back to stock, no credit note.
+  if (inv.withoutZatca)
+    return api<InvoiceDetail>("POST", `/invoices/${id}/cancel-invoice`, { reason, goodsReturned: true, paymentRefunded: false });
   if (Number(inv.adjustedTotal ?? inv.totalInclVat) <= 0)
     throw new ApiError(409, "already_cancelled", "This invoice is already fully cancelled by a credit note");
   // A credit note must point to an invoice ZATCA has accepted, so a queued one is sent first.

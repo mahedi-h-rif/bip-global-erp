@@ -85,7 +85,8 @@ public class InvoicePdfService {
             b.withHtmlContent(html, null);
             b.toStream(out);
             b.run();
-            return embedXml(out.toByteArray(), inv.getNumber() + ".xml", inv.legalXml());
+            // An invoice issued without ZATCA has no XML to attach.
+            return inv.legalXml() == null ? out.toByteArray() : embedXml(out.toByteArray(), inv.getNumber() + ".xml", inv.legalXml());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -140,7 +141,9 @@ public class InvoicePdfService {
     private String html(Invoice inv, Organization org, Party seller, Party buyer) {
         InvoiceTotals totals = InvoiceTotals.of(inv.getLines().stream().map(InvoiceLineEntity::toModel).toList());
         var issued = inv.getIssuedAt().atZone(InvoiceApiApplication.KSA);
-        String[] title = title(inv.getKind(), inv.getType());
+        // Issued without ZATCA: a plain invoice, no VAT columns, no QR.
+        boolean noVat = inv.isWithoutZatca();
+        String[] title = noVat ? new String[]{"فاتورة", "Invoice"} : title(inv.getKind(), inv.getType());
         boolean skyline = LetterheadPdf.isSkyline(org);
         String color = skyline ? SkylineLetterhead.NAVY : org.getBrandColor() == null ? "#0B2A6F" : org.getBrandColor();
         String cur = esc(inv.getCurrency());
@@ -153,11 +156,11 @@ public class InvoicePdfService {
                     .append(td(esc(l.line().name()), startsRtl(l.line().name()) ? "desc rtl" : "desc"))
                     .append(td(plain(l.line().quantity()) + " " + esc(com.fatoora.api.common.UnitNames.of(l.line().unitCode())), "n"))
                     .append(td(money(l.line().unitPrice()), "n"))
-                    .append(td(money(l.net()), "n"))
-                    .append(td(plain(l.line().vatRate()) + "%", "n"))
+                    .append(td(money(l.net()), "n"));
+            if (!noVat) rows.append(td(plain(l.line().vatRate()) + "%", "n"))
                     .append(td(money(l.vat()), "n"))
-                    .append(td(money(l.gross()), "n"))
-                    .append("</tr>");
+                    .append(td(money(l.gross()), "n"));
+            rows.append("</tr>");
         }
 
         StringBuilder meta = new StringBuilder()
@@ -226,8 +229,7 @@ public class InvoicePdfService {
                   <table class="lines">
                     <tr>
                       <th>#</th><th>Item name<br/>اسم الصنف</th><th>Qty<br/>الكمية</th>
-                      <th>Unit price<br/>سعر الوحدة</th><th>Taxable<br/>المبلغ الخاضع</th>
-                      <th>VAT %%<br/>النسبة</th><th>VAT<br/>الضريبة</th><th>Total<br/>الإجمالي</th>
+                      %s
                     </tr>
                     %s
                   </table>
@@ -236,9 +238,7 @@ public class InvoicePdfService {
                     <td class="col" style="width:40%%"></td>
                     <td class="col" style="width:60%%">
                       <table class="sum">
-                        <tr><td>Total excl. VAT</td><td class="rtl">الإجمالي غير شامل الضريبة</td><td class="v">%s %s</td></tr>
-                        <tr><td>VAT total</td><td class="rtl">مجموع ضريبة القيمة المضافة</td><td class="v">%s %s</td></tr>
-                        <tr class="total"><td>Total incl. VAT</td><td class="rtl">الإجمالي شامل الضريبة</td><td class="v">%s %s</td></tr>
+                        %s
                       </table>
                     </td>
                   </tr></table>
@@ -251,12 +251,20 @@ public class InvoicePdfService {
                 skyline ? SkylineLetterhead.css() + " body { margin: 0; }" : "@page { size: A4; margin: 14mm 12mm; }",
                 color, color, color, color, color, color,
                 skyline ? SkylineLetterhead.chrome(org) : classicHead(org, seller, brandEn),
-                titleMetaAndQr(title[1], title[0], meta.toString(), qrDataUri(inv.getQrCode())),
+                titleMetaAndQr(title[1], title[0], meta.toString(), inv.getQrCode() == null ? null : qrDataUri(inv.getQrCode())),
                 parties(seller, org.getLegalNameEn(), buyer, buyerOtherName(inv, buyer)),
+                noVat ? "<th>Unit price<br/>سعر الوحدة</th><th>Total<br/>الإجمالي</th>"
+                        : "<th>Unit price<br/>سعر الوحدة</th><th>Taxable<br/>المبلغ الخاضع</th>"
+                          + "<th>VAT %<br/>النسبة</th><th>VAT<br/>الضريبة</th><th>Total<br/>الإجمالي</th>",
                 rows,
-                money(totals.taxExclusive()), cur,
-                money(totals.vatTotal()), cur,
-                money(totals.taxInclusive()), cur,
+                noVat ? "<tr class=\"total\"><td>Total</td><td class=\"rtl\">الإجمالي</td><td class=\"v\">"
+                        + money(totals.taxInclusive()) + " " + cur + "</td></tr>"
+                        : "<tr><td>Total excl. VAT</td><td class=\"rtl\">الإجمالي غير شامل الضريبة</td><td class=\"v\">"
+                          + money(totals.taxExclusive()) + " " + cur + "</td></tr>"
+                          + "<tr><td>VAT total</td><td class=\"rtl\">مجموع ضريبة القيمة المضافة</td><td class=\"v\">"
+                          + money(totals.vatTotal()) + " " + cur + "</td></tr>"
+                          + "<tr class=\"total\"><td>Total incl. VAT</td><td class=\"rtl\">الإجمالي شامل الضريبة</td><td class=\"v\">"
+                          + money(totals.taxInclusive()) + " " + cur + "</td></tr>",
                 extras(inv, org, totals.taxInclusive()));
     }
 
@@ -321,7 +329,7 @@ public class InvoicePdfService {
                 + "<table class=\"kv\">" + meta + "</table></td>"
                 + "<td style=\"width:2%; padding:0\"></td>"
                 + "<td style=\"width:23%; vertical-align:top; text-align:center; padding:6px 0 0 0\">"
-                + "<img src=\"" + qr + "\" style=\"width:118px;height:118px\"/>"
+                + (qr == null ? "" : "<img src=\"" + qr + "\" style=\"width:118px;height:118px\"/>")
                 + "</td></tr></table>";
     }
 
@@ -379,7 +387,10 @@ public class InvoicePdfService {
         if (inv.getInternalNote() != null && inv.getInternalNote().startsWith("Based on"))
             b.append("<div style=\"margin-top:4px\"><b>Remarks:</b> ").append(esc(inv.getInternalNote())).append("</div>");
         b.append(BankDetailsBlock.html(org));
-        b.append("<div style=\"margin-top:6px; color:#555\">This is a system-generated e-invoice and does not need a signature · "
+        if (inv.isWithoutZatca())
+            b.append("<div style=\"margin-top:6px; color:#555\">This is a system-generated invoice and does not need a signature · "
+                    + "هذه فاتورة صادرة من النظام ولا تحتاج إلى توقيع</div>");
+        else b.append("<div style=\"margin-top:6px; color:#555\">This is a system-generated e-invoice and does not need a signature · "
                 + "هذه فاتورة إلكترونية صادرة من النظام ولا تحتاج إلى توقيع</div>");
         if (org.getInvoiceFooter() != null && !org.getInvoiceFooter().isBlank())
             b.append("<div style=\"margin-top:4px; color:#555\">").append(esc(org.getInvoiceFooter())).append("</div>");

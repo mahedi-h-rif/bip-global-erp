@@ -9,7 +9,9 @@ export type InvoiceStatus =
   | "CLEARED_WITH_WARNINGS"
   | "REPORTED"
   | "REPORTED_WITH_WARNINGS"
-  | "REJECTED";
+  | "REJECTED"
+  /** Issued without ZATCA: numbered, no VAT, no QR, never sent. */
+  | "ISSUED";
 export type ZatcaEnvironment = "SANDBOX" | "SIMULATION" | "PRODUCTION";
 export type PaymentStatus = "UNPAID" | "PARTIAL" | "PAID" | "CLOSED";
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CARD" | "CHEQUE" | "OTHER";
@@ -65,6 +67,8 @@ export interface InvoiceSummary {
   /** Signed by a sandbox or simulation device: not a legal invoice, so it can be deleted. */
   test: boolean;
   lifecycle?: "CANCELLED" | "CLOSED" | null;
+  /** Issued outside ZATCA: no VAT, no QR, never sent. */
+  withoutZatca?: boolean;
 }
 
 export interface Submission {
@@ -128,6 +132,8 @@ export interface InvoiceDetail {
   lifecycleReason?: string | null;
   lifecycleAt?: string | null;
   cancelNoteId?: number | null;
+  /** Issued outside ZATCA: no VAT, no QR, never sent. */
+  withoutZatca?: boolean;
   cancelNoteNumber?: string | null;
 }
 

@@ -126,6 +126,8 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
   const [warehouseId, setWarehouseId] = useState<string>(initial?.warehouseId ? String(initial.warehouseId) : "");
 
   const [kind, setKind] = useState<InvoiceKind>(initial?.kind ?? "SIMPLIFIED");
+  /** Issue outside ZATCA: no VAT, no QR, nothing sent. Invoices only. */
+  const [noZatca, setNoZatca] = useState(!!initial?.withoutZatca);
   const [customerId, setCustomerId] = useState<string>(
     initial?.customerId ? String(initial.customerId) : defaultCustomerId ? String(defaultCustomerId) : "");
   const [supplyDate, setSupplyDate] = useState(initial?.supplyDate ?? todayKsa());
@@ -140,7 +142,8 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
   /** What the last spoken invoice filled in, shown until the next one. */
   const [voiceNote, setVoiceNote] = useState<{ heard: string; filled: string[] } | null>(null);
 
-  const totals = useMemo(() => lineTotals(lines), [lines]);
+  // Without ZATCA every line is out of scope: no VAT.
+  const totals = useMemo(() => lineTotals(noZatca ? lines.map((l) => ({ ...l, vatCategory: "O" as VatCategory, vatRate: 0 })) : lines), [lines, noZatca]);
   const customer = customers?.find((c) => String(c.id) === customerId);
 
   function setLine(i: number, patch: Partial<Line>) {
@@ -216,6 +219,7 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
       internalNote: initial?.internalNote ?? null,
       dueDate: initial?.dueDate ?? null,
       warehouseId: warehouseId ? Number(warehouseId) : null,
+      withoutZatca: !isNote && noZatca,
       lines: lines.map((l) => ({
         ...l,
         quantity: Number(l.quantity),
@@ -339,6 +343,16 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
             </div>
           </fieldset>
 
+          {!isNote && (
+            <label className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 md:col-span-2 ${noZatca ? "border-violet-300 bg-violet-50" : "border-line"}`}>
+              <input type="checkbox" checked={noZatca} onChange={(e) => setNoZatca(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-brand)]" />
+              <span>
+                <span className="block text-sm font-semibold">{t("Without ZATCA / VAT")}</span>
+                <span className="block text-xs text-muted">{t("No VAT, no ZATCA QR, and nothing is sent to ZATCA. The invoice still gets the next invoice number, takes stock and counts in the customer's dues.")}</span>
+              </span>
+            </label>
+          )}
+
           <Field
             label={t("Customer")}
             required={standard}
@@ -392,7 +406,7 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
       </Card>
 
       <Card>
-        <CardHeader title={t("Lines")} subtitle={t("Prices exclude VAT. Amounts are rounded exactly as ZATCA validates them.")} />
+        <CardHeader title={t("Lines")} subtitle={noZatca ? t("No VAT on this invoice.") : t("Prices exclude VAT. Amounts are rounded exactly as ZATCA validates them.")} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
             <thead>
@@ -401,7 +415,7 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
                 <th className="w-24 px-2 py-2 text-start font-medium">{t("Qty")}<RequiredMark /></th>
                 <th className="w-28 px-2 py-2 text-start font-medium">{t("Unit")}</th>
                 <th className="w-32 px-2 py-2 text-start font-medium">{t("Unit price")}<RequiredMark /></th>
-                <th className="w-44 px-2 py-2 text-start font-medium">{t("VAT")}</th>
+                {!noZatca && <th className="w-44 px-2 py-2 text-start font-medium">{t("VAT")}</th>}
                 <th className="w-32 px-3 py-2 text-end font-medium">{t("Line total")}</th>
                 <th className="w-10" />
               </tr>
@@ -435,7 +449,7 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
                   <td className="px-2 py-2">
                     <Input type="number" min="0" step="any" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} aria-label={t("Unit price")} />
                   </td>
-                  <td className="space-y-1.5 px-2 py-2">
+                  {!noZatca && <td className="space-y-1.5 px-2 py-2">
                     <Select
                       value={l.vatCategory}
                       onChange={(e) => {
@@ -456,10 +470,10 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
                         ))}
                       </Select>
                     )}
-                  </td>
+                  </td>}
                   <td className="tabular px-3 py-2 text-end">
                     <span className="block pt-2 font-medium">{money(totals.rows[i]?.gross)}</span>
-                    <span className="block text-xs text-muted">{t("VAT")} {money(totals.rows[i]?.vat)}</span>
+                    {!noZatca && <span className="block text-xs text-muted">{t("VAT")} {money(totals.rows[i]?.vat)}</span>}
                   </td>
                   <td className="py-2 pe-2">
                     <button
@@ -490,9 +504,15 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
             <DictateButton onText={applyVoice}>{t("Speak the invoice")}</DictateButton>
           </div>
           <dl className="tabular w-full max-w-xs space-y-1.5 text-sm">
-            <div className="flex justify-between"><dt className="text-muted">{t("Total excl. VAT")}</dt><dd>{money(totals.net)}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted">{t("VAT")}</dt><dd>{money(totals.vat)}</dd></div>
-            <div className="flex justify-between border-t border-line pt-2 text-base font-semibold"><dt>{t("Total incl. VAT")}</dt><dd>{money(totals.total)}</dd></div>
+            {noZatca ? (
+              <div className="flex justify-between border-t border-line pt-2 text-base font-semibold"><dt>{t("Total")}</dt><dd>{money(totals.total)}</dd></div>
+            ) : (
+              <>
+                <div className="flex justify-between"><dt className="text-muted">{t("Total excl. VAT")}</dt><dd>{money(totals.net)}</dd></div>
+                <div className="flex justify-between"><dt className="text-muted">{t("VAT")}</dt><dd>{money(totals.vat)}</dd></div>
+                <div className="flex justify-between border-t border-line pt-2 text-base font-semibold"><dt>{t("Total incl. VAT")}</dt><dd>{money(totals.total)}</dd></div>
+              </>
+            )}
           </dl>
         </div>
       </Card>
@@ -501,20 +521,22 @@ export function InvoiceEditor({ initial, defaultCustomerId }: { initial?: Invoic
 
       <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-line bg-canvas/95 px-4 py-4 backdrop-blur md:-mx-8 md:px-8">
         <p className="me-auto text-xs text-muted">
-          {standard
+          {noZatca && !isNote
+            ? t("Issuing gives it the next invoice number. No VAT, no QR, and nothing goes to ZATCA.")
+            : standard
             ? t("Standard invoices stay a draft until you send them. ZATCA must clear them before they are valid.")
             : t("Issuing assigns the legal number and signs the invoice. Choose when it goes to ZATCA.")}
         </p>
         <Button variant="secondary" loading={busy === "draft"} disabled={busy != null} onClick={() => run("draft")}>
           <Save className="size-4" aria-hidden /> {t("Save draft")}
         </Button>
-        {!standard && (
+        {!standard && !noZatca && (
           <Button variant="secondary" loading={busy === "LATER"} disabled={busy != null} onClick={() => run("LATER")}>
             <Clock className="size-4" aria-hidden /> {t("Issue · send to ZATCA later")}
           </Button>
         )}
         <Button loading={busy === "NOW"} disabled={busy != null} onClick={() => run("NOW")}>
-          <Send className="size-4" aria-hidden /> {standard ? t("Send to ZATCA for clearance") : t("Issue · send to ZATCA now")}
+          <Send className="size-4" aria-hidden /> {noZatca && !isNote ? t("Issue without ZATCA") : standard ? t("Send to ZATCA for clearance") : t("Issue · send to ZATCA now")}
         </Button>
       </div>
     </div>

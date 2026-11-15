@@ -51,6 +51,8 @@ public class InvoiceService {
     private final AuditService audit;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.fatoora.api.product.UomService uom;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.fatoora.api.inventory.StockService stockService;
 
     public InvoiceService(InvoiceRepository invoices, CustomerRepository customers, ZatcaSubmissionRepository submissions,
                           EgsUnitRepository units, EgsService egs, InvoiceSigningService signing,
@@ -134,6 +136,8 @@ public class InvoiceService {
     @Transactional
     public Invoice createNote(Long orgId, String user, Long originalId, NoteRequest req) {
         Invoice original = load(orgId, originalId);
+        if (original.isWithoutZatca())
+            throw ApiException.conflict("without_zatca", "This invoice was issued without ZATCA, so it has no credit or debit notes. Cancel it instead.");
         if (original.getType() != DocumentType.INVOICE || !original.getStatus().accepted())
             throw ApiException.conflict("not_noteable", "Notes can only be raised against an invoice ZATCA has accepted");
         if (req.type() == DocumentType.INVOICE) throw ApiException.badRequest("bad_type", "Choose credit or debit note");
@@ -177,6 +181,7 @@ public class InvoiceService {
         copy.setReason(src.getReason());
         copy.setPaymentMeans(src.getPaymentMeans());
         copy.setSupplyDate(src.getSupplyDate());
+        copy.setWithoutZatca(src.isWithoutZatca());
         copy.setInternalNote(src.getStatus() == InvoiceStatus.REJECTED ? "Correction of " + src.getNumber() : src.getInternalNote());
         copy.replaceLines(src.getLines().stream().map(InvoiceService::copyLine).toList());
         recalc(copy);
@@ -189,6 +194,11 @@ public class InvoiceService {
 
     /** Signs the draft; with send mode NOW it is submitted to ZATCA immediately. */
     public Invoice issue(Long orgId, Long id, SendMode mode) {
+        if (load(orgId, id).isWithoutZatca()) {
+            Invoice issued = signing.issueWithoutZatca(orgId, id);
+            audit.record(orgId, "INVOICE_ISSUED_WITHOUT_ZATCA", "invoice", id, issued.getNumber());
+            return load(orgId, id);
+        }
         Invoice signed = signing.sign(orgId, id, mode);
         audit.record(orgId, "INVOICE_ISSUED", "invoice", id, signed.getNumber() + " ICV " + signed.getIcv());
         if (signed.getSendMode() == SendMode.NOW) submitter.submit(id);
@@ -250,7 +260,8 @@ public class InvoiceService {
                 isTestDocument(i), i.getWarehouseId(), i.getCustomerRef(), i.getSalesEmployee(),
                 lifecycle(i), i.getCancelledAt() != null ? i.getCancelReason() : i.getCloseReason(),
                 i.getCancelledAt() != null ? i.getCancelledAt() : i.getClosedAt(), i.getCancelNoteId(),
-                i.getCancelNoteId() == null ? null : invoices.findById(i.getCancelNoteId()).map(Invoice::getNumber).orElse(null));
+                i.getCancelNoteId() == null ? null : invoices.findById(i.getCancelNoteId()).map(Invoice::getNumber).orElse(null),
+                i.isWithoutZatca());
     }
 
     @Transactional(readOnly = true)
@@ -304,6 +315,7 @@ public class InvoiceService {
      * Simplified documents are valid from the moment they are signed.
      */
     public static boolean downloadable(Invoice i) {
+        if (i.isWithoutZatca()) return i.getStatus() == InvoiceStatus.ISSUED;
         if (i.getKind() == InvoiceKind.STANDARD) {
             return i.getStatus() == InvoiceStatus.CLEARED || i.getStatus() == InvoiceStatus.CLEARED_WITH_WARNINGS;
         }
@@ -320,8 +332,10 @@ public class InvoiceService {
         if (req.kind() == InvoiceKind.STANDARD && req.sendMode() == SendMode.LATER)
             throw ApiException.badRequest("standard_later", "Standard invoices can't be queued; keep them as draft instead");
 
+        boolean noZatca = type == DocumentType.INVOICE && req.noZatca();
         inv.setKind(req.kind());
         inv.setType(type);
+        inv.setWithoutZatca(noZatca);
         inv.setCustomerId(req.customerId());
         inv.setSupplyDate(req.supplyDate());
         inv.setPaymentMeans(req.paymentMeans() == null || req.paymentMeans().isBlank() ? "10" : req.paymentMeans());
@@ -340,7 +354,8 @@ public class InvoiceService {
         for (LineDto l : req.lines())
             if (l.productId() != null && products.findByIdAndOrganizationId(l.productId(), inv.getOrganizationId()).isEmpty())
                 throw ApiException.notFound("Product");
-        inv.replaceLines(req.lines().stream().map(this::toEntity).toList());
+        // Without ZATCA there is no VAT: every line is out of scope at 0%.
+        inv.replaceLines(req.lines().stream().map(l -> noZatca ? withoutVat(l) : l).map(this::toEntity).toList());
         // The item code is internal: a line picked as "code · name" keeps only the name on the invoice.
         for (InvoiceLineEntity e : inv.getLines()) {
             if (e.getProductId() == null || e.getName() == null) continue;
@@ -372,6 +387,11 @@ public class InvoiceService {
         e.setSalesOrderLineId(d.salesOrderLineId());
         e.setUomFactor(uom == null ? java.math.BigDecimal.ONE : uom.factor(d.productId(), model.unitCode()));
         return e;
+    }
+
+    private static LineDto withoutVat(LineDto l) {
+        return new LineDto(l.name(), l.quantity(), l.unitCode(), l.unitPrice(), VatCategory.O, java.math.BigDecimal.ZERO,
+                "VATEX-SA-OOS", "Not subject to VAT", l.productId(), l.deliveryLineId(), l.salesOrderLineId(), l.uomFactor());
     }
 
     private static InvoiceLineEntity copyLine(InvoiceLineEntity l) {
@@ -414,7 +434,7 @@ public class InvoiceService {
                 i.getCustomerId() == null ? null : names.get(i.getCustomerId()), i.getTotalInclVat(), i.getVatTotal(),
                 i.getIssuedAt(), i.getReportDeadlineAt(), i.getCreatedAt(), i.getDueDate(),
                 b == null ? null : b.paid(), b == null ? null : b.due(), b == null ? null : b.status(), downloadable(i),
-                i.getEgsUnitId() != null && testUnits.contains(i.getEgsUnitId()), lifecycle(i));
+                i.getEgsUnitId() != null && testUnits.contains(i.getEgsUnitId()), lifecycle(i), i.isWithoutZatca());
     }
 
     private static String emptyToNull(String s) {
@@ -431,6 +451,11 @@ public class InvoiceService {
     @Transactional(readOnly = true)
     public void requireCancellable(Long orgId, Long id) {
         Invoice inv = load(orgId, id);
+        if (inv.isWithoutZatca()) {
+            if (inv.getStatus() != InvoiceStatus.ISSUED) throw ApiException.conflict("not_cancellable", "Only an issued invoice can be cancelled");
+            if (inv.getCancelledAt() != null) throw ApiException.conflict("already_cancelled", "This invoice is already cancelled");
+            return;
+        }
         if (inv.getType() != DocumentType.INVOICE || !inv.getStatus().accepted())
             throw ApiException.conflict("not_cancellable", "Only an invoice ZATCA has accepted can be cancelled");
         if (inv.getCancelledAt() != null) throw ApiException.conflict("already_cancelled", "This invoice is already cancelled");
@@ -466,6 +491,19 @@ public class InvoiceService {
         }
         audit.record(orgId, "INVOICE_CANCELLED", "invoice", id, inv.getNumber() + " · " + reason
                 + (refunded ? " · payment refunded" : "") );
+    }
+
+    /**
+     * Cancels an invoice issued without ZATCA: no credit note is needed. Goods go back to stock and the payment is
+     * refunded only when ticked.
+     */
+    @Transactional
+    public void cancelWithoutZatca(Long orgId, String user, Long id, String reason, boolean goodsReturned, boolean refunded) {
+        Invoice inv = load(orgId, id);
+        if (!inv.isWithoutZatca()) throw ApiException.conflict("not_cancellable", "This invoice is cancelled with a credit note");
+        requireCancellable(orgId, id);
+        if (goodsReturned && stockService != null) stockService.reverseInvoice(inv, user);
+        completeCancel(orgId, user, id, null, reason, refunded);
     }
 
     /** Close: the unpaid rest is written off; no more dues or reminders. Reopen undoes it. */

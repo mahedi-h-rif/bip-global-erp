@@ -129,7 +129,7 @@ public class VatController {
                        COALESCE(sum(CASE WHEN doc_type = 'DEBIT_NOTE' THEN total_excl_vat END), 0) AS dn_net,
                        COALESCE(sum(CASE WHEN doc_type = 'DEBIT_NOTE' THEN vat_total END), 0) AS dn_vat,
                        count(*) AS docs
-                FROM invoice WHERE organization_id = ? AND status NOT IN ('DRAFT','REJECTED') AND issued_at IS NOT NULL
+                FROM invoice WHERE organization_id = ? AND status NOT IN ('DRAFT','REJECTED') AND NOT without_zatca AND issued_at IS NOT NULL
                   AND (issued_at AT TIME ZONE 'Asia/Riyadh')::date BETWEEN ? AND ?""", orgId, from, to);
         // Purchases: supplier invoices less supplier credit notes, in SAR, by their own dates.
         Map<String, Object> p = jdbc.queryForMap("""

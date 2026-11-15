@@ -66,6 +66,7 @@ export const statusLabel: Record<InvoiceStatus, string> = {
   REPORTED: "Reported",
   REPORTED_WITH_WARNINGS: "Reported · warnings",
   REJECTED: "Rejected",
+  ISSUED: "Issued · no ZATCA",
 };
 
 export const paymentStatusLabel: Record<PaymentStatus, string> = {

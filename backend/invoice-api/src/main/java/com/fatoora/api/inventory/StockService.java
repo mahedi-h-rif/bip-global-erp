@@ -127,6 +127,17 @@ public class StockService {
         apply(inv.getOrganizationId(), moves, credit, actor);
     }
 
+    /** Puts back what an invoice took out of stock (cancelling an invoice issued without ZATCA). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reverseInvoice(Invoice inv, String actor) {
+        List<Move> moves = jdbc.query("""
+                SELECT product_id, warehouse_id, sum(quantity) AS q FROM stock_movement
+                WHERE ref_type = 'invoice' AND ref_id = ? GROUP BY product_id, warehouse_id HAVING sum(quantity) <> 0""",
+                (rs, i) -> new Move(rs.getLong("product_id"), rs.getLong("warehouse_id"), rs.getBigDecimal("q").negate(),
+                        Kind.RETURN, "invoice", inv.getId(), inv.getNumber(), "Invoice cancelled"), inv.getId());
+        apply(inv.getOrganizationId(), moves, true, actor);
+    }
+
     /** After signing assigns the number, label this invoice's movements with it. */
     public void labelInvoiceMovements(Long invoiceId, String number) {
         jdbc.update("UPDATE stock_movement SET ref_number = ? WHERE ref_type = 'invoice' AND ref_id = ?", number, invoiceId);

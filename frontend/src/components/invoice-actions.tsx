@@ -9,9 +9,9 @@ import { cancelInvoice, correctInvoice } from "@/lib/invoice-actions";
 import type { InvoiceDetail, InvoiceStatus, InvoiceSummary } from "@/lib/types";
 import { useT } from "@/lib/i18n";
 
-type Doc = Pick<InvoiceSummary, "id" | "number" | "type" | "status"> & { test?: boolean };
+type Doc = Pick<InvoiceSummary, "id" | "number" | "type" | "status"> & { test?: boolean; withoutZatca?: boolean };
 
-const cancellable = new Set<InvoiceStatus>(["SIGNED", "CLEARED", "CLEARED_WITH_WARNINGS", "REPORTED", "REPORTED_WITH_WARNINGS"]);
+const cancellable = new Set<InvoiceStatus>(["SIGNED", "CLEARED", "CLEARED_WITH_WARNINGS", "REPORTED", "REPORTED_WITH_WARNINGS", "ISSUED"]);
 
 const small = "inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-medium hover:bg-canvas disabled:opacity-40";
 
@@ -77,12 +77,16 @@ export function EditDeleteActions({ doc, onChanged }: { doc: Doc; onChanged?: ()
 
   const message =
     ask === "delete"
-      ? real
+      ? real && doc.withoutZatca
+        ? t("{label} will be cancelled and its goods put back in stock. It was issued without ZATCA, so no credit note is needed.", { label })
+        : real
         ? t("{label} will be cancelled with a credit note sent to ZATCA. Its total becomes 0; any payment shows as a refund.", { label })
         : doc.test
           ? t("{label} is a test invoice from the ZATCA sandbox and will be deleted permanently.", { label })
           : t("Draft {label} will be deleted.", { label })
-      : real
+      : real && doc.withoutZatca
+        ? t("{label} will be cancelled, and a copy opens as a new draft for you to fix and issue.", { label })
+        : real
         ? t("{label} will be cancelled with a credit note sent to ZATCA, and a copy opens as a new draft for you to fix and issue.", { label })
         : t("A copy of {label} opens as a new draft for you to fix and issue.", { label });
 

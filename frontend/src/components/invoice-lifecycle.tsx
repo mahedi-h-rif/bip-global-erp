@@ -35,7 +35,7 @@ export function InvoiceLifecycle({ inv, canWrite, onChanged }: { inv: InvoiceDet
   const [error, setError] = useState<string | null>(null);
 
   const accepted = ["CLEARED", "CLEARED_WITH_WARNINGS", "REPORTED", "REPORTED_WITH_WARNINGS"].includes(inv.status);
-  const billable = accepted || inv.status === "SIGNED";
+  const billable = accepted || inv.status === "SIGNED" || inv.status === "ISSUED";
   if (inv.type !== "INVOICE" || !billable) return null;
   const paid = Number(inv.paidAmount ?? 0);
   const hasStockLines = inv.lines.some((l) => l.productId != null);
@@ -97,7 +97,7 @@ export function InvoiceLifecycle({ inv, canWrite, onChanged }: { inv: InvoiceDet
       {mode === "cancel" && (
         <Card>
           <CardHeader title={t("Cancel invoice {number}", { number: inv.number ?? "" })}
-            subtitle={t("A full credit note is issued to ZATCA. The invoice stays in the list, marked Cancelled.")} />
+            subtitle={inv.withoutZatca ? t("Issued without ZATCA, so no credit note is needed. The invoice stays in the list, marked Cancelled.") : t("A full credit note is issued to ZATCA. The invoice stays in the list, marked Cancelled.")} />
           <form className="space-y-4 p-5" onSubmit={(e) => {
             e.preventDefault();
             void run(() => api("POST", `/invoices/${inv.id}/cancel-invoice`, { reason, goodsReturned: hasStockLines && goodsReturned, paymentRefunded: paid > 0 && refunded }));
@@ -126,7 +126,9 @@ export function InvoiceLifecycle({ inv, canWrite, onChanged }: { inv: InvoiceDet
       {mode === "close" && (
         <Card>
           <CardHeader title={t("Close invoice {number}", { number: inv.number ?? "" })}
-            subtitle={t("The unpaid {amount} is written off: no more dues or reminders. The invoice stays valid at ZATCA. You can reopen it.", { amount: money(inv.dueAmount) })} />
+            subtitle={inv.withoutZatca
+              ? t("The unpaid {amount} is written off: no more dues or reminders. You can reopen it.", { amount: money(inv.dueAmount) })
+              : t("The unpaid {amount} is written off: no more dues or reminders. The invoice stays valid at ZATCA. You can reopen it.", { amount: money(inv.dueAmount) })} />
           <form className="flex flex-wrap items-end gap-3 p-5" onSubmit={(e) => { e.preventDefault(); void run(() => api("POST", `/invoices/${inv.id}/close`, { reason })); }}>
             {error && <div className="w-full"><Alert tone="bad">{error}</Alert></div>}
             <Field label={t("Reason")} optional className="min-w-64 flex-1"><Input maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>

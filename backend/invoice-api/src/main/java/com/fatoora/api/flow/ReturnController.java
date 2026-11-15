@@ -88,6 +88,8 @@ public class ReturnController {
         Invoice inv = invoices.load(CurrentUser.orgId(), id);
         if (inv.getType() != DocumentType.INVOICE || inv.getStatus() == InvoiceStatus.DRAFT || inv.getStatus() == InvoiceStatus.REJECTED)
             throw ApiException.badRequest("not_returnable", "Returns can only be made on an issued invoice");
+        if (inv.isWithoutZatca())
+            throw ApiException.conflict("without_zatca", "This invoice was issued without ZATCA, so returns go through cancelling it, not a credit note");
         return inv;
     }
 }

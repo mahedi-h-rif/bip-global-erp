@@ -57,7 +57,21 @@ public final class InvoiceDtos {
             @NotEmpty List<@Valid LineDto> lines,
             Long warehouseId,
             String customerRef,
-            String salesEmployee) {}
+            String salesEmployee,
+            /** Issue outside ZATCA: no VAT, no QR, not submitted. Invoices only. */
+            Boolean withoutZatca) {
+
+        public DraftRequest(InvoiceKind kind, DocumentType type, Long customerId, LocalDate supplyDate, String paymentMeans,
+                            SendMode sendMode, Long originalInvoiceId, String reason, String internalNote, LocalDate dueDate,
+                            List<LineDto> lines, Long warehouseId, String customerRef, String salesEmployee) {
+            this(kind, type, customerId, supplyDate, paymentMeans, sendMode, originalInvoiceId, reason, internalNote, dueDate,
+                    lines, warehouseId, customerRef, salesEmployee, false);
+        }
+
+        public boolean noZatca() {
+            return Boolean.TRUE.equals(withoutZatca);
+        }
+    }
 
     public record IssueRequest(SendMode sendMode) {}
 
@@ -74,7 +88,8 @@ public final class InvoiceDtos {
             // Signed by a sandbox or simulation device: not a legal invoice, so it may be deleted.
             boolean test,
             /** CANCELLED, CLOSED or null. */
-            String lifecycle) {}
+            String lifecycle,
+            boolean withoutZatca) {}
 
     /** Cancel an issued invoice: a full credit note is issued; goods and payments are reversed only when ticked. */
     public record CancelRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 500) String reason,
@@ -102,7 +117,8 @@ public final class InvoiceDtos {
             Long warehouseId,
             String customerRef,
             String salesEmployee,
-            String lifecycle, String lifecycleReason, java.time.Instant lifecycleAt, Long cancelNoteId, String cancelNoteNumber) {}
+            String lifecycle, String lifecycleReason, java.time.Instant lifecycleAt, Long cancelNoteId, String cancelNoteNumber,
+            boolean withoutZatca) {}
 
     public record Dashboard(
             long drafts, long awaitingSubmission, long rejected, BigDecimal issuedThisMonth,
