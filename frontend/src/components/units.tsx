@@ -56,7 +56,7 @@ export function UnitSelect({ productId, value, onPick, disabled, ariaLabel }: {
         if (u) onPick(u.unitCode, u.price == null ? null : Number(u.price), Number(u.factor));
       }}>
         {!known && <option value={value}>{t(label(value))}</option>}
-        {own.map((u) => <option key={u.unitCode} value={u.unitCode}>{t(label(u.unitCode))}{u.base ? "" : ` ×${Number(u.factor)}`}</option>)}
+        {own.map((u) => <option key={u.unitCode} value={u.unitCode}>{t(label(u.unitCode))}</option>)}
       </Select>
     );
   }
@@ -86,7 +86,7 @@ export function uomRows(data: { unitCode: string; factor: number; price: number 
 
 /** Body for PUT /products/{id}/units. Rows in the base unit are dropped: the base unit is always factor 1. */
 export function uomPayload(rows: UomRow[], baseUnit: string) {
-  return rows.filter((r) => r.unitCode !== baseUnit).map((r) => ({ unitCode: r.unitCode, factor: Number(r.factor), price: r.price === "" ? null : Number(r.price),
+  return rows.filter((r) => r.unitCode !== baseUnit).map((r) => ({ unitCode: r.unitCode, factor: Number(r.factor) > 0 ? Number(r.factor) : 1, price: r.price === "" ? null : Number(r.price),
     barcode: r.barcode.trim() || null, salesDefault: false, purchaseDefault: false }));
 }
 
@@ -95,10 +95,9 @@ export function uomProblem(rows: UomRow[], baseUnit: string, t: TFunction): stri
   const seen = new Set<string>();
   for (const r of rows) {
     const name = t(unitName(r.unitCode));
-    if (r.unitCode === baseUnit) return t("{unit} is already the base unit. Pick another unit or remove the row.", { unit: name });
-    if (seen.has(r.unitCode)) return t("{unit} is listed twice.", { unit: name });
+    if (r.unitCode === baseUnit || seen.has(r.unitCode)) return t("{unit} is listed twice.", { unit: name });
     seen.add(r.unitCode);
-    if (!(Number(r.factor) > 0)) return t("Enter how many {base} one {unit} contains.", { base: t(unitName(baseUnit)), unit: name });
+    if (r.price === "" || !(Number(r.price) >= 0)) return t("Enter the price of {unit}.", { unit: name });
   }
   return null;
 }
@@ -113,20 +112,19 @@ export function UnitRows({ rows, onChange, baseUnit, onBaseUnit, basePrice, onBa
 }) {
   const t = useT();
   const set = (i: number, patch: Partial<UomRow>) => onChange(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)));
-  const base = Number(basePrice) || 0;
   const baseName = t(unitName(baseUnit));
   return (
     <div className="rounded-lg border border-line">
       <div className="border-b border-line px-4 py-3">
         <p className="text-sm font-semibold">{t("Units and prices")}</p>
-        <p className="text-xs text-muted">{t("Prices exclude VAT. Add every unit this item is sold in, each with its own price. Stock is counted in the first unit.")}</p>
+        <p className="text-xs text-muted">{t("Prices exclude VAT. Add every unit this item is sold in, each with its own price.")}</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-line text-xs text-muted">
             <th className="px-3 py-2 text-start font-medium">{t("Unit")}</th>
             <th className="px-3 py-2 text-end font-medium">{t("Price (SAR, excl. VAT)")}</th>
-            <th className="px-3 py-2 text-end font-medium">{t("Contains ({unit})", { unit: baseName })}</th><th className="w-10" />
+            <th className="w-10" />
           </tr></thead>
           <tbody className="divide-y divide-line">
             <tr>
@@ -137,14 +135,13 @@ export function UnitRows({ rows, onChange, baseUnit, onBaseUnit, basePrice, onBa
                 <Input required type="number" min="0" step="any" className="text-end" aria-label={t("Price (SAR, excl. VAT)")} value={basePrice} onChange={(e) => onBasePrice(e.target.value)} />
                 {priceError && <span className="mt-1 block text-xs text-bad">{priceError}</span>}
               </td>
-              <td className="tabular px-3 py-2 text-end text-muted">1</td><td />
+              <td />
             </tr>
             {rows.map((r, i) => (
               <tr key={i}>
                 <td className="min-w-40 px-3 py-2"><Select value={r.unitCode} aria-label={t("Unit")} onChange={(e) => set(i, { unitCode: e.target.value })}>
                   {unitCodes.filter((u) => u.code !== baseUnit || u.code === r.unitCode).map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}</Select></td>
-                <td className="min-w-32 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Price (SAR, excl. VAT)")} placeholder={Number(r.factor) > 0 ? (base * Number(r.factor)).toFixed(2) : ""} value={r.price} onChange={(e) => set(i, { price: e.target.value })} /></td>
-                <td className="min-w-28 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Contains ({unit})", { unit: baseName })} placeholder="12" value={r.factor} onChange={(e) => set(i, { factor: e.target.value })} /></td>
+                <td className="min-w-32 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Price (SAR, excl. VAT)")} required value={r.price} onChange={(e) => set(i, { price: e.target.value })} /></td>
                 <td className="px-2 py-2"><Button type="button" variant="ghost" aria-label={t("Remove line")} onClick={() => onChange(rows.filter((_, k) => k !== i))}><Trash2 className="size-4" aria-hidden /></Button></td>
               </tr>
             ))}
@@ -152,9 +149,8 @@ export function UnitRows({ rows, onChange, baseUnit, onBaseUnit, basePrice, onBa
         </table>
       </div>
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
-        <Button type="button" variant="secondary" onClick={() => onChange([...rows, { unitCode: unitCodes.find((u) => u.code !== baseUnit && !rows.some((r) => r.unitCode === u.code))?.code ?? "CT", factor: "", price: "", barcode: "", salesDefault: false, purchaseDefault: false }])}>
+        <Button type="button" variant="secondary" onClick={() => onChange([...rows, { unitCode: unitCodes.find((u) => u.code !== baseUnit && !rows.some((r) => r.unitCode === u.code))?.code ?? "CT", factor: "1", price: "", barcode: "", salesDefault: false, purchaseDefault: false }])}>
           <Plus className="size-4" aria-hidden /> {t("Add unit")}</Button>
-        <span className="text-xs text-muted">{t("“Contains”: how many {unit} are in one of that unit, e.g. a carton of 24.", { unit: baseName })}</span>
       </div>
     </div>
   );

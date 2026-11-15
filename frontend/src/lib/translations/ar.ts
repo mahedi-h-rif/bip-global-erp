@@ -1599,6 +1599,8 @@ export const ar: Record<string, string> = {
   "VAT 15%": "ضريبة 15%",
   "Waiting for an admin to approve this requisition.": "بانتظار اعتماد المدير لطلب الشراء.",
   "base": "أساسية",
+  "Prices exclude VAT. Add every unit this item is sold in, each with its own price.": "الأسعار لا تشمل الضريبة. أضف كل وحدة يُباع بها هذا الصنف ولكل وحدة سعرها.",
+  "Enter the price of {unit}.": "أدخل سعر {unit}.",
   "Prices exclude VAT. Add every unit this item is sold in, each with its own price. Stock is counted in the first unit.": "الأسعار لا تشمل الضريبة. أضف كل وحدة يُباع بها هذا الصنف ولكل وحدة سعرها. يُحسب المخزون بالوحدة الأولى.",
   "Price (SAR, excl. VAT)": "السعر (ريال، غير شامل الضريبة)",
   "“Contains”: how many {unit} are in one of that unit, e.g. a carton of 24.": "«يحتوي»: عدد وحدات {unit} في وحدة واحدة من تلك الوحدة، مثل كرتون من 24.",

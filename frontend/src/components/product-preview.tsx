@@ -43,10 +43,7 @@ export function ProductPreview({ product: p }: { product: Product }) {
           <ul className="divide-y divide-line rounded-lg border border-line text-sm">
             {units.map((u) => (
               <li key={u.unitCode} className="flex justify-between gap-3 px-3 py-2">
-                <span>
-                  {t(unitName(u.unitCode))}
-                  <span className="ms-1.5 text-xs text-muted">{u.base ? t("base") : `= ${qty(u.factor)} ${t(unitName(p.unitCode))}`}</span>
-                </span>
+                <span>{t(unitName(u.unitCode))}</span>
                 <span className="tabular font-medium">{money(u.price)}</span>
               </li>
             ))}
