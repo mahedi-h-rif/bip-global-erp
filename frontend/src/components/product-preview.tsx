@@ -6,6 +6,7 @@ import type { Product, StockMovement, StockRow } from "@/lib/types";
 import { dateTime, money, unitName } from "@/lib/format";
 import { Details } from "@/components/preview";
 import { useT } from "@/lib/i18n";
+import { unitsOf, useItemUnits } from "@/components/units";
 
 const qty = (v: number | string | null | undefined) => Number(v ?? 0).toLocaleString("en-US", { maximumFractionDigits: 3 });
 
@@ -16,6 +17,7 @@ export function ProductPreview({ product: p }: { product: Product }) {
   const { data: levels } = useSWR<StockRow[]>(tracked ? `/stock?q=${encodeURIComponent(p.number || p.name)}` : null, fetcher);
   const { data: moves } = useSWR<StockMovement[]>(tracked ? `/stock/movements?productId=${p.id}&limit=10` : null, fetcher);
   const mine = levels?.filter((l) => l.productId === p.id) ?? [];
+  const units = unitsOf(useItemUnits(), p.id);
 
   return (
     <div className="pb-5">
@@ -35,6 +37,22 @@ export function ProductPreview({ product: p }: { product: Product }) {
         ["Low-stock alert at", p.lowStockThreshold != null && p.lowStockThreshold !== "" ? qty(p.lowStockThreshold) : null],
         ["Status", p.active === false ? t("Deactivated") : null],
       ]} />
+      {units.length > 1 && (
+        <section className="px-5 pt-3">
+          <h3 className="mb-2 text-sm font-semibold">{t("Units and prices")}</h3>
+          <ul className="divide-y divide-line rounded-lg border border-line text-sm">
+            {units.map((u) => (
+              <li key={u.unitCode} className="flex justify-between gap-3 px-3 py-2">
+                <span>
+                  {t(unitName(u.unitCode))}
+                  <span className="ms-1.5 text-xs text-muted">{u.base ? t("base") : `= ${qty(u.factor)} ${t(unitName(p.unitCode))}`}</span>
+                </span>
+                <span className="tabular font-medium">{money(u.price)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {tracked && mine.length > 0 && (
         <section className="px-5 pt-3">
           <h3 className="mb-2 text-sm font-semibold">{t("Stock by warehouse")}</h3>

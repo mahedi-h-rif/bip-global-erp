@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import { Archive, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { api, ApiError, fetcher } from "@/lib/api";
 import type { Me, Product } from "@/lib/types";
 import { money, unitCodes, unitName } from "@/lib/format";
 import { Alert, Button, Card, CardHeader, Empty, Field, Input, PageHeader, RequiredLegend, Select, Spinner } from "@/components/ui";
-import { ProductUnits } from "@/components/units";
+import { UnitRows, uomPayload, uomProblem, uomRows, type UomRow } from "@/components/units";
 import { ProductPreview } from "@/components/product-preview";
 import { useT } from "@/lib/i18n";
 import { PreviewDrawer, usePreview, ViewButton } from "@/components/preview";
@@ -24,21 +24,36 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
   const { data: suggested } = useSWR<{ number: string }>(isNew ? "/products/next-number" : null, fetcher);
   // p.number is undefined until the user edits, so the suggestion shows through until then.
   const code = p.number ?? suggested?.number ?? "";
+  // The other units it is sold or bought in, each with its own price. Saved together with the product.
+  const { data: savedUnits } = useSWR<Parameters<typeof uomRows>[0]>(initial.id ? `/products/${initial.id}/units` : null, fetcher, { revalidateOnFocus: false });
+  const [edited, setUnits] = useState<UomRow[] | null>(null);
+  // null while an existing item's units are still loading.
+  const units = edited ?? (!initial.id ? [] : savedUnits ? uomRows(savedUnits) : null);
+  const baseUnit = p.unitCode || "PCE";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    const rows = units ?? [];
+    const problem = uomProblem(rows, baseUnit, t);
+    if (problem) { setError(new ApiError(400, "units", problem)); return; }
+    setBusy(true);
+    let id = p.id;
     try {
       const num = (v: unknown) => (v === "" || v == null ? null : Number(v));
       // Every product is sold and bought. Stock counting starts on its own once a quantity is entered in Inventory.
       const body = { ...p, trackStock: undefined, salesItem: undefined, purchaseItem: undefined, number: code.trim() || undefined, name: p.name.trim(), unitPrice: Number(p.unitPrice),
         costPrice: num(p.costPrice), lowStockThreshold: num(p.lowStockThreshold), unitCode: p.unitCode || "PCE" };
-      if (p.id) await api("PUT", `/products/${p.id}`, body);
-      else await api("POST", "/products", body);
+      if (id) await api("PUT", `/products/${id}`, body);
+      else id = (await api<Product>("POST", "/products", body)).id;
+      // Units are saved once loaded (an existing item) or entered (a new one).
+      if (id && units !== null && (p.id || rows.length > 0)) await api("PUT", `/products/${id}/units`, uomPayload(rows, baseUnit));
+      await globalMutate("/products/units");
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, "network", t("Could not reach the server")));
+      // A new item saved but its units refused: keep editing that item, so saving again doesn't create a second one.
+      if (id && !p.id) setP((cur) => ({ ...cur, id }));
       setBusy(false);
     }
   }
@@ -74,12 +89,13 @@ function ProductForm({ initial, onDone }: { initial: Product; onDone: () => void
           <Field label={t("Low-stock alert at")} optional error={error?.fields?.lowStockThreshold}>
             <Input type="number" min="0" step="any" value={p.lowStockThreshold ?? ""} onChange={(e) => setP({ ...p, lowStockThreshold: e.target.value })} />
           </Field>
-          <Field label={t("Unit")} optional>
+          <Field label={t("Base unit")} optional hint={t("Stock is counted in this unit.")}>
             <Select value={p.unitCode ?? "PCE"} onChange={(e) => setP({ ...p, unitCode: e.target.value })}>
               {unitCodes.map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}
             </Select>
           </Field>
         </div>
+        {units === null ? <Spinner /> : <UnitRows rows={units} onChange={setUnits} baseUnit={baseUnit} basePrice={p.unitPrice} name={String(p.id ?? "new")} />}
         <div className="flex gap-2">
           <Button type="submit" loading={busy}>{t("Save product")}</Button>
           <Button type="button" variant="ghost" onClick={onDone}>{t("Cancel")}</Button>
@@ -138,7 +154,6 @@ export default function ProductsPage() {
         actions={canWrite && !editing && <Button onClick={() => setEditing(blank)}><Plus className="size-4" aria-hidden /> {t("New product")}</Button>}
       />
       {editing && <ProductForm key={editing.id ?? "new"} initial={editing} onDone={() => { setEditing(null); mutate(); }} />}
-      {editing?.id && <ProductUnits key={`u-${editing.id}`} productId={editing.id} baseUnit={editing.unitCode ?? "PCE"} basePrice={editing.unitPrice} />}
       {notice && <div className="mb-4"><Alert tone={notice.tone}>{notice.text}</Alert></div>}
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">

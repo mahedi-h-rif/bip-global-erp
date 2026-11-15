@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import useSWR, { mutate as globalMutate } from "swr";
+import useSWR from "swr";
 import { Plus, Trash2 } from "lucide-react";
-import { api, ApiError, fetcher } from "@/lib/api";
+import { fetcher } from "@/lib/api";
 import { unitCodes, unitName } from "@/lib/format";
-import { Alert, Button, Card, CardHeader, Input, Select } from "@/components/ui";
-import { useT } from "@/lib/i18n";
+import { Button, Input, Select } from "@/components/ui";
+import { useT, type TFunction } from "@/lib/i18n";
 
 /** One unit of one item (base unit included, factor 1), from GET /products/units. */
 export interface ItemUnit {
@@ -75,66 +74,86 @@ export function qtyWithBase(qty: number | string, unitCode: string, factor: numb
   return f === 1 || !baseUnit ? `${q} ${unitName(unitCode)}` : `${q} ${unitName(unitCode)} (${+(q * f).toFixed(3)} ${unitName(baseUnit)})`;
 }
 
-interface UomRow { unitCode: string; factor: string; price: string; barcode: string; salesDefault: boolean; purchaseDefault: boolean }
+
+/** One alternative unit of an item, as typed in the product form. */
+export interface UomRow { unitCode: string; factor: string; price: string; barcode: string; salesDefault: boolean; purchaseDefault: boolean }
+
+/** An item's saved units (GET /products/{id}/units) as form rows. */
+export function uomRows(data: { unitCode: string; factor: number; price: number | null; barcode: string | null; salesDefault: boolean; purchaseDefault: boolean }[]): UomRow[] {
+  return data.map((u) => ({ unitCode: u.unitCode, factor: String(Number(u.factor)), price: u.price == null ? "" : String(Number(u.price)),
+    barcode: u.barcode ?? "", salesDefault: u.salesDefault, purchaseDefault: u.purchaseDefault }));
+}
+
+/** Body for PUT /products/{id}/units. Rows in the base unit are dropped: the base unit is always factor 1. */
+export function uomPayload(rows: UomRow[], baseUnit: string) {
+  return rows.filter((r) => r.unitCode !== baseUnit).map((r) => ({ unitCode: r.unitCode, factor: Number(r.factor), price: r.price === "" ? null : Number(r.price),
+    barcode: r.barcode.trim() || null, salesDefault: r.salesDefault, purchaseDefault: r.purchaseDefault }));
+}
+
+/** A problem with the rows the user can fix before saving, or null. */
+export function uomProblem(rows: UomRow[], baseUnit: string, t: TFunction): string | null {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const name = t(unitName(r.unitCode));
+    if (r.unitCode === baseUnit) return t("{unit} is already the base unit. Pick another unit or remove the row.", { unit: name });
+    if (seen.has(r.unitCode)) return t("{unit} is listed twice.", { unit: name });
+    seen.add(r.unitCode);
+    if (!(Number(r.factor) > 0)) return t("Enter how many {base} one {unit} contains.", { base: t(unitName(baseUnit)), unit: name });
+  }
+  return null;
+}
 
 /**
- * An item's alternative units (SAP B1 UoM group): e.g. Dozen ×12 at its own price, Carton ×24 with its own barcode.
- * Lines already entered keep the factor they were entered with.
+ * The units an item is sold or bought in, each with its own price (SAP B1 UoM group): e.g. Dozen ×12 at its own
+ * price, Carton ×24 with its own barcode. Part of the product form; lines already entered keep their own factor.
  */
-export function ProductUnits({ productId, baseUnit, basePrice }: { productId: number; baseUnit: string; basePrice: number | string }) {
+export function UnitRows({ rows, onChange, baseUnit, basePrice, name }: {
+  rows: UomRow[]; onChange: (rows: UomRow[]) => void; baseUnit: string; basePrice: number | string; name: string;
+}) {
   const t = useT();
-  const { data, mutate } = useSWR<{ unitCode: string; factor: number; price: number | null; barcode: string | null; salesDefault: boolean; purchaseDefault: boolean }[]>(
-    `/products/${productId}/units`, fetcher, { revalidateOnFocus: false });
-  const [rows, setRows] = useState<UomRow[] | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const list: UomRow[] = rows ?? (data ?? []).map((u) => ({ unitCode: u.unitCode, factor: String(Number(u.factor)), price: u.price == null ? "" : String(Number(u.price)),
-    barcode: u.barcode ?? "", salesDefault: u.salesDefault, purchaseDefault: u.purchaseDefault }));
-  const set = (i: number, patch: Partial<UomRow>) => { setSaved(false); setRows(list.map((r, k) => (k === i ? { ...r, ...patch } : r))); };
+  const set = (i: number, patch: Partial<UomRow>) => onChange(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  const base = Number(basePrice) || 0;
   return (
-    <Card className="mb-6">
-      <CardHeader title={t("Units of measure")} subtitle={t("Stock is counted in {unit}. Add the other units this item is sold or bought in.", { unit: baseUnit })} />
-      {problem && <div className="px-4 pt-3"><Alert tone="bad">{problem}</Alert></div>}
-      {saved && <div className="px-4 pt-3"><Alert tone="ok">{t("Units saved")}</Alert></div>}
+    <div className="rounded-lg border border-line">
+      <div className="border-b border-line px-4 py-3">
+        <p className="text-sm font-semibold">{t("Units and prices")}</p>
+        <p className="text-xs text-muted">{t("Stock is counted in {unit}. Add the other units this item is sold or bought in, each with its own price.", { unit: t(unitName(baseUnit)) })}</p>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-line text-xs text-muted">
-            <th className="px-4 py-2 text-start font-medium">{t("Unit")}</th><th className="px-4 py-2 text-end font-medium">{t("Contains ({unit})", { unit: baseUnit })}</th>
-            <th className="px-4 py-2 text-end font-medium">{t("Selling price")}</th><th className="px-4 py-2 text-start font-medium">{t("Barcode")}</th>
-            <th className="px-4 py-2 text-center font-medium">{t("Default sale")}</th><th className="px-4 py-2 text-center font-medium">{t("Default purchase")}</th><th className="w-10" />
+            <th className="px-3 py-2 text-start font-medium">{t("Unit")}</th><th className="px-3 py-2 text-end font-medium">{t("Contains ({unit})", { unit: t(unitName(baseUnit)) })}</th>
+            <th className="px-3 py-2 text-end font-medium">{t("Selling price")}</th><th className="px-3 py-2 text-start font-medium">{t("Barcode")}</th>
+            <th className="px-3 py-2 text-center font-medium">{t("Default sale")}</th><th className="px-3 py-2 text-center font-medium">{t("Default purchase")}</th><th className="w-10" />
           </tr></thead>
           <tbody className="divide-y divide-line">
-            <tr className="bg-slate-50 text-muted"><td className="px-4 py-2">{t(label(baseUnit))} ({t("base")})</td><td className="tabular px-4 py-2 text-end">1</td>
-              <td className="tabular px-4 py-2 text-end">{Number(basePrice).toFixed(2)}</td><td colSpan={4} /></tr>
-            {list.map((r, i) => (
+            <tr className="bg-slate-50 text-muted">
+              <td className="px-3 py-2">{t(label(baseUnit))} ({t("base")})</td><td className="tabular px-3 py-2 text-end">1</td>
+              <td className="tabular px-3 py-2 text-end">{base.toFixed(2)}</td><td />
+              <td className="px-3 py-2 text-center"><input type="radio" name={`sd-${name}`} aria-label={t("Default sale")} checked={!rows.some((r) => r.salesDefault)} onChange={() => onChange(rows.map((x) => ({ ...x, salesDefault: false })))} /></td>
+              <td className="px-3 py-2 text-center"><input type="radio" name={`pd-${name}`} aria-label={t("Default purchase")} checked={!rows.some((r) => r.purchaseDefault)} onChange={() => onChange(rows.map((x) => ({ ...x, purchaseDefault: false })))} /></td>
+              <td />
+            </tr>
+            {rows.map((r, i) => (
               <tr key={i}>
-                <td className="px-4 py-2"><Select value={r.unitCode} aria-label={t("Unit")} onChange={(e) => set(i, { unitCode: e.target.value })}>
-                  {unitCodes.filter((u) => u.code !== baseUnit).map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}</Select></td>
-                <td className="px-4 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Contains ({unit})", { unit: baseUnit })} value={r.factor} onChange={(e) => set(i, { factor: e.target.value })} /></td>
-                <td className="px-4 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Selling price")} placeholder={r.factor ? (Number(basePrice) * Number(r.factor)).toFixed(2) : ""} value={r.price} onChange={(e) => set(i, { price: e.target.value })} /></td>
-                <td className="px-4 py-2"><Input aria-label={t("Barcode")} value={r.barcode} onChange={(e) => set(i, { barcode: e.target.value })} /></td>
-                <td className="px-4 py-2 text-center"><input type="radio" name={`sd-${productId}`} aria-label={t("Default sale")} checked={r.salesDefault} onChange={() => setRows(list.map((x, k) => ({ ...x, salesDefault: k === i })))} /></td>
-                <td className="px-4 py-2 text-center"><input type="radio" name={`pd-${productId}`} aria-label={t("Default purchase")} checked={r.purchaseDefault} onChange={() => setRows(list.map((x, k) => ({ ...x, purchaseDefault: k === i })))} /></td>
-                <td className="px-2 py-2"><Button type="button" variant="ghost" aria-label={t("Remove line")} onClick={() => setRows(list.filter((_, k) => k !== i))}><Trash2 className="size-4" aria-hidden /></Button></td>
+                <td className="min-w-36 px-3 py-2"><Select value={r.unitCode} aria-label={t("Unit")} onChange={(e) => set(i, { unitCode: e.target.value })}>
+                  {unitCodes.filter((u) => u.code !== baseUnit || u.code === r.unitCode).map((u) => <option key={u.code} value={u.code}>{t(u.label)}</option>)}</Select></td>
+                <td className="min-w-24 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Contains ({unit})", { unit: t(unitName(baseUnit)) })} placeholder="12" value={r.factor} onChange={(e) => set(i, { factor: e.target.value })} /></td>
+                <td className="min-w-28 px-3 py-2"><Input type="number" min="0" step="any" className="text-end" aria-label={t("Selling price")} placeholder={Number(r.factor) > 0 ? (base * Number(r.factor)).toFixed(2) : ""} value={r.price} onChange={(e) => set(i, { price: e.target.value })} /></td>
+                <td className="min-w-32 px-3 py-2"><Input dir="ltr" aria-label={t("Barcode")} value={r.barcode} onChange={(e) => set(i, { barcode: e.target.value })} /></td>
+                <td className="px-3 py-2 text-center"><input type="radio" name={`sd-${name}`} aria-label={t("Default sale")} checked={r.salesDefault} onChange={() => onChange(rows.map((x, k) => ({ ...x, salesDefault: k === i })))} /></td>
+                <td className="px-3 py-2 text-center"><input type="radio" name={`pd-${name}`} aria-label={t("Default purchase")} checked={r.purchaseDefault} onChange={() => onChange(rows.map((x, k) => ({ ...x, purchaseDefault: k === i })))} /></td>
+                <td className="px-2 py-2"><Button type="button" variant="ghost" aria-label={t("Remove line")} onClick={() => onChange(rows.filter((_, k) => k !== i))}><Trash2 className="size-4" aria-hidden /></Button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-line p-4">
-        <Button type="button" variant="secondary" onClick={() => setRows([...list, { unitCode: unitCodes.find((u) => u.code !== baseUnit && !list.some((r) => r.unitCode === u.code))?.code ?? "CT", factor: "", price: "", barcode: "", salesDefault: false, purchaseDefault: false }])}>
+      <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
+        <Button type="button" variant="secondary" onClick={() => onChange([...rows, { unitCode: unitCodes.find((u) => u.code !== baseUnit && !rows.some((r) => r.unitCode === u.code))?.code ?? "CT", factor: "", price: "", barcode: "", salesDefault: false, purchaseDefault: false }])}>
           <Plus className="size-4" aria-hidden /> {t("Add unit")}</Button>
-        <Button type="button" loading={busy} disabled={rows === null} onClick={async () => {
-          setBusy(true); setProblem(null);
-          try {
-            await api("PUT", `/products/${productId}/units`, list.map((r) => ({ unitCode: r.unitCode, factor: Number(r.factor), price: r.price === "" ? null : Number(r.price),
-              barcode: r.barcode || null, salesDefault: r.salesDefault, purchaseDefault: r.purchaseDefault })));
-            setRows(null); setSaved(true); await mutate(); await globalMutate("/products/units");
-          } catch (e) { setProblem(e instanceof ApiError ? e.message : t("Could not reach the server")); }
-          setBusy(false);
-        }}>{t("Save units")}</Button>
+        <span className="text-xs text-muted">{t("Leave a price empty to use the base price × the quantity it contains.")}</span>
       </div>
-    </Card>
+    </div>
   );
 }
